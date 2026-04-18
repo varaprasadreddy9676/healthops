@@ -1,0 +1,43 @@
+{
+  "server": {
+    "addr": ":8080",
+    "readTimeoutSeconds": 10,
+    "writeTimeoutSeconds": 10,
+    "idleTimeoutSeconds": 60
+  },
+  "retentionDays": 7,
+  "checkIntervalSeconds": 60,
+  "workers": 8,
+  "allowCommandChecks": false,
+  "checks": [
+    {
+      "id": "prod-api",
+      "name": "Production API",
+      "type": "api",
+      "server": "prod-1",
+      "application": "medics",
+      "target": "https://example.com/health",
+      "expectedStatus": 200,
+      "timeoutSeconds": 5,
+      "warningThresholdMs": 1000,
+      "intervalSeconds": 120,
+      "retryCount": 3,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 30,
+      "enabled": true,
+      "tags": ["api", "prod"]
+    },
+    {
+      "id": "tomcat-heartbeat",
+      "name": "Tomcat Log Heartbeat",
+      "type": "log",
+      "server": "prod-1",
+      "application": "medics",
+      "path": "/var/log/tomcat/catalina.out",
+      "freshnessSeconds": 300,
+      "timeoutSeconds": 5,
+      "enabled": true,
+      "tags": ["logs", "heartbeat"]
+    }
+  ]
+}

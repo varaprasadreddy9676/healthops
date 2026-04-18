@@ -1,0 +1,266 @@
+package monitoring
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+)
+
+type MongoMirror struct {
+	client        *mongo.Client
+	db            *mongo.Database
+	checks        *mongo.Collection
+	results       *mongo.Collection
+	state         *mongo.Collection
+	dashboard     *mongo.Collection
+	retentionDays int
+}
+
+func NewMongoMirror(uri, dbName, prefix string, retentionDays int) (*MongoMirror, error) {
+	if uri == "" {
+		return nil, fmt.Errorf("mongo uri is required")
+	}
+	if dbName == "" {
+		dbName = "healthmon"
+	}
+	if prefix == "" {
+		prefix = "healthmon"
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
+	if err != nil {
+		return nil, err
+	}
+	if err := client.Ping(ctx, nil); err != nil {
+		_ = client.Disconnect(context.Background())
+		return nil, err
+	}
+
+	mirror := &MongoMirror{
+		client:        client,
+		db:            client.Database(dbName),
+		checks:        client.Database(dbName).Collection(prefix + "_checks"),
+		results:       client.Database(dbName).Collection(prefix + "_results"),
+		state:         client.Database(dbName).Collection(prefix + "_state"),
+		dashboard:     client.Database(dbName).Collection(prefix + "_dashboard"),
+		retentionDays: retentionDays,
+	}
+
+	if err := mirror.ensureIndexes(ctx); err != nil {
+		_ = client.Disconnect(context.Background())
+		return nil, err
+	}
+
+	return mirror, nil
+}
+
+func (m *MongoMirror) ensureIndexes(ctx context.Context) error {
+	_, err := m.results.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "checkId", Value: 1}, {Key: "finishedAt", Value: -1}}},
+		{Keys: bson.D{{Key: "finishedAt", Value: -1}}},
+	})
+	if err != nil && !indexAlreadyExists(err) {
+		return err
+	}
+
+	return nil
+}
+
+func indexAlreadyExists(err error) bool {
+	var cmdErr mongo.CommandError
+	if errors.As(err, &cmdErr) {
+		return cmdErr.Name == "IndexOptionsConflict" || cmdErr.Code == 85
+	}
+	return false
+}
+
+func (m *MongoMirror) SyncState(ctx context.Context, state State) error {
+	if m == nil || m.client == nil {
+		return nil
+	}
+
+	if err := m.upsertChecks(ctx, state.Checks); err != nil {
+		return err
+	}
+	if err := m.upsertResults(ctx, state.Results); err != nil {
+		return err
+	}
+	if err := m.upsertState(ctx, state); err != nil {
+		return err
+	}
+	if err := m.upsertDashboardSnapshot(ctx, state); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *MongoMirror) ReadState(ctx context.Context) (State, error) {
+	if m == nil || m.client == nil {
+		return State{}, fmt.Errorf("mongo mirror is not configured")
+	}
+
+	checks, err := m.readChecks(ctx)
+	if err != nil {
+		return State{}, err
+	}
+	results, err := m.readResults(ctx)
+	if err != nil {
+		return State{}, err
+	}
+	meta, err := m.readStateMeta(ctx)
+	if err != nil {
+		return State{}, err
+	}
+
+	return State{
+		Checks:    checks,
+		Results:   results,
+		LastRunAt: meta.LastRunAt,
+		UpdatedAt: meta.UpdatedAt,
+	}, nil
+}
+
+func (m *MongoMirror) ReadDashboardSnapshot(ctx context.Context) (DashboardSnapshot, error) {
+	if m == nil || m.client == nil {
+		return DashboardSnapshot{}, fmt.Errorf("mongo mirror is not configured")
+	}
+
+	var snapshot DashboardSnapshot
+	if err := m.dashboard.FindOne(ctx, bson.M{"_id": "dashboard"}).Decode(&snapshot); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return DashboardSnapshot{}, nil
+		}
+		return DashboardSnapshot{}, err
+	}
+	return snapshot, nil
+}
+
+func (m *MongoMirror) readChecks(ctx context.Context) ([]CheckConfig, error) {
+	cur, err := m.checks.Find(ctx, bson.D{})
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	var checks []CheckConfig
+	for cur.Next(ctx) {
+		var check CheckConfig
+		if err := cur.Decode(&check); err != nil {
+			return nil, err
+		}
+		checks = append(checks, check)
+	}
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+	return checks, nil
+}
+
+func (m *MongoMirror) readResults(ctx context.Context) ([]CheckResult, error) {
+	filter := bson.D{}
+	if m.retentionDays > 0 {
+		filter = bson.D{{Key: "finishedAt", Value: bson.M{"$gte": time.Now().UTC().Add(-time.Duration(m.retentionDays) * 24 * time.Hour)}}}
+	}
+	findOpts := options.Find().SetSort(bson.D{{Key: "finishedAt", Value: 1}})
+	cur, err := m.results.Find(ctx, filter, findOpts)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	var results []CheckResult
+	for cur.Next(ctx) {
+		var result CheckResult
+		if err := cur.Decode(&result); err != nil {
+			return nil, err
+		}
+		results = append(results, result)
+	}
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (m *MongoMirror) readStateMeta(ctx context.Context) (State, error) {
+	var doc State
+	err := m.state.FindOne(ctx, bson.M{"_id": "state"}).Decode(&doc)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return State{}, nil
+		}
+		if errors.Is(err, io.EOF) {
+			return State{}, nil
+		}
+		return State{}, err
+	}
+	return doc, nil
+}
+
+func (m *MongoMirror) upsertChecks(ctx context.Context, checks []CheckConfig) error {
+	for _, check := range checks {
+		if check.ID == "" {
+			continue
+		}
+		if _, err := m.checks.ReplaceOne(ctx, bson.M{"_id": check.ID}, check, options.Replace().SetUpsert(true)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *MongoMirror) upsertResults(ctx context.Context, results []CheckResult) error {
+	cutoff := time.Time{}
+	if m.retentionDays > 0 {
+		cutoff = time.Now().UTC().Add(-time.Duration(m.retentionDays) * 24 * time.Hour)
+	}
+
+	for _, result := range results {
+		if result.ID == "" {
+			continue
+		}
+		if _, err := m.results.ReplaceOne(ctx, bson.M{"_id": result.ID}, result, options.Replace().SetUpsert(true)); err != nil {
+			return err
+		}
+	}
+
+	if !cutoff.IsZero() {
+		if _, err := m.results.DeleteMany(ctx, bson.M{"finishedAt": bson.M{"$lt": cutoff}}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *MongoMirror) upsertState(ctx context.Context, state State) error {
+	doc := bson.M{
+		"_id":       "state",
+		"checks":    state.Checks,
+		"results":   state.Results,
+		"lastRunAt": state.LastRunAt,
+		"updatedAt": state.UpdatedAt,
+	}
+	_, err := m.state.ReplaceOne(ctx, bson.M{"_id": "state"}, doc, options.Replace().SetUpsert(true))
+	return err
+}
+
+func (m *MongoMirror) upsertDashboardSnapshot(ctx context.Context, state State) error {
+	snapshot := buildDashboardSnapshot(state)
+	doc := bson.M{
+		"_id":         "dashboard",
+		"state":       snapshot.State,
+		"summary":     snapshot.Summary,
+		"generatedAt": snapshot.GeneratedAt,
+	}
+	_, err := m.dashboard.ReplaceOne(ctx, bson.M{"_id": "dashboard"}, doc, options.Replace().SetUpsert(true))
+	return err
+}
