@@ -4,7 +4,22 @@
 
 HealthOps is a single-binary Go backend + React frontend that monitors your servers, APIs, databases, and services — then alerts you when things go wrong and uses AI to help you fix them.
 
+## Demo
+
+<div align="center">
+
+https://github.com/user-attachments/assets/healthops-demo.mp4
+
+*Dashboard → Health Checks → Incidents → Analytics → AI Analysis → MySQL Monitoring → Dark Mode*
+
+</div>
+
+<details>
+<summary>📸 Screenshots</summary>
+
 ![Dashboard](docs/screenshots/dashboard.png)
+
+</details>
 
 ## Why HealthOps?
 
