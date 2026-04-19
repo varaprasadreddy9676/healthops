@@ -444,7 +444,7 @@ const Outro: React.FC = () => {
             fontFamily: "system-ui, -apple-system, sans-serif",
           }}
         >
-          github.com/your-org/healthops
+          github.com/varaprasadreddy9676/healthops
         </p>
 
         <div
