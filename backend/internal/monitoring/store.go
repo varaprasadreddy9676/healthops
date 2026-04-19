@@ -22,7 +22,7 @@ func NewFileStore(path string, checks []CheckConfig) (*FileStore, error) {
 	if path == "" {
 		return nil, fmt.Errorf("state path is required")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("create state dir: %w", err)
 	}
 
@@ -153,7 +153,7 @@ func (s *FileStore) writeLocked(state State) error {
 		return fmt.Errorf("encode state: %w", err)
 	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, encoded, 0o644); err != nil {
+	if err := os.WriteFile(tmp, encoded, 0o600); err != nil {
 		return fmt.Errorf("write temp state: %w", err)
 	}
 	if err := os.Rename(tmp, s.path); err != nil {

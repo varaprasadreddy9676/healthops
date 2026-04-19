@@ -42,6 +42,19 @@ type NotificationDispatcher struct {
 	// Track notified incidents to prevent duplicates: incidentID:channelID
 	notified map[string]bool
 	mu       sync.Mutex
+
+	// Batching: collect incidents within a window and send consolidated notifications
+	batchWindow  time.Duration
+	batchTimer   *time.Timer
+	pendingBatch []pendingNotification
+	batchMu      sync.Mutex
+}
+
+// pendingNotification holds a buffered incident waiting to be batched.
+type pendingNotification struct {
+	incident        monitoring.Incident
+	checkResult     *monitoring.CheckResult
+	checkChannelIDs []string
 }
 
 // NewNotificationDispatcher creates a dispatcher wired to the channel store.
@@ -60,9 +73,24 @@ func NewNotificationDispatcher(
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
-		cooldowns: make(map[string]time.Time),
-		notified:  make(map[string]bool),
+		cooldowns:   make(map[string]time.Time),
+		notified:    make(map[string]bool),
+		batchWindow: 5 * time.Second,
 	}
+}
+
+// Stop flushes any pending batch and stops the batch timer.
+// Call this on graceful shutdown to ensure no notifications are lost.
+func (d *NotificationDispatcher) Stop() {
+	d.batchMu.Lock()
+	if d.batchTimer != nil {
+		d.batchTimer.Stop()
+		d.batchTimer = nil
+	}
+	d.batchMu.Unlock()
+
+	// Flush remaining pending notifications synchronously
+	d.flushBatch()
 }
 
 // SetDashboardURL sets the base URL used for dashboard links in email notifications.
@@ -70,45 +98,124 @@ func (d *NotificationDispatcher) SetDashboardURL(url string) {
 	d.dashboardURL = url
 }
 
-// NotifyIncident evaluates all channels and sends notifications for matching ones.
-// checkResult is optional — when available, provides extra filter context (server, type, tags).
-func (d *NotificationDispatcher) NotifyIncident(incident monitoring.Incident, checkResult *monitoring.CheckResult) {
+// NotifyIncident buffers the incident for batched notification.
+// When multiple checks fail within the same cycle (batchWindow), a single
+// consolidated digest is sent per channel instead of N separate messages.
+// checkChannelIDs is optional — when provided, these channel IDs are always included.
+func (d *NotificationDispatcher) NotifyIncident(incident monitoring.Incident, checkResult *monitoring.CheckResult, checkChannelIDs ...string) {
 	channels := d.channelStore.ListRaw()
 	if len(channels) == 0 {
 		return
 	}
 
-	payload := buildPayload(incident, "open")
+	d.batchMu.Lock()
+	defer d.batchMu.Unlock()
 
-	for _, ch := range channels {
-		if !ch.Enabled {
-			continue
-		}
-		if !d.matchesFilters(ch, incident, checkResult) {
-			continue
-		}
-		if d.inCooldown(ch, incident.CheckID) {
-			d.logger.Printf("notification: channel %q in cooldown for check %s", ch.Name, incident.CheckID)
-			continue
-		}
-		// Prevent duplicate notifications for the same incident+channel
-		if d.alreadyNotified(incident.ID, ch.ID) {
-			continue
+	d.pendingBatch = append(d.pendingBatch, pendingNotification{
+		incident:        incident,
+		checkResult:     checkResult,
+		checkChannelIDs: checkChannelIDs,
+	})
+
+	// Reset the batch timer — flush after batchWindow of silence
+	if d.batchTimer != nil {
+		d.batchTimer.Stop()
+	}
+	d.batchTimer = time.AfterFunc(d.batchWindow, d.flushBatch)
+}
+
+// flushBatch sends all buffered notifications. Single incident → normal message.
+// Multiple incidents → consolidated digest per channel.
+func (d *NotificationDispatcher) flushBatch() {
+	d.batchMu.Lock()
+	batch := d.pendingBatch
+	d.pendingBatch = nil
+	d.batchTimer = nil
+	d.batchMu.Unlock()
+
+	if len(batch) == 0 {
+		return
+	}
+
+	channels := d.channelStore.ListRaw()
+	if len(channels) == 0 {
+		return
+	}
+
+	// For each channel, determine which incidents in this batch match it.
+	type channelBatch struct {
+		channel   NotificationChannelConfig
+		payloads  []NotificationPayload
+		incidents []monitoring.Incident
+	}
+
+	channelBatches := make(map[string]*channelBatch)
+
+	for _, pn := range batch {
+		explicitIDs := make(map[string]bool, len(pn.checkChannelIDs))
+		for _, id := range pn.checkChannelIDs {
+			explicitIDs[id] = true
 		}
 
-		// Send async — don't block incident creation
-		go d.sendToChannel(ch, payload, incident.ID)
-		d.recordCooldown(ch, incident.CheckID)
-		d.markNotified(incident.ID, ch.ID)
+		payload := buildPayload(pn.incident, "open")
+
+		for _, ch := range channels {
+			if !ch.Enabled {
+				continue
+			}
+			if !explicitIDs[ch.ID] && !d.matchesFilters(ch, pn.incident, pn.checkResult) {
+				continue
+			}
+			if d.inCooldown(ch, pn.incident.CheckID) {
+				d.logger.Printf("notification: channel %q in cooldown for check %s", ch.Name, pn.incident.CheckID)
+				continue
+			}
+			if d.alreadyNotified(pn.incident.ID, ch.ID) {
+				continue
+			}
+
+			cb, ok := channelBatches[ch.ID]
+			if !ok {
+				cb = &channelBatch{channel: ch}
+				channelBatches[ch.ID] = cb
+			}
+			cb.payloads = append(cb.payloads, payload)
+			cb.incidents = append(cb.incidents, pn.incident)
+
+			d.recordCooldown(ch, pn.incident.CheckID)
+			d.markNotified(pn.incident.ID, ch.ID)
+		}
+	}
+
+	// Dispatch per channel — single or digest
+	for _, cb := range channelBatches {
+		go func(cb *channelBatch) {
+			defer func() {
+				if r := recover(); r != nil {
+					d.logger.Printf("notification: panic in batch send for %q: %v", cb.channel.Name, r)
+				}
+			}()
+			if len(cb.payloads) == 1 {
+				d.sendToChannel(cb.channel, cb.payloads[0], cb.incidents[0].ID)
+			} else {
+				d.sendDigest(cb.channel, cb.payloads)
+			}
+		}(cb)
 	}
 }
 
 // NotifyResolved sends resolution notifications to channels with notifyOnResolve enabled.
-func (d *NotificationDispatcher) NotifyResolved(incident monitoring.Incident, checkResult *monitoring.CheckResult) {
+func (d *NotificationDispatcher) NotifyResolved(incident monitoring.Incident, checkResult *monitoring.CheckResult, checkChannelIDs ...string) {
 	// Clear dedup tracking so reopened incidents can trigger fresh notifications
 	d.ClearIncident(incident.ID)
 
 	channels := d.channelStore.ListRaw()
+
+	// Build a set of explicitly assigned channel IDs from the check config
+	explicitIDs := make(map[string]bool, len(checkChannelIDs))
+	for _, id := range checkChannelIDs {
+		explicitIDs[id] = true
+	}
 
 	payload := buildPayload(incident, "resolved")
 	if incident.ResolvedAt != nil {
@@ -119,10 +226,17 @@ func (d *NotificationDispatcher) NotifyResolved(incident monitoring.Incident, ch
 		if !ch.Enabled || !ch.NotifyOnResolve {
 			continue
 		}
-		if !d.matchesFilters(ch, incident, checkResult) {
+		if !explicitIDs[ch.ID] && !d.matchesFilters(ch, incident, checkResult) {
 			continue
 		}
-		go d.sendToChannel(ch, payload, incident.ID)
+		go func(ch NotificationChannelConfig, p NotificationPayload, incID string) {
+			defer func() {
+				if r := recover(); r != nil {
+					d.logger.Printf("notification: panic in sendToChannel for %q: %v", ch.Name, r)
+				}
+			}()
+			d.sendToChannel(ch, p, incID)
+		}(ch, payload, incident.ID)
 	}
 }
 
@@ -228,6 +342,24 @@ func (d *NotificationDispatcher) ClearIncident(incidentID string) {
 	}
 }
 
+// CleanupStaleTracking prunes cooldown and dedup entries older than 24 hours.
+func (d *NotificationDispatcher) CleanupStaleTracking() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	cutoff := time.Now().Add(-24 * time.Hour)
+	for key, lastSent := range d.cooldowns {
+		if lastSent.Before(cutoff) {
+			delete(d.cooldowns, key)
+		}
+	}
+	// notified map: clear entries for old incidents (best-effort, uses same cutoff)
+	// Since notified is bool-only, we clear all entries periodically
+	if len(d.notified) > 10000 {
+		d.notified = make(map[string]bool)
+	}
+}
+
 // sendToChannel dispatches the notification to the specific channel type.
 func (d *NotificationDispatcher) sendToChannel(ch NotificationChannelConfig, payload NotificationPayload, incidentID string) {
 	var err error
@@ -278,6 +410,60 @@ func (d *NotificationDispatcher) sendToChannel(ch NotificationChannelConfig, pay
 	}
 }
 
+// sendDigest sends a consolidated notification for multiple incidents to a single channel.
+func (d *NotificationDispatcher) sendDigest(ch NotificationChannelConfig, payloads []NotificationPayload) {
+	var err error
+
+	switch ch.Type {
+	case ChannelSlack:
+		err = d.sendSlackDigest(ch, payloads)
+	case ChannelDiscord:
+		err = d.sendDiscordDigest(ch, payloads)
+	case ChannelWebhook:
+		err = d.sendWebhookDigest(ch, payloads)
+	case ChannelEmail:
+		err = d.sendEmailDigest(ch, payloads)
+	case ChannelTelegram:
+		err = d.sendTelegramDigest(ch, payloads)
+	case ChannelPagerDuty:
+		// PagerDuty requires one event per incident for proper dedup_key tracking
+		for _, p := range payloads {
+			if pErr := d.sendPagerDuty(ch, p); pErr != nil {
+				d.logger.Printf("notification: failed to send pagerduty for %s: %v", p.IncidentID, pErr)
+			}
+		}
+		return
+	default:
+		err = fmt.Errorf("unsupported channel type: %s", ch.Type)
+	}
+
+	// Record digest in outbox for audit trail
+	if d.outbox != nil {
+		ids := make([]string, len(payloads))
+		for i, p := range payloads {
+			ids[i] = p.IncidentID
+		}
+		digestJSON, _ := json.Marshal(payloads)
+		evt := monitoring.NotificationEvent{
+			IncidentID:  strings.Join(ids, ","),
+			Channel:     fmt.Sprintf("%s:%s", ch.Type, ch.Name),
+			PayloadJSON: string(digestJSON),
+		}
+		if err != nil {
+			evt.LastError = err.Error()
+		}
+		if enqErr := d.outbox.Enqueue(evt); enqErr != nil {
+			d.logger.Printf("notification: failed to record digest in outbox: %v", enqErr)
+		}
+	}
+
+	if err != nil {
+		d.logger.Printf("notification: failed to send digest (%d incidents) to %s channel %q: %v", len(payloads), ch.Type, ch.Name, err)
+	} else {
+		d.logger.Printf("notification: sent digest (%d incidents) to %s channel %q", len(payloads), ch.Type, ch.Name)
+	}
+}
+
 // --- Slack ---
 
 func (d *NotificationDispatcher) sendSlack(ch NotificationChannelConfig, p NotificationPayload) error {
@@ -291,14 +477,14 @@ func (d *NotificationDispatcher) sendSlack(ch NotificationChannelConfig, p Notif
 		color = "#36a64f"
 	}
 
-	statusEmoji := "🔴"
+	statusIndicator := "[CRITICAL]"
 	if p.Status == "resolved" {
-		statusEmoji = "✅"
+		statusIndicator = "[RESOLVED]"
 	} else if p.Severity == "warning" {
-		statusEmoji = "🟡"
+		statusIndicator = "[WARNING]"
 	}
 
-	title := fmt.Sprintf("%s %s — %s", statusEmoji, strings.ToUpper(p.Status), p.CheckName)
+	title := fmt.Sprintf("%s %s — %s", statusIndicator, strings.ToUpper(p.Status), p.CheckName)
 
 	slackBody := map[string]interface{}{
 		"attachments": []map[string]interface{}{
@@ -399,16 +585,16 @@ func (d *NotificationDispatcher) sendEmail(ch NotificationChannelConfig, p Notif
 // --- Telegram ---
 
 func (d *NotificationDispatcher) sendTelegram(ch NotificationChannelConfig, p NotificationPayload) error {
-	statusEmoji := "🔴"
+	statusIndicator := "[CRITICAL]"
 	if p.Status == "resolved" {
-		statusEmoji = "✅"
+		statusIndicator = "[RESOLVED]"
 	} else if p.Severity == "warning" {
-		statusEmoji = "🟡"
+		statusIndicator = "[WARNING]"
 	}
 
 	text := fmt.Sprintf(
 		"%s *%s — %s*\n\n*Severity:* %s\n*Type:* %s\n*Server:* %s\n\n%s",
-		statusEmoji, strings.ToUpper(p.Status), escapeMarkdown(p.CheckName),
+		statusIndicator, strings.ToUpper(p.Status), escapeMarkdown(p.CheckName),
 		strings.ToUpper(p.Severity), p.CheckType, p.Server,
 		escapeMarkdown(p.Message),
 	)
@@ -583,4 +769,221 @@ func (d *NotificationDispatcher) TestChannel(ch NotificationChannelConfig) error
 	}
 
 	return err
+}
+
+// --- Digest helpers ---
+
+// digestSummary returns severity counts and the highest severity in the batch.
+func digestSummary(payloads []NotificationPayload) (critical, warning, other int, highest string) {
+	for _, p := range payloads {
+		switch p.Severity {
+		case "critical":
+			critical++
+		case "warning":
+			warning++
+		default:
+			other++
+		}
+	}
+	if critical > 0 {
+		highest = "critical"
+	} else if warning > 0 {
+		highest = "warning"
+	} else {
+		highest = "info"
+	}
+	return
+}
+
+// --- Slack Digest ---
+
+func (d *NotificationDispatcher) sendSlackDigest(ch NotificationChannelConfig, payloads []NotificationPayload) error {
+	critical, warning, _, highest := digestSummary(payloads)
+
+	color := "#e01e5a"
+	if highest == "warning" {
+		color = "#ecb22e"
+	}
+
+	title := fmt.Sprintf("[ALERT] %d checks failing", len(payloads))
+	summary := ""
+	if critical > 0 {
+		summary += fmt.Sprintf("%d critical", critical)
+	}
+	if warning > 0 {
+		if summary != "" {
+			summary += ", "
+		}
+		summary += fmt.Sprintf("%d warning", warning)
+	}
+
+	var lines []string
+	for _, p := range payloads {
+		sev := strings.ToUpper(p.Severity)
+		line := fmt.Sprintf("- *%s* [%s] %s", p.CheckName, sev, p.Message)
+		if p.Server != "" {
+			line += fmt.Sprintf(" (server: %s)", p.Server)
+		}
+		lines = append(lines, line)
+	}
+
+	slackBody := map[string]interface{}{
+		"attachments": []map[string]interface{}{
+			{
+				"color":  color,
+				"title":  title,
+				"text":   strings.Join(lines, "\n"),
+				"footer": fmt.Sprintf("HealthOps | %s", summary),
+				"ts":     time.Now().Unix(),
+			},
+		},
+	}
+
+	return d.postJSON(ch.WebhookURL, slackBody, nil)
+}
+
+// --- Discord Digest ---
+
+func (d *NotificationDispatcher) sendDiscordDigest(ch NotificationChannelConfig, payloads []NotificationPayload) error {
+	_, _, _, highest := digestSummary(payloads)
+
+	color := 0xe01e5a
+	if highest == "warning" {
+		color = 0xecb22e
+	}
+
+	var lines []string
+	for _, p := range payloads {
+		sev := strings.ToUpper(p.Severity)
+		line := fmt.Sprintf("**%s** [%s] %s", p.CheckName, sev, p.Message)
+		if p.Server != "" {
+			line += fmt.Sprintf(" (server: %s)", p.Server)
+		}
+		lines = append(lines, line)
+	}
+
+	discordBody := map[string]interface{}{
+		"embeds": []map[string]interface{}{
+			{
+				"title":       fmt.Sprintf("ALERT — %d checks failing", len(payloads)),
+				"description": strings.Join(lines, "\n"),
+				"color":       color,
+				"footer":      map[string]string{"text": "HealthOps"},
+				"timestamp":   time.Now().Format(time.RFC3339),
+			},
+		},
+	}
+
+	return d.postJSON(ch.WebhookURL, discordBody, nil)
+}
+
+// --- Webhook Digest ---
+
+func (d *NotificationDispatcher) sendWebhookDigest(ch NotificationChannelConfig, payloads []NotificationPayload) error {
+	body := map[string]interface{}{
+		"type":      "digest",
+		"count":     len(payloads),
+		"incidents": payloads,
+		"timestamp": time.Now().Format(time.RFC3339),
+	}
+	return d.postJSON(ch.WebhookURL, body, ch.Headers)
+}
+
+// --- Telegram Digest ---
+
+func (d *NotificationDispatcher) sendTelegramDigest(ch NotificationChannelConfig, payloads []NotificationPayload) error {
+	critical, warning, _, _ := digestSummary(payloads)
+
+	header := fmt.Sprintf("[ALERT] *%d checks failing*", len(payloads))
+	var counts []string
+	if critical > 0 {
+		counts = append(counts, fmt.Sprintf("%d critical", critical))
+	}
+	if warning > 0 {
+		counts = append(counts, fmt.Sprintf("%d warning", warning))
+	}
+	if len(counts) > 0 {
+		header += fmt.Sprintf(" \\(%s\\)", strings.Join(counts, ", "))
+	}
+
+	var lines []string
+	for _, p := range payloads {
+		sev := strings.ToUpper(p.Severity)
+		line := fmt.Sprintf("\\- *%s* \\[%s\\] %s", escapeMarkdown(p.CheckName), sev, escapeMarkdown(p.Message))
+		lines = append(lines, line)
+	}
+
+	text := header + "\n\n" + strings.Join(lines, "\n")
+
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", ch.BotToken)
+	body := map[string]interface{}{
+		"chat_id":    ch.ChatID,
+		"text":       text,
+		"parse_mode": "MarkdownV2",
+	}
+
+	return d.postJSON(url, body, nil)
+}
+
+// --- Email Digest ---
+
+func (d *NotificationDispatcher) sendEmailDigest(ch NotificationChannelConfig, payloads []NotificationPayload) error {
+	critical, warning, _, highest := digestSummary(payloads)
+
+	subject := fmt.Sprintf("[HealthOps] ALERT — %d checks failing", len(payloads))
+	if critical > 0 {
+		subject += fmt.Sprintf(" (%d critical)", critical)
+	} else if warning > 0 {
+		subject += fmt.Sprintf(" (%d warning)", warning)
+	}
+
+	htmlBody := buildDigestHTMLEmail(payloads, critical, warning, highest, d.dashboardURL)
+	plainBody := buildDigestPlainText(payloads)
+
+	from := ch.FromEmail
+	if from == "" {
+		from = ch.SMTPUser
+	}
+
+	recipients := strings.Split(ch.Email, ",")
+	for i := range recipients {
+		recipients[i] = strings.TrimSpace(recipients[i])
+	}
+
+	boundary := fmt.Sprintf("healthops-%d", time.Now().UnixNano())
+	msg := fmt.Sprintf(
+		"From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=\"%s\"\r\n\r\n--%s\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s\r\n\r\n--%s\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s\r\n\r\n--%s--",
+		from, strings.Join(recipients, ","), subject,
+		boundary,
+		boundary, plainBody,
+		boundary, htmlBody,
+		boundary,
+	)
+
+	addr := fmt.Sprintf("%s:%d", ch.SMTPHost, ch.SMTPPort)
+	var auth smtp.Auth
+	if ch.SMTPUser != "" {
+		auth = smtp.PlainAuth("", ch.SMTPUser, ch.SMTPPass, ch.SMTPHost)
+	}
+
+	return smtp.SendMail(addr, auth, from, recipients, []byte(msg))
+}
+
+func buildDigestPlainText(payloads []NotificationPayload) string {
+	lines := []string{
+		fmt.Sprintf("HealthOps Alert — %d checks failing", len(payloads)),
+		strings.Repeat("=", 50),
+		"",
+	}
+	for i, p := range payloads {
+		lines = append(lines,
+			fmt.Sprintf("%d. %s [%s]", i+1, p.CheckName, strings.ToUpper(p.Severity)),
+			fmt.Sprintf("   %s", p.Message),
+		)
+		if p.Server != "" {
+			lines = append(lines, fmt.Sprintf("   Server: %s", p.Server))
+		}
+		lines = append(lines, fmt.Sprintf("   Started: %s", p.StartedAt), "")
+	}
+	return strings.Join(lines, "\n")
 }

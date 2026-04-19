@@ -130,7 +130,7 @@ func (r *FileAuditRepository) flushLocked() error {
 		return fmt.Errorf("encode audit log: %w", err)
 	}
 	tmp := r.path + ".tmp"
-	if err := os.WriteFile(tmp, encoded, 0o644); err != nil {
+	if err := os.WriteFile(tmp, encoded, 0o600); err != nil {
 		return fmt.Errorf("write temp audit log: %w", err)
 	}
 	if err := os.Rename(tmp, r.path); err != nil {

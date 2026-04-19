@@ -80,25 +80,49 @@ func NewService(cfg *Config, store Store, logger *log.Logger) *Service {
 	svc.scheduler.SetAlertCallback(func(results []CheckResult) {
 		if svc.alertEngine != nil {
 			alerts := svc.alertEngine.Evaluate(results)
-			if len(alerts) > 0 && svc.logger != nil {
-				svc.logger.Printf("alert evaluation: %d alerts triggered", len(alerts))
+			if len(alerts) > 0 {
+				if svc.logger != nil {
+					svc.logger.Printf("alert evaluation: %d alerts triggered", len(alerts))
+				}
 
 				// Process alerts through incident manager if configured
 				if svc.incidentManager != nil {
+					// Build a lookup from checkID → result for metadata
+					resultMap := make(map[string]CheckResult, len(results))
+					for _, r := range results {
+						resultMap[r.CheckID] = r
+					}
+
 					for _, alert := range alerts {
 						metadata := map[string]string{
 							"ruleId":   alert.RuleID,
 							"ruleName": alert.RuleName,
 							"message":  alert.Message,
 						}
+						checkType := ""
+						if r, ok := resultMap[alert.CheckID]; ok {
+							checkType = r.Type
+							if r.Server != "" {
+								metadata["server"] = r.Server
+							}
+						}
 						_ = svc.incidentManager.ProcessAlert(
 							alert.CheckID,
 							alert.CheckName,
-							"", // type not available in alert
+							checkType,
 							alert.Severity,
 							alert.Message,
 							metadata,
 						)
+					}
+				}
+			}
+
+			// Auto-resolve incidents for checks that recovered
+			if svc.incidentManager != nil {
+				for _, result := range results {
+					if result.Healthy {
+						_ = svc.incidentManager.AutoResolveOnRecovery(result.CheckID)
 					}
 				}
 			}
@@ -233,8 +257,10 @@ func (s *Service) Run(ctx context.Context) error {
 		s.logger.Printf("serving frontend from %s", frontendDir)
 	}
 
-	// Apply middlewares: first metrics, then logging, then auth
+	// Apply middlewares: first body limit, then rate limit, then metrics, then logging, then auth
 	var handler http.Handler = mux
+	handler = maxBodyMiddleware(1<<20, handler)              // 1 MB request body limit
+	handler = rateLimitMiddleware(100, time.Minute, handler) // 100 req/min per IP
 	handler = metricsMiddleware(s.metrics, handler)
 	handler = loggingMiddleware(s.logger, handler)
 	if s.userStore != nil {
@@ -247,7 +273,7 @@ func (s *Service) Run(ctx context.Context) error {
 		Addr:              s.cfg.Server.Addr,
 		Handler:           handler,
 		ReadTimeout:       time.Duration(s.cfg.Server.ReadTimeoutSeconds) * time.Second,
-		WriteTimeout:      0, // Disabled: AI endpoints need long write windows; per-handler timeouts via context
+		WriteTimeout:      60 * time.Second, // Default 60s; AI endpoints use per-handler context deadlines
 		IdleTimeout:       time.Duration(s.cfg.Server.IdleTimeoutSeconds) * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -693,6 +719,16 @@ func addGroupCount(groups map[string]StatusCount, key, status string) {
 		current.Unknown++
 	}
 	groups[key] = current
+}
+
+// maxBodyMiddleware limits the size of incoming request bodies to prevent abuse.
+func maxBodyMiddleware(maxBytes int64, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body != nil && r.Method != http.MethodGet && r.Method != http.MethodHead {
+			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func loggingMiddleware(logger *log.Logger, next http.Handler) http.Handler {

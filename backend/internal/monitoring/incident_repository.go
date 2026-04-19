@@ -3,6 +3,7 @@ package monitoring
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 
 // MemoryIncidentRepository provides an in-memory implementation of IncidentRepository
@@ -117,4 +118,17 @@ func copyMap(m map[string]string) map[string]string {
 		copy[k] = v
 	}
 	return copy
+}
+
+// PruneBefore removes resolved incidents older than the given cutoff time.
+func (r *MemoryIncidentRepository) PruneBefore(cutoff time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for id, incident := range r.incidents {
+		if incident.Status == "resolved" && incident.UpdatedAt.Before(cutoff) {
+			delete(r.incidents, id)
+		}
+	}
+	return nil
 }

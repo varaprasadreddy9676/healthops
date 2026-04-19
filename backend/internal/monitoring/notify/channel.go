@@ -3,6 +3,8 @@ package notify
 import (
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -68,9 +70,15 @@ func (c *NotificationChannelConfig) Validate() error {
 		if c.WebhookURL == "" {
 			return fmt.Errorf("webhookUrl is required for %s", c.Type)
 		}
+		if err := validateWebhookURL(c.WebhookURL); err != nil {
+			return err
+		}
 	case ChannelWebhook:
 		if c.WebhookURL == "" {
 			return fmt.Errorf("webhookUrl is required for webhook")
+		}
+		if err := validateWebhookURL(c.WebhookURL); err != nil {
+			return err
 		}
 	case ChannelEmail:
 		if c.Email == "" {
@@ -113,6 +121,44 @@ func maskString(s string) string {
 		return "••••••••"
 	}
 	return s[:4] + "••••" + s[len(s)-4:]
+}
+
+// validateWebhookURL validates that a webhook URL is safe (no SSRF to internal networks).
+func validateWebhookURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid webhook URL: %w", err)
+	}
+
+	// Only allow HTTPS and HTTP schemes
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return fmt.Errorf("webhook URL must use http or https scheme")
+	}
+
+	host := parsed.Hostname()
+	if host == "" {
+		return fmt.Errorf("webhook URL must have a hostname")
+	}
+
+	// Block localhost and loopback
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "0.0.0.0" {
+		return fmt.Errorf("webhook URL must not target localhost")
+	}
+
+	// Block private/internal IP ranges
+	ip := net.ParseIP(host)
+	if ip != nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return fmt.Errorf("webhook URL must not target private or internal IP addresses")
+		}
+	}
+
+	// Block common metadata endpoints
+	if host == "169.254.169.254" || host == "metadata.google.internal" {
+		return fmt.Errorf("webhook URL must not target cloud metadata services")
+	}
+
+	return nil
 }
 
 // NotificationChannelStore persists notification channel configurations.
@@ -277,7 +323,7 @@ func (s *NotificationChannelStore) save() error {
 	}
 
 	tmpPath := s.path + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+	if err := os.WriteFile(tmpPath, data, 0o600); err != nil {
 		return fmt.Errorf("write channels: %w", err)
 	}
 	return os.Rename(tmpPath, s.path)

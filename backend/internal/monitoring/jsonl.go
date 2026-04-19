@@ -38,7 +38,7 @@ func LoadJSONLFile[T any](path string) ([]T, error) {
 
 // AppendJSONLFile appends a single item as a JSON line to the file.
 func AppendJSONLFile[T any](path string, item T) error {
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func AppendJSONLFile[T any](path string, item T) error {
 // RewriteJSONLFile atomically rewrites a JSONL file with the given items.
 func RewriteJSONLFile[T any](path string, items []T) error {
 	tmp := path + ".tmp"
-	f, err := os.Create(tmp)
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}

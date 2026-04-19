@@ -52,6 +52,11 @@ func main() {
 
 	service := monitoring.NewService(cfg, store, logger)
 
+	// Warn about insecure auth configuration
+	if !cfg.Auth.Enabled {
+		logger.Printf("SECURITY WARNING: Authentication is disabled — set auth.enabled=true in config for production use")
+	}
+
 	// Initialize user store
 	dataDir := resolvePath("DATA_DIR", filepath.Join("backend", "data"), "data")
 	userStore, err := monitoring.NewUserStore(dataDir)
@@ -59,7 +64,11 @@ func main() {
 		logger.Printf("Warning: Failed to init user store: %v", err)
 	} else {
 		service.SetUserStore(userStore)
-		logger.Printf("User management initialized (default admin/admin)")
+		if userStore.IsUsingDefaultCredentials() {
+			logger.Printf("WARNING: User management using default credentials — change immediately in production")
+		} else {
+			logger.Printf("User management initialized")
+		}
 	}
 
 	// Initialize incident manager
@@ -82,6 +91,7 @@ func main() {
 	var notificationDispatcher *notify.NotificationDispatcher
 	if channelStore != nil {
 		notificationDispatcher = notify.NewNotificationDispatcher(channelStore, outbox, logger)
+		defer notificationDispatcher.Stop() // flush pending notifications on shutdown
 		// Set dashboard URL for email links
 		addr := cfg.Server.Addr
 		if addr == "" || addr == ":8080" {
@@ -162,6 +172,8 @@ func main() {
 	if aiQueue != nil {
 		retentionJob.Register("ai_queue", aiQueue, retentionCfg.AIQueueRetentionDays)
 	}
+	// Prune resolved incidents to prevent unbounded memory growth
+	retentionJob.Register("incidents", incidentRepo, retentionCfg.IncidentRetentionDays)
 
 	// Initialize BYOK AI service
 	aiConfigStore, err := ai.NewAIConfigStore(dataDir)
@@ -186,7 +198,8 @@ func main() {
 				logger.Printf("AI: failed to enqueue analysis for incident %s: %v", incident.ID, err)
 			}
 			if notificationDispatcher != nil {
-				notificationDispatcher.NotifyIncident(incident, nil)
+				channelIDs := lookupCheckChannelIDs(store, incident.CheckID)
+				notificationDispatcher.NotifyIncident(incident, nil, channelIDs...)
 			}
 		})
 
@@ -197,9 +210,18 @@ func main() {
 	if aiConfigStore == nil || aiQueue == nil {
 		if notificationDispatcher != nil {
 			incidentManager.SetOnIncidentCreated(func(incident monitoring.Incident) {
-				notificationDispatcher.NotifyIncident(incident, nil)
+				channelIDs := lookupCheckChannelIDs(store, incident.CheckID)
+				notificationDispatcher.NotifyIncident(incident, nil, channelIDs...)
 			})
 		}
+	}
+
+	// Wire resolution notifications (always, regardless of AI config)
+	if notificationDispatcher != nil {
+		incidentManager.SetOnIncidentResolved(func(incident monitoring.Incident) {
+			channelIDs := lookupCheckChannelIDs(store, incident.CheckID)
+			notificationDispatcher.NotifyResolved(incident, nil, channelIDs...)
+		})
 	}
 
 	stopRetention := make(chan struct{})
@@ -209,6 +231,17 @@ func main() {
 	if err := service.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Fatalf("service stopped: %v", err)
 	}
+}
+
+// lookupCheckChannelIDs returns the NotificationChannelIDs configured on a check.
+func lookupCheckChannelIDs(store monitoring.Store, checkID string) []string {
+	state := store.Snapshot()
+	for _, c := range state.Checks {
+		if c.ID == checkID {
+			return c.NotificationChannelIDs
+		}
+	}
+	return nil
 }
 
 func resolvePath(envKey string, candidates ...string) string {

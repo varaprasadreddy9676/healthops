@@ -30,6 +30,7 @@ export interface CheckConfig {
   mysql?: MySQLCheckConfig
   ssh?: SSHCheckConfig
   serverId?: string
+  notificationChannelIds?: string[]
 }
 
 export interface SSHCheckConfig {

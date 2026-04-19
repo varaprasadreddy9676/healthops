@@ -17,7 +17,7 @@ services:
   healthops:
     environment:
       - CONFIG_PATH=/app/config/demo.json
-      - MYSQL_DSN=healthops:healthops123@tcp(mysql:3306)/healthops
+      - MYSQL_DSN=${MYSQL_USER:-healthops}:${MYSQL_PASSWORD:-healthops123}@tcp(mysql:3306)/healthops
     volumes:
       - ./backend/config/demo.json:/app/config/demo.json:ro
     depends_on:
@@ -35,18 +35,18 @@ services:
   mysql:
     image: mysql:8.0
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     environment:
-      - MYSQL_ROOT_PASSWORD=rootpass123
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpass123}
       - MYSQL_DATABASE=healthops
-      - MYSQL_USER=healthops
-      - MYSQL_PASSWORD=healthops123
+      - MYSQL_USER=${MYSQL_USER:-healthops}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-healthops123}
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql-init:/docker-entrypoint-initdb.d
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass123"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 5s
       timeout: 5s
       retries: 10

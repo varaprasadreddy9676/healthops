@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -426,7 +427,12 @@ func (s *Service) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// Use configured CORS origin, default to same-origin (no header)
+	corsOrigin := os.Getenv("CORS_ORIGIN")
+	if corsOrigin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", corsOrigin)
+	}
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()

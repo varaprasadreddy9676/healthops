@@ -19,6 +19,9 @@ FROM alpine:3.20
 RUN apk --no-cache add ca-certificates tzdata procps bind-tools openssh-client
 WORKDIR /app
 
+# Create non-root user
+RUN addgroup -g 1000 app && adduser -D -u 1000 -G app app
+
 # Copy backend binary and config
 COPY --from=backend-builder /app/healthops .
 COPY --from=backend-builder /app/config ./config/
@@ -26,14 +29,15 @@ COPY --from=backend-builder /app/config ./config/
 # Copy frontend dist
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist/
 
-# Create data directory
-RUN mkdir -p data
+# Create data directory with correct ownership
+RUN mkdir -p data && chown -R app:app /app
 
 ENV CONFIG_PATH=/app/config/default.json
 ENV STATE_PATH=/app/data/state.json
 ENV DATA_DIR=/app/data
 ENV FRONTEND_DIR=/app/frontend/dist
 
+USER app
 EXPOSE 8080
 
 # Run healthops and tee stdout to a log file for the log freshness check

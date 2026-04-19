@@ -64,31 +64,32 @@ type AuthConfig struct {
 }
 
 type CheckConfig struct {
-	ID                 string            `json:"id" bson:"id"`
-	Name               string            `json:"name" bson:"name"`
-	Type               string            `json:"type" bson:"type"`
-	Server             string            `json:"server,omitempty" bson:"server,omitempty"`
-	Application        string            `json:"application,omitempty" bson:"application,omitempty"`
-	Target             string            `json:"target,omitempty" bson:"target,omitempty"`
-	Host               string            `json:"host,omitempty" bson:"host,omitempty"`
-	Port               int               `json:"port,omitempty" bson:"port,omitempty"`
-	Command            string            `json:"command,omitempty" bson:"command,omitempty"`
-	Path               string            `json:"path,omitempty" bson:"path,omitempty"`
-	ExpectedStatus     int               `json:"expectedStatus,omitempty" bson:"expectedStatus,omitempty"`
-	ExpectedContains   string            `json:"expectedContains,omitempty" bson:"expectedContains,omitempty"`
-	TimeoutSeconds     int               `json:"timeoutSeconds,omitempty" bson:"timeoutSeconds,omitempty"`
-	WarningThresholdMs int               `json:"warningThresholdMs,omitempty" bson:"warningThresholdMs,omitempty"`
-	FreshnessSeconds   int               `json:"freshnessSeconds,omitempty" bson:"freshnessSeconds,omitempty"`
-	IntervalSeconds    int               `json:"intervalSeconds,omitempty" bson:"intervalSeconds,omitempty"`
-	RetryCount         int               `json:"retryCount,omitempty" bson:"retryCount,omitempty"`
-	RetryDelaySeconds  int               `json:"retryDelaySeconds,omitempty" bson:"retryDelaySeconds,omitempty"`
-	CooldownSeconds    int               `json:"cooldownSeconds,omitempty" bson:"cooldownSeconds,omitempty"`
-	Enabled            *bool             `json:"enabled,omitempty" bson:"enabled,omitempty"`
-	Tags               []string          `json:"tags,omitempty" bson:"tags,omitempty"`
-	Metadata           map[string]string `json:"metadata,omitempty" bson:"metadata,omitempty"`
-	ServerId           string            `json:"serverId,omitempty" bson:"serverId,omitempty"`
-	MySQL              *MySQLCheckConfig `json:"mysql,omitempty" bson:"mysql,omitempty"`
-	SSH                *SSHCheckConfig   `json:"ssh,omitempty" bson:"ssh,omitempty"`
+	ID                     string            `json:"id" bson:"id"`
+	Name                   string            `json:"name" bson:"name"`
+	Type                   string            `json:"type" bson:"type"`
+	Server                 string            `json:"server,omitempty" bson:"server,omitempty"`
+	Application            string            `json:"application,omitempty" bson:"application,omitempty"`
+	Target                 string            `json:"target,omitempty" bson:"target,omitempty"`
+	Host                   string            `json:"host,omitempty" bson:"host,omitempty"`
+	Port                   int               `json:"port,omitempty" bson:"port,omitempty"`
+	Command                string            `json:"command,omitempty" bson:"command,omitempty"`
+	Path                   string            `json:"path,omitempty" bson:"path,omitempty"`
+	ExpectedStatus         int               `json:"expectedStatus,omitempty" bson:"expectedStatus,omitempty"`
+	ExpectedContains       string            `json:"expectedContains,omitempty" bson:"expectedContains,omitempty"`
+	TimeoutSeconds         int               `json:"timeoutSeconds,omitempty" bson:"timeoutSeconds,omitempty"`
+	WarningThresholdMs     int               `json:"warningThresholdMs,omitempty" bson:"warningThresholdMs,omitempty"`
+	FreshnessSeconds       int               `json:"freshnessSeconds,omitempty" bson:"freshnessSeconds,omitempty"`
+	IntervalSeconds        int               `json:"intervalSeconds,omitempty" bson:"intervalSeconds,omitempty"`
+	RetryCount             int               `json:"retryCount,omitempty" bson:"retryCount,omitempty"`
+	RetryDelaySeconds      int               `json:"retryDelaySeconds,omitempty" bson:"retryDelaySeconds,omitempty"`
+	CooldownSeconds        int               `json:"cooldownSeconds,omitempty" bson:"cooldownSeconds,omitempty"`
+	Enabled                *bool             `json:"enabled,omitempty" bson:"enabled,omitempty"`
+	Tags                   []string          `json:"tags,omitempty" bson:"tags,omitempty"`
+	Metadata               map[string]string `json:"metadata,omitempty" bson:"metadata,omitempty"`
+	ServerId               string            `json:"serverId,omitempty" bson:"serverId,omitempty"`
+	NotificationChannelIDs []string          `json:"notificationChannelIds,omitempty" bson:"notificationChannelIds,omitempty"`
+	MySQL                  *MySQLCheckConfig `json:"mysql,omitempty" bson:"mysql,omitempty"`
+	SSH                    *SSHCheckConfig   `json:"ssh,omitempty" bson:"ssh,omitempty"`
 }
 
 type State struct {

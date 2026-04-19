@@ -196,6 +196,15 @@ AI auto-analyzes new incidents with configurable prompt templates. API keys are 
 └──────────────────────────────────────────────────────┘
 ```
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Deployment Guide](docs/deployment-guide.md) | **Start here** — Complete setup for dev, Docker, and production. Covers ports, env vars, TLS/SSL, domains, notifications, SSH, MySQL, troubleshooting, and log debugging |
+| [API Reference](backend/docs/api-reference.md) | Full reference for all 62+ REST endpoints |
+| [Operational Runbook](docs/runbook.md) | Day-to-day operations, backup/restore, performance tuning |
+| [Architecture Decisions](docs/) | ADRs for scope, persistence, auth, incidents |
+
 ## Project Layout
 
 ```
@@ -230,7 +239,12 @@ healthops/
 | `DATA_DIR` | `data/` | Data directory for JSONL repos |
 | `FRONTEND_DIR` | — | Path to frontend dist folder |
 | `MONGODB_URI` | — | Optional MongoDB connection |
-| `MYSQL_DSN` | — | MySQL DSN for mysql checks |
+| `MONGODB_DATABASE` | `healthops` | MongoDB database name |
+| `MONGODB_COLLECTION_PREFIX` | `healthops` | MongoDB collection prefix |
+| `CORS_ORIGIN` | — | Allowed CORS origin (for custom domains) |
+| `MYSQL_DSN` / check `dsnEnv` | — | MySQL DSN for mysql checks |
+
+See the [Deployment Guide](docs/deployment-guide.md) for full details on all configuration options, notification setup, SSH servers, TLS, and troubleshooting.
 
 ### Check Configuration
 

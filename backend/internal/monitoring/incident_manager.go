@@ -18,11 +18,15 @@ type IncidentRepository interface {
 // IncidentCreatedCallback is called when a new incident is created.
 type IncidentCreatedCallback func(incident Incident)
 
+// IncidentResolvedCallback is called when an incident is resolved.
+type IncidentResolvedCallback func(incident Incident)
+
 // IncidentManager handles incident lifecycle
 type IncidentManager struct {
-	repo              IncidentRepository
-	logger            *log.Logger
-	onIncidentCreated IncidentCreatedCallback
+	repo               IncidentRepository
+	logger             *log.Logger
+	onIncidentCreated  IncidentCreatedCallback
+	onIncidentResolved IncidentResolvedCallback
 }
 
 // NewIncidentManager creates a new incident manager
@@ -126,7 +130,7 @@ func (im *IncidentManager) AcknowledgeIncident(id, acknowledgedBy string) error 
 
 // ResolveIncident resolves an incident
 func (im *IncidentManager) ResolveIncident(id, resolvedBy string) error {
-	return im.repo.UpdateIncident(id, func(inc *Incident) error {
+	err := im.repo.UpdateIncident(id, func(inc *Incident) error {
 		if inc.Status == "resolved" {
 			return fmt.Errorf("incident already resolved")
 		}
@@ -140,11 +144,29 @@ func (im *IncidentManager) ResolveIncident(id, resolvedBy string) error {
 		im.logger.Printf("Incident resolved: %s by %s", id, resolvedBy)
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// Fire resolved callback for resolution notifications
+	if im.onIncidentResolved != nil {
+		resolved, getErr := im.repo.GetIncident(id)
+		if getErr == nil {
+			im.onIncidentResolved(resolved)
+		}
+	}
+
+	return nil
 }
 
 // SetOnIncidentCreated sets a callback for new incidents (e.g. AI analysis enqueue).
 func (im *IncidentManager) SetOnIncidentCreated(cb IncidentCreatedCallback) {
 	im.onIncidentCreated = cb
+}
+
+// SetOnIncidentResolved sets a callback for resolved incidents (e.g. resolution notifications).
+func (im *IncidentManager) SetOnIncidentResolved(cb IncidentResolvedCallback) {
+	im.onIncidentResolved = cb
 }
 
 // AutoResolveOnRecovery automatically resolves an incident when a check recovers

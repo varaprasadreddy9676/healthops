@@ -254,6 +254,20 @@ func (s *UserStore) Authenticate(username, password string) (*User, error) {
 	return nil, fmt.Errorf("invalid credentials")
 }
 
+// IsUsingDefaultCredentials checks if the only user is the default admin with default password.
+func (s *UserStore) IsUsingDefaultCredentials() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(s.users) != 1 {
+		return false
+	}
+	u, ok := s.users["admin"]
+	if !ok {
+		return false
+	}
+	return bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte("admin")) == nil
+}
+
 func (s *UserStore) List() []User {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -291,8 +305,8 @@ func (s *UserStore) Create(req CreateUserRequest) (*User, error) {
 		return nil, fmt.Errorf("role must be 'admin' or 'ops'")
 	}
 
-	if len(req.Password) < 4 {
-		return nil, fmt.Errorf("password must be at least 4 characters")
+	if len(req.Password) < 8 {
+		return nil, fmt.Errorf("password must be at least 8 characters")
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
