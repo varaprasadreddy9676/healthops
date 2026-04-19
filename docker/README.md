@@ -12,7 +12,7 @@ This guide covers deploying HealthOps using Docker and Docker Compose.
 ### 1. Build the Docker image
 
 ```bash
-docker build -t healthmon .
+docker build -t healthops .
 ```
 
 ### 2. Start the stack
@@ -22,7 +22,7 @@ docker compose up -d
 ```
 
 This starts:
-- **healthmon** service on port 8080 (Go backend + React frontend)
+- **healthops** service on port 8080 (Go backend + React frontend)
 - **MongoDB** on port 27017
 
 ### 2b. (Optional) Start with demo services
@@ -48,7 +48,7 @@ All demo services come pre-configured with health checks in `backend/config/demo
 docker-compose logs -f
 
 # Follow specific service logs
-docker-compose logs -f healthmon
+docker-compose logs -f healthops
 docker-compose logs -f mongo
 ```
 
@@ -81,7 +81,7 @@ Edit `.env` to customize:
 - **AUTH_USERNAME** - Admin username (default: admin)
 - **AUTH_PASSWORD** - Admin password (default: admin123 - change in production!)
 - **MONGODB_URI** - MongoDB connection string
-- **MONGODB_DATABASE** - Database name (default: healthmon)
+- **MONGODB_DATABASE** - Database name (default: healthops)
 - **STATE_PATH** - Path to local state file
 - **CONFIG_PATH** - Path to config file
 
@@ -122,14 +122,14 @@ docker-compose up -d --build
 ### Execute commands in container
 
 ```bash
-# Open shell in healthmon container
-docker-compose exec healthmon sh
+# Open shell in healthops container
+docker-compose exec healthops sh
 
 # View config
-docker-compose exec healthmon cat /root/config/default.json
+docker-compose exec healthops cat /root/config/default.json
 
 # Check state
-docker-compose exec healthmon cat /root/data/state.json
+docker-compose exec healthops cat /root/data/state.json
 ```
 
 ## Production Considerations
@@ -148,10 +148,10 @@ docker-compose exec healthmon cat /root/data/state.json
 
 ```bash
 # Check logs
-docker-compose logs healthmon
+docker-compose logs healthops
 
 # Verify config
-docker-compose exec healthmon cat /root/config/default.json
+docker-compose exec healthops cat /root/config/default.json
 ```
 
 ### MongoDB connection issues
@@ -168,7 +168,7 @@ docker-compose exec mongo mongosh --eval "db.adminCommand('ping')"
 
 ```bash
 # Check volume mounts
-docker-compose exec healthmon ls -la /root/data
+docker-compose exec healthops ls -la /root/data
 
 # Verify data directory permissions
 ls -la ./backend/data

@@ -27,10 +27,10 @@ func NewMongoMirror(uri, dbName, prefix string, retentionDays int) (*MongoMirror
 		return nil, fmt.Errorf("mongo uri is required")
 	}
 	if dbName == "" {
-		dbName = "healthmon"
+		dbName = "healthops"
 	}
 	if prefix == "" {
-		prefix = "healthmon"
+		prefix = "healthops"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

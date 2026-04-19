@@ -138,11 +138,11 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 
 	bodyStr := string(body)
-	if !strings.Contains(bodyStr, "healthmon_check_runs_total") {
-		t.Error("expected metrics to contain healthmon_check_runs_total")
+	if !strings.Contains(bodyStr, "healthops_check_runs_total") {
+		t.Error("expected metrics to contain healthops_check_runs_total")
 	}
-	if !strings.Contains(bodyStr, "healthmon_http_requests_total") {
-		t.Error("expected metrics to contain healthmon_http_requests_total")
+	if !strings.Contains(bodyStr, "healthops_http_requests_total") {
+		t.Error("expected metrics to contain healthops_http_requests_total")
 	}
 }
 

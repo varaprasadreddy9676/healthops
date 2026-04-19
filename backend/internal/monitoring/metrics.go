@@ -40,7 +40,7 @@ func NewMetricsCollector() *MetricsCollector {
 		// Check runs counter: status can be "healthy", "warning", "critical", "error"
 		checkRunsTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "healthmon_check_runs_total",
+				Name: "healthops_check_runs_total",
 				Help: "Total number of health check executions, labeled by status and check type",
 			},
 			[]string{"status", "type"},
@@ -49,7 +49,7 @@ func NewMetricsCollector() *MetricsCollector {
 		// Check failures counter: labeled by check_id and check type
 		checkFailuresTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "healthmon_check_failures_total",
+				Name: "healthops_check_failures_total",
 				Help: "Total number of health check failures, labeled by check_id and check type",
 			},
 			[]string{"check_id", "type"},
@@ -58,7 +58,7 @@ func NewMetricsCollector() *MetricsCollector {
 		// Check duration histogram: labeled by check_id
 		checkDuration: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name:    "healthmon_check_duration_seconds",
+				Name:    "healthops_check_duration_seconds",
 				Help:    "Duration of health check execution in seconds, labeled by check_id",
 				Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 			},
@@ -68,7 +68,7 @@ func NewMetricsCollector() *MetricsCollector {
 		// Incidents counter: status can be "open", "acknowledged", "resolved"
 		incidentsTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "healthmon_incidents_total",
+				Name: "healthops_incidents_total",
 				Help: "Total number of incidents created, labeled by status",
 			},
 			[]string{"status"},
@@ -77,7 +77,7 @@ func NewMetricsCollector() *MetricsCollector {
 		// Alert deliveries counter: channel can be "email", "webhook", etc; outcome can be "success", "failure"
 		alertDeliveriesTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "healthmon_alert_deliveries_total",
+				Name: "healthops_alert_deliveries_total",
 				Help: "Total number of alert delivery attempts, labeled by channel and outcome",
 			},
 			[]string{"channel", "outcome"},
@@ -86,7 +86,7 @@ func NewMetricsCollector() *MetricsCollector {
 		// Scheduler lag gauge: measures delay between expected and actual execution time
 		schedulerLag: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: "healthmon_scheduler_lag_seconds",
+				Name: "healthops_scheduler_lag_seconds",
 				Help: "Lag between scheduled check time and actual execution time in seconds",
 			},
 			[]string{}, // No labels for global lag
@@ -95,7 +95,7 @@ func NewMetricsCollector() *MetricsCollector {
 		// HTTP requests counter: labeled by method, endpoint, and status code
 		httpRequestsTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "healthmon_http_requests_total",
+				Name: "healthops_http_requests_total",
 				Help: "Total number of HTTP requests, labeled by method, endpoint, and status code",
 			},
 			[]string{"method", "endpoint", "status"},
@@ -104,7 +104,7 @@ func NewMetricsCollector() *MetricsCollector {
 		// HTTP request duration histogram: labeled by endpoint
 		httpRequestDuration: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name:    "healthmon_http_request_duration_seconds",
+				Name:    "healthops_http_request_duration_seconds",
 				Help:    "Duration of HTTP requests in seconds, labeled by endpoint",
 				Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 			},

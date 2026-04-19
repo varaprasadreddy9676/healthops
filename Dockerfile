@@ -12,7 +12,7 @@ WORKDIR /app
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./
-RUN CGO_ENABLED=0 go build -o healthmon ./cmd/healthmon
+RUN CGO_ENABLED=0 go build -o healthops ./cmd/healthops
 
 # ---- Stage 3: Runtime ----
 FROM alpine:3.20
@@ -20,7 +20,7 @@ RUN apk --no-cache add ca-certificates tzdata procps bind-tools openssh-client
 WORKDIR /app
 
 # Copy backend binary and config
-COPY --from=backend-builder /app/healthmon .
+COPY --from=backend-builder /app/healthops .
 COPY --from=backend-builder /app/config ./config/
 
 # Copy frontend dist
@@ -36,6 +36,6 @@ ENV FRONTEND_DIR=/app/frontend/dist
 
 EXPOSE 8080
 
-# Run healthmon and tee stdout to a log file for the log freshness check
+# Run healthops and tee stdout to a log file for the log freshness check
 # stdbuf ensures unbuffered output so the log file stays fresh
-CMD ["sh", "-c", "exec ./healthmon 2>&1 | tee -a /app/data/healthmon.log"]
+CMD ["sh", "-c", "exec ./healthops 2>&1 | tee -a /app/data/healthops.log"]

@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `backend/` is the Go service. `backend/cmd/healthmon/main.go` is the entrypoint.
+- `backend/` is the Go service. `backend/cmd/healthops/main.go` is the entrypoint.
 - `backend/internal/monitoring/` holds config, store, runner, HTTP handlers, MySQL monitoring, AI BYOK layer, incidents, analytics, and alert rules.
 - `backend/config/default.json` defines the initial monitored checks and runtime defaults.
 - `backend/data/` stores the file-backed state: `state.json`, JSONL repositories, AI config, encryption keys.
@@ -10,10 +10,10 @@
 - `docs/` contains architectural decision records (ADRs) and the operational runbook.
 
 ## Build, Test, and Development Commands
-- `cd backend && go run ./cmd/healthmon` starts the monitoring API and scheduler.
+- `cd backend && go run ./cmd/healthops` starts the monitoring API and scheduler.
 - `cd backend && go test ./...` runs backend tests once they are added.
 - `go fmt ./...` should be run from `backend/` before committing Go changes.
-- `go test ./...` and `go run ./cmd/healthmon` assume you are inside the backend module directory.
+- `go test ./...` and `go run ./cmd/healthops` assume you are inside the backend module directory.
 
 ## Coding Style & Naming Conventions
 - Use standard Go formatting and keep package names short, lowercase, and domain-oriented.

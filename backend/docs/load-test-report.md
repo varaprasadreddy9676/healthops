@@ -6,7 +6,7 @@
 
 ## Test Setup
 - Service command:
-  - `cd backend && go run ./cmd/healthmon`
+  - `cd backend && go run ./cmd/healthops`
 - Load test command:
   - `cd backend && go run ./cmd/loadtest -scenario=query -duration=20s -checks=20 -queries=20 -workers=10 -memory-growth-max=400 -goroutine-limit=5000`
 

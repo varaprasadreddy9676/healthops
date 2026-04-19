@@ -6,7 +6,7 @@
 - Owner: Backend
 
 ## 1. Decision
-We will retire the separate MySQL SQL-pack application and move the same core capability into `healthmon`.
+We will retire the separate MySQL SQL-pack application and move the same core capability into `healthops`.
 
 This implementation must be:
 - Modular at component boundaries
@@ -336,7 +336,7 @@ Run from `backend/`.
 - Pass condition: all green
 
 ## 14. Cutover Plan (No Parallel Legacy Pack Maintenance)
-1. Deploy new healthmon build with mysql checks configured
+1. Deploy new healthops build with mysql checks configured
 2. Verify Gates G1-G8 in target environment
 3. Disable old db-side events:
    - `ALTER EVENT dbmon.ev_collect_sample DISABLE;`

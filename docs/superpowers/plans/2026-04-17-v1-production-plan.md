@@ -15,7 +15,7 @@
 This is the starting point as of plan creation.
 
 ### Backend exists today
-- Go service entrypoint: `backend/cmd/healthmon/main.go`
+- Go service entrypoint: `backend/cmd/healthops/main.go`
 - Core package: `backend/internal/monitoring/`
 - Supported check types: `api`, `tcp`, `process`, `command`, `log`
 - HTTP endpoints for health, check CRUD, manual run, summary, results, dashboard aliases
@@ -112,7 +112,7 @@ Do not start frontend work before the backend domain model and API contracts are
 This is the intended direction, not necessarily the exact final structure.
 
 ### Backend
-- `backend/cmd/healthmon/main.go`: bootstrap, env loading, dependency wiring
+- `backend/cmd/healthops/main.go`: bootstrap, env loading, dependency wiring
 - `backend/internal/monitoring/config.go`: config schema, validation, defaults
 - `backend/internal/monitoring/types.go`: shared domain types only if still justified after refactor
 - `backend/internal/monitoring/checks/`: check definitions, validation, execution helpers
@@ -151,7 +151,7 @@ Make the repository clearly Go-only so future engineers do not follow dead paths
 - Update: `ReadMe.md`
 - Update: `CLAUDE.md`
 - Update: `AGENTS.md` only if repo instructions now misstate reality
-- Update: `backend/cmd/healthmon/main.go`
+- Update: `backend/cmd/healthops/main.go`
 
 **Implementation**
 - Remove root startup script that points to missing Node runtime
@@ -160,7 +160,7 @@ Make the repository clearly Go-only so future engineers do not follow dead paths
 - Rewrite docs to describe only current Go product
 
 **Tests after implementation**
-- Start backend with no custom env vars: `cd backend && go run ./cmd/healthmon`
+- Start backend with no custom env vars: `cd backend && go run ./cmd/healthops`
 - Verify config loads from intended path only
 - Verify docs mention only supported startup flow
 - Verify no repo file references deleted Node startup path

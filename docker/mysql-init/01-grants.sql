@@ -1,3 +1,3 @@
--- Grant healthmon user access to performance_schema for monitoring
-GRANT SELECT ON performance_schema.* TO 'healthmon'@'%';
+-- Grant healthops user access to performance_schema for monitoring
+GRANT SELECT ON performance_schema.* TO 'healthops'@'%';
 FLUSH PRIVILEGES;

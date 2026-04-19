@@ -39,7 +39,7 @@ HealthOps is a single-binary Go backend + React frontend that monitors your serv
 cd frontend && npm install && npm run build && cd ..
 
 # Start the backend (serves frontend too)
-cd backend && FRONTEND_DIR=../frontend/dist go run ./cmd/healthmon
+cd backend && FRONTEND_DIR=../frontend/dist go run ./cmd/healthops
 ```
 
 Open [http://localhost:8080](http://localhost:8080) — that's it.
@@ -161,7 +161,7 @@ AI auto-analyzes new incidents with configurable prompt templates. API keys are 
 ```
 healthops/
 ├── backend/                  # Go backend service
-│   ├── cmd/healthmon/        # Main entrypoint
+│   ├── cmd/healthops/        # Main entrypoint
 │   ├── cmd/loadtest/         # Load testing tool
 │   ├── internal/monitoring/  # Core modules (50+ files)
 │   ├── config/default.json   # Default check configuration

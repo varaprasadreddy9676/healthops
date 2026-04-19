@@ -1,5 +1,5 @@
 services:
-  healthmon:
+  healthops:
     build: .
     ports:
       - "8080:8080"
@@ -9,10 +9,10 @@ services:
       - DATA_DIR=/app/data
       - FRONTEND_DIR=/app/frontend/dist
       - MONGODB_URI=mongodb://mongo:27017
-      - MONGODB_DATABASE=healthmon
-      - MONGODB_COLLECTION_PREFIX=healthmon
+      - MONGODB_DATABASE=healthops
+      - MONGODB_COLLECTION_PREFIX=healthops
     volumes:
-      - healthmon_data:/app/data
+      - healthops_data:/app/data
     depends_on:
       mongo:
         condition: service_started
@@ -40,4 +40,4 @@ services:
 
 volumes:
   mongo_data:
-  healthmon_data:
+  healthops_data:

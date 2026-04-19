@@ -14,7 +14,7 @@ All Go commands must be run from the `backend/` directory:
 
 ```bash
 # Run the monitoring service (API + scheduler)
-cd backend && go run ./cmd/healthmon
+cd backend && go run ./cmd/healthops
 
 # Run tests
 cd backend && go test ./...
@@ -30,7 +30,7 @@ cd backend && go fmt ./...
 
 ### Backend Structure (`backend/`)
 
-- **`cmd/healthmon/main.go`** - Service entrypoint. Loads config, initializes stores, repositories, AI service, and starts the HTTP server and check scheduler.
+- **`cmd/healthops/main.go`** - Service entrypoint. Loads config, initializes stores, repositories, AI service, and starts the HTTP server and check scheduler.
 - **`internal/monitoring/`** - Core monitoring package:
   - `config.go` - Config loading, validation, defaults.
   - `types.go` - Core types: `Config`, `CheckConfig`, `CheckResult`, `State`, `Summary`, `Store`/`Mirror` interfaces, `Incident`, `AIAnalysisResult`.
@@ -128,8 +128,8 @@ See `backend/docs/api-reference.md` for the full reference with request/response
 - `STATE_PATH` - Override local state file location
 - `DATA_DIR` - Override data directory for JSONL stores
 - `MONGODB_URI` - Enable MongoDB mirroring (optional)
-- `MONGODB_DATABASE` - Mongo database name (default: `healthmon`)
-- `MONGODB_COLLECTION_PREFIX` - Mongo collection prefix (default: `healthmon`)
+- `MONGODB_DATABASE` - Mongo database name (default: `healthops`)
+- `MONGODB_COLLECTION_PREFIX` - Mongo collection prefix (default: `healthops`)
 - `{check.mysql.dsnEnv}` - MySQL DSN per check (never logged)
 
 The `backend/config/default.json` contains the check definitions.

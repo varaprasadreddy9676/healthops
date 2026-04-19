@@ -17,8 +17,8 @@
 | `CONFIG_PATH` | No | `backend/config/default.json` | Path to configuration file |
 | `STATE_PATH` | No | `backend/data/state.json` | Path to state storage file |
 | `MONGODB_URI` | No | - | MongoDB connection string (enable hybrid storage) |
-| `MONGODB_DATABASE` | No | `healthmon` | MongoDB database name |
-| `MONGODB_COLLECTION_PREFIX` | No | `healthmon` | MongoDB collection prefix |
+| `MONGODB_DATABASE` | No | `healthops` | MongoDB database name |
+| `MONGODB_COLLECTION_PREFIX` | No | `healthops` | MongoDB collection prefix |
 | `AUTH_USERNAME` | No | - | Basic auth username (if auth enabled) |
 | `AUTH_PASSWORD` | No | - | Basic auth password (if auth enabled) |
 
@@ -29,11 +29,11 @@
 cd backend
 
 # Start the monitoring service
-go run ./cmd/healthmon
+go run ./cmd/healthops
 
 # Alternative: Build and run
-go build -o healthmon ./cmd/healthmon
-./healthmon
+go build -o healthops ./cmd/healthops
+./healthops
 ```
 
 ### Verify Startup
@@ -53,7 +53,7 @@ curl http://localhost:8080/readyz
 **Check service status:**
 ```bash
 # Check if process is running
-ps aux | grep healthmon
+ps aux | grep healthops
 
 # Check port binding
 netstat -an | grep 8080
@@ -195,7 +195,7 @@ tail -f backend/data/state.json
 cat data/audit.json
 
 # Run verbose mode (if available)
-go run ./cmd/healthmon -v
+go run ./cmd/healthops -v
 ```
 
 ### Common Issues and Solutions
@@ -410,7 +410,7 @@ cp backend/config/default.json /backup/health-monitor/$(date +%Y%m%d)/config.jso
 cp -r backend/data/ /backup/health-monitor/$(date +%Y%m%d)/
 
 # Backup MongoDB (if using hybrid storage)
-mongodump --uri="$MONGODB_URI" --db=healthmon --out /backup/health-monitor/$(date +%Y%m%d)/mongodb
+mongodump --uri="$MONGODB_URI" --db=healthops --out /backup/health-monitor/$(date +%Y%m%d)/mongodb
 
 # Verify backup
 ls -la /backup/health-monitor/$(date +%Y%m%d)/
@@ -420,7 +420,7 @@ ls -la /backup/health-monitor/$(date +%Y%m%d)/
 
 ```bash
 # Stop the service
-pkill healthmon
+pkill healthops
 
 # Restore config
 cp /backup/health-monitor/YYYYMMDD/config.json backend/config/default.json
@@ -429,10 +429,10 @@ cp /backup/health-monitor/YYYYMMDD/config.json backend/config/default.json
 cp -r /backup/health-monitor/YYYYMMDD/data/ backend/
 
 # Restore MongoDB (if using hybrid storage)
-mongorestore --uri="$MONGODB_URI" /backup/health-monitor/YYYYMMDD/mongodb/healthmon
+mongorestore --uri="$MONGODB_URI" /backup/health-monitor/YYYYMMDD/mongodb/healthops
 
 # Start the service
-cd backend && go run ./cmd/healthmon
+cd backend && go run ./cmd/healthops
 ```
 
 ### Automated Backup Script
@@ -505,9 +505,9 @@ echo "Backup completed: $BACKUP_DIR/$DATE"
 
 ```json
 {
-  "MONGODB_URI": "mongodb://localhost:27017/healthmon",
-  "MONGODB_DATABASE": "healthmon",
-  "MONGODB_COLLECTION_PREFIX": "healthmon"
+  "MONGODB_URI": "mongodb://localhost:27017/healthops",
+  "MONGODB_DATABASE": "healthops",
+  "MONGODB_COLLECTION_PREFIX": "healthops"
 }
 ```
 
@@ -593,11 +593,11 @@ curl http://localhost:8080/api/v1/metrics
 
 ### Key Metrics to Watch
 
-- **`healthmon_checks_total`** - Total checks executed
-- **`healthmon_checks_failed_total`** - Failed checks
-- **`healthmon_incidents_total`** - Total incidents
-- **`healthmon_alerts_triggered_total`** - Alerts triggered
-- **`healthmon_last_run_timestamp_seconds`** - Last run timestamp
+- **`healthops_checks_total`** - Total checks executed
+- **`healthops_checks_failed_total`** - Failed checks
+- **`healthops_incidents_total`** - Total incidents
+- **`healthops_alerts_triggered_total`** - Alerts triggered
+- **`healthops_last_run_timestamp_seconds`** - Last run timestamp
 
 ### Alerting Recommendations
 
@@ -781,7 +781,7 @@ sudo chmod 644 /path/to/log/file.log
 jq . config/default.json
 
 # Check configuration
-go run ./cmd/healthmon --validate-config
+go run ./cmd/healthops --validate-config
 ```
 
 ## Emergency Procedures
@@ -790,7 +790,7 @@ go run ./cmd/healthmon --validate-config
 
 ```bash
 # Check for existing process
-pkill healthmon
+pkill healthops
 
 # Check port availability
 lsof -i :8080

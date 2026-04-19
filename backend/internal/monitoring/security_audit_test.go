@@ -145,31 +145,31 @@ func TestInvalidAuthRejected(t *testing.T) {
 			name:           "POST with wrong username",
 			authHeader:     "Basic " + basicAuthEncodeForTest("wrong:secret"),
 			expectedStatus: http.StatusUnauthorized,
-			expectedHeader: `Basic realm="HealthMon"`,
+			expectedHeader: `Basic realm="HealthOps"`,
 		},
 		{
 			name:           "POST with wrong password",
 			authHeader:     "Basic " + basicAuthEncodeForTest("admin:wrong"),
 			expectedStatus: http.StatusUnauthorized,
-			expectedHeader: `Basic realm="HealthMon"`,
+			expectedHeader: `Basic realm="HealthOps"`,
 		},
 		{
 			name:           "POST with malformed Basic auth",
 			authHeader:     "Basic invalidbase64==",
 			expectedStatus: http.StatusUnauthorized,
-			expectedHeader: `Basic realm="HealthMon"`,
+			expectedHeader: `Basic realm="HealthOps"`,
 		},
 		{
 			name:           "POST with non-Basic auth scheme",
 			authHeader:     "Bearer token123",
 			expectedStatus: http.StatusUnauthorized,
-			expectedHeader: `Basic realm="HealthMon"`,
+			expectedHeader: `Basic realm="HealthOps"`,
 		},
 		{
 			name:           "POST without auth header",
 			authHeader:     "",
 			expectedStatus: http.StatusUnauthorized,
-			expectedHeader: `Basic realm="HealthMon"`,
+			expectedHeader: `Basic realm="HealthOps"`,
 		},
 	}
 

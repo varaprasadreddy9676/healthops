@@ -54,7 +54,7 @@ func isRequestAuthorized(cfg AuthConfig, r *http.Request) bool {
 
 // requestAuth sends a 401 Unauthorized response with WWW-Authenticate header.
 func requestAuth(w http.ResponseWriter) {
-	w.Header().Set("WWW-Authenticate", `Basic realm="HealthMon"`)
+	w.Header().Set("WWW-Authenticate", `Basic realm="HealthOps"`)
 	w.WriteHeader(http.StatusUnauthorized)
 	w.Write([]byte("Unauthorized\n"))
 }

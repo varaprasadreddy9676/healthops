@@ -41,7 +41,7 @@
 | **Header** | `Authorization: Basic base64(username:password)` |
 | **Read endpoints (GET)** | No auth required |
 | **Write endpoints (POST/PUT/PATCH/DELETE)** | Auth required when `auth.enabled = true` |
-| **401 Response Header** | `WWW-Authenticate: Basic realm="HealthMon"` |
+| **401 Response Header** | `WWW-Authenticate: Basic realm="HealthOps"` |
 
 ---
 
@@ -1874,13 +1874,13 @@ Prometheus metrics endpoint.
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `healthmon_check_runs_total` | counter | Total check runs by check ID and status |
-| `healthmon_check_duration_seconds` | histogram | Check execution duration |
-| `healthmon_check_failures_total` | counter | Total check failures |
-| `healthmon_incidents_total` | counter | Total incidents by severity |
-| `healthmon_alerts_triggered_total` | counter | Total alerts triggered |
-| `healthmon_http_requests_total` | counter | HTTP requests by method, path, status |
-| `healthmon_http_request_duration_seconds` | histogram | HTTP request duration |
+| `healthops_check_runs_total` | counter | Total check runs by check ID and status |
+| `healthops_check_duration_seconds` | histogram | Check execution duration |
+| `healthops_check_failures_total` | counter | Total check failures |
+| `healthops_incidents_total` | counter | Total incidents by severity |
+| `healthops_alerts_triggered_total` | counter | Total alerts triggered |
+| `healthops_http_requests_total` | counter | HTTP requests by method, path, status |
+| `healthops_http_request_duration_seconds` | histogram | HTTP request duration |
 
 ---
 
@@ -1922,8 +1922,8 @@ These rules are loaded at startup and can be managed via the Alert Rules API.
 | `CONFIG_PATH` | No | `config/default.json` | Config file location |
 | `STATE_PATH` | No | `data/state.json` | Local state file |
 | `MONGODB_URI` | No | — | Enable MongoDB mirroring |
-| `MONGODB_DATABASE` | No | `healthmon` | MongoDB database name |
-| `MONGODB_COLLECTION_PREFIX` | No | `healthmon` | MongoDB collection prefix |
+| `MONGODB_DATABASE` | No | `healthops` | MongoDB database name |
+| `MONGODB_COLLECTION_PREFIX` | No | `healthops` | MongoDB collection prefix |
 | `{check.mysql.dsnEnv}` | Per check | — | MySQL DSN (never logged) |
 
 ---

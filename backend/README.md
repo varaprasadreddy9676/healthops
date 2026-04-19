@@ -6,7 +6,7 @@ Go backend for the HealthOps monitoring console. Provides health checks, MySQL m
 
 ```bash
 cd backend
-go run ./cmd/healthmon
+go run ./cmd/healthops
 ```
 
 ## Test
@@ -26,8 +26,8 @@ go fmt ./...             # format before committing
 | `STATE_PATH` | `data/state.json` | Persisted state file |
 | `DATA_DIR` | `data/` | JSONL repositories, AI config |
 | `MONGODB_URI` | — | Optional MongoDB mirror |
-| `MONGODB_DATABASE` | `healthmon` | MongoDB database name |
-| `MONGODB_COLLECTION_PREFIX` | `healthmon` | Collection prefix |
+| `MONGODB_DATABASE` | `healthops` | MongoDB database name |
+| `MONGODB_COLLECTION_PREFIX` | `healthops` | Collection prefix |
 | `{check.mysql.dsnEnv}` | — | MySQL DSN per check (never logged) |
 
 MongoDB is best-effort only. The backend keeps running with the local file store if MongoDB is unavailable.

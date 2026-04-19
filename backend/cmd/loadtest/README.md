@@ -178,7 +178,7 @@ Goroutines:
 ### Connection Refused
 Ensure the health monitoring service is running:
 ```bash
-cd backend && go run ./cmd/healthmon
+cd backend && go run ./cmd/healthops
 ```
 
 ### High Scheduler Lag
@@ -212,7 +212,7 @@ jobs:
       - name: Start service
         run: |
           cd backend
-          go run ./cmd/healthmon &
+          go run ./cmd/healthops &
           sleep 10
       - name: Run load tests
         run: |
@@ -226,7 +226,7 @@ stage('Load Test') {
     steps {
         sh '''
             cd backend
-            go run ./cmd/healthmon &
+            go run ./cmd/healthops &
             sleep 10
             go run ./cmd/loadtest -duration 5m
         '''

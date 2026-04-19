@@ -13,7 +13,7 @@ docs/
 frontend/node_modules/
 
 # Backend binary (build artifact)
-backend/healthmon
+backend/healthops
 
 # Data directory
 backend/data/

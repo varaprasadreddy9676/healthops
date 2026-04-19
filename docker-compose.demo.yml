@@ -14,10 +14,10 @@
 # which has checks pre-configured for all demo services.
 
 services:
-  healthmon:
+  healthops:
     environment:
       - CONFIG_PATH=/app/config/demo.json
-      - MYSQL_DSN=healthmon:healthmon123@tcp(mysql:3306)/healthmon
+      - MYSQL_DSN=healthops:healthops123@tcp(mysql:3306)/healthops
     volumes:
       - ./backend/config/demo.json:/app/config/demo.json:ro
     depends_on:
@@ -38,9 +38,9 @@ services:
       - "3306:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=rootpass123
-      - MYSQL_DATABASE=healthmon
-      - MYSQL_USER=healthmon
-      - MYSQL_PASSWORD=healthmon123
+      - MYSQL_DATABASE=healthops
+      - MYSQL_USER=healthops
+      - MYSQL_PASSWORD=healthops123
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql-init:/docker-entrypoint-initdb.d

@@ -13,15 +13,15 @@ import (
 )
 
 func main() {
-	logger := log.New(os.Stdout, "healthmon ", log.LstdFlags|log.Lmicroseconds)
+	logger := log.New(os.Stdout, "healthops ", log.LstdFlags|log.Lmicroseconds)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	configPath := resolvePath("CONFIG_PATH", filepath.Join("backend", "config", "default.json"), filepath.Join("config", "default.json"))
 	mongoURI := os.Getenv("MONGODB_URI")
-	mongoDB := envOrDefault("MONGODB_DATABASE", "healthmon")
-	mongoPrefix := envOrDefault("MONGODB_COLLECTION_PREFIX", "healthmon")
+	mongoDB := envOrDefault("MONGODB_DATABASE", "healthops")
+	mongoPrefix := envOrDefault("MONGODB_COLLECTION_PREFIX", "healthops")
 
 	cfg, err := monitoring.LoadConfig(configPath)
 	if err != nil {
