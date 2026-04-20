@@ -1,13 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
-
-interface User {
-  id: string
-  username: string
-  role: 'admin' | 'ops'
-  displayName?: string
-  createdAt: string
-  updatedAt: string
-}
+import type { User } from '@/types'
 
 interface AuthState {
   user: User | null

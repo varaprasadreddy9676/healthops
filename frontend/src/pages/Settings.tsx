@@ -4,12 +4,13 @@ import { useSearchParams } from 'react-router-dom'
 import {
   Settings as SettingsIcon, Bell, Download, Key, Plus, Trash2,
   Pencil, X, Save, Globe, Terminal, FileText, Database, Activity,
-  Eye, EyeOff, Zap, Monitor, Server, Play,
+  Eye, EyeOff, Zap, Monitor, Server, Play, Users,
 } from 'lucide-react'
 import { settingsApi } from '@/api/settings'
 import { aiApi } from '@/api/ai'
 import { checksApi } from '@/api/checks'
 import { serversApi } from '@/api/servers'
+import { usersApi } from '@/api/users'
 import { LoadingState } from '@/components/LoadingState'
 import { ErrorState } from '@/components/ErrorState'
 import { useConfirm } from '@/components/ConfirmDialog'
@@ -17,10 +18,10 @@ import { useToast } from '@/components/Toast'
 import { cn } from '@/lib/utils'
 import type {
   CheckConfig, AlertRule, AlertCondition, AIProviderConfig,
-  AIProviderType, RemoteServer,
+  AIProviderType, RemoteServer, User, CreateUserRequest, UpdateUserRequest,
 } from '@/types'
 
-type Tab = 'general' | 'servers' | 'checks' | 'alerts' | 'ai' | 'export'
+type Tab = 'general' | 'users' | 'servers' | 'checks' | 'alerts' | 'ai' | 'export'
 
 export default function Settings() {
   const [searchParams] = useSearchParams()
@@ -28,6 +29,7 @@ export default function Settings() {
   const [tab, setTab] = useState<Tab>(initialTab)
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'general', label: 'General', icon: <SettingsIcon className="h-4 w-4" /> },
+    { id: 'users', label: 'Users', icon: <Users className="h-4 w-4" /> },
     { id: 'servers', label: 'Servers', icon: <Server className="h-4 w-4" /> },
     { id: 'checks', label: 'Health Checks', icon: <Activity className="h-4 w-4" /> },
     { id: 'alerts', label: 'Alert Rules', icon: <Bell className="h-4 w-4" /> },
@@ -61,6 +63,7 @@ export default function Settings() {
       </div>
 
       {tab === 'general' && <GeneralSettings />}
+      {tab === 'users' && <UsersSettings />}
       {tab === 'servers' && <ServersSettings />}
       {tab === 'checks' && <ChecksSettings />}
       {tab === 'alerts' && <AlertSettings />}
@@ -249,7 +252,211 @@ function ConfigCard({ label, value }: { label: string; value: string }) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   1b. REMOTE SERVERS MANAGEMENT
+   1b. USER MANAGEMENT
+   ══════════════════════════════════════════════════════════════════ */
+
+function UsersSettings() {
+  const queryClient = useQueryClient()
+  const toast = useToast()
+  const confirm = useConfirm()
+  const [modalUser, setModalUser] = useState<User | null>(null)
+  const [showModal, setShowModal] = useState(false)
+
+  const { data: users, isLoading, error } = useQuery({ queryKey: ['users'], queryFn: usersApi.list })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => usersApi.delete(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['users'] }); toast.success('User deleted') },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  if (isLoading) return <LoadingState />
+  if (error) return <ErrorState message={error.message} />
+
+  return (
+    <>
+      <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">User Management</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Manage users and their notification email addresses</p>
+          </div>
+          <button onClick={() => { setModalUser(null); setShowModal(true) }}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-700">
+            <Plus className="h-3.5 w-3.5" /> Add User
+          </button>
+        </div>
+
+        {(!users || users.length === 0) ? (
+          <div className="px-5 py-8 text-center text-sm text-slate-500">No users configured</div>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {users.map(u => (
+              <div key={u.id} className="flex items-center justify-between px-5 py-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
+                      {u.displayName || u.username}
+                    </p>
+                    <span className={cn(
+                      'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                      u.role === 'admin'
+                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+                    )}>
+                      {u.role}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 truncate">
+                    {u.username}{u.email ? ` · ${u.email}` : ' · no email set'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button onClick={() => { setModalUser(u); setShowModal(true) }}
+                    className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={async () => { const ok = await confirm({ title: 'Delete User', message: `Delete user "${u.username}"?`, variant: 'danger', confirmLabel: 'Delete' }); if (ok) deleteMutation.mutate(u.id) }}
+                    className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showModal && (
+        <UserModal
+          user={modalUser}
+          onClose={() => setShowModal(false)}
+          onSaved={() => { setShowModal(false); queryClient.invalidateQueries({ queryKey: ['users'] }) }}
+        />
+      )}
+    </>
+  )
+}
+
+function UserModal({ user, onClose, onSaved }: { user: User | null; onClose: () => void; onSaved: () => void }) {
+  const toast = useToast()
+  const isEdit = !!user
+
+  const [form, setForm] = useState({
+    username: user?.username ?? '',
+    displayName: user?.displayName ?? '',
+    email: user?.email ?? '',
+    role: user?.role ?? 'ops',
+    password: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const createMutation = useMutation({
+    mutationFn: (data: CreateUserRequest) => usersApi.create(data),
+    onSuccess: () => { toast.success('User created'); onSaved() },
+    onError: (e: Error) => { toast.error(e.message); setSaving(false) },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: (data: UpdateUserRequest) => usersApi.update(user!.id, data),
+    onSuccess: () => { toast.success('User updated'); onSaved() },
+    onError: (e: Error) => { toast.error(e.message); setSaving(false) },
+  })
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+
+    if (isEdit) {
+      const req: UpdateUserRequest = {}
+      if (form.displayName !== (user?.displayName ?? '')) req.displayName = form.displayName
+      if (form.email !== (user?.email ?? '')) req.email = form.email
+      if (form.role !== user?.role) req.role = form.role
+      if (form.password) req.password = form.password
+      updateMutation.mutate(req)
+    } else {
+      createMutation.mutate({
+        username: form.username,
+        password: form.password,
+        role: form.role,
+        displayName: form.displayName || undefined,
+        email: form.email || undefined,
+      })
+    }
+  }
+
+  const inputCls = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {isEdit ? 'Edit User' : 'Create User'}
+          </h3>
+          <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Username</label>
+            <input value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
+              disabled={isEdit} required placeholder="johndoe" className={cn(inputCls, isEdit && 'opacity-50 cursor-not-allowed')} />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Display Name</label>
+            <input value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))}
+              placeholder="John Doe" className={inputCls} />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Email</label>
+            <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              placeholder="john@example.com" className={inputCls} />
+            <p className="mt-1 text-[11px] text-slate-500">Used for alert notifications and incident reports</p>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Role</label>
+            <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as 'admin' | 'ops' }))}
+              className={inputCls}>
+              <option value="ops">Ops</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">
+              {isEdit ? 'New Password (leave blank to keep current)' : 'Password'}
+            </label>
+            <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+              required={!isEdit} minLength={8} placeholder={isEdit ? 'Leave blank to keep current' : 'Min 8 characters'}
+              className={inputCls} />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50">
+              <Save className="h-3.5 w-3.5" />
+              {saving ? 'Saving...' : isEdit ? 'Update' : 'Create'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   1c. REMOTE SERVERS MANAGEMENT
    ══════════════════════════════════════════════════════════════════ */
 
 function emptyServer(): Partial<RemoteServer> {
@@ -558,7 +765,7 @@ function emptyCheck(): Partial<CheckConfig> {
     timeoutSeconds: 5, warningThresholdMs: undefined, freshnessSeconds: undefined,
     intervalSeconds: undefined, retryCount: 0, retryDelaySeconds: undefined,
     server: '', application: '', enabled: true, tags: [],
-    mysql: { dsnEnv: '' },
+    mysql: { dsnEnv: '', host: '', port: 3306, username: '', password: '', database: '' },
     ssh: { host: '', port: 22, user: '', keyPath: '', keyEnv: '', password: '', passwordEnv: '' },
   }
 }
@@ -684,7 +891,7 @@ function ChecksSettings() {
                     {c.type === 'process' && c.target}
                     {c.type === 'command' && c.command}
                     {c.type === 'log' && c.path}
-                    {c.type === 'mysql' && `DSN: $${c.mysql?.dsnEnv || 'MYSQL_DSN'}`}
+                    {c.type === 'mysql' && (c.mysql?.host ? `${c.mysql.username || 'root'}@${c.mysql.host}:${c.mysql.port || 3306}` : `DSN: $${c.mysql?.dsnEnv || 'MYSQL_DSN'}`)}
                     {c.type === 'ssh' && `${c.ssh?.user || 'root'}@${c.ssh?.host || '?'}:${c.ssh?.port || 22}`}
                     {c.serverId && ` · 🖥 ${servers?.find(s => s.id === c.serverId)?.name || c.serverId}`}
                     {!c.serverId && c.server && ` · ${c.server}`}
@@ -911,18 +1118,54 @@ function CheckForm({ initial, isEdit, saving, servers, onSave, onCancel }: {
       )}
 
       {type === 'mysql' && (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="DSN Environment Variable" required hint="Env var containing MySQL DSN">
-            <input value={form.mysql?.dsnEnv ?? ''} onChange={e => setForm(f => ({
-              ...f, mysql: { ...f.mysql!, dsnEnv: e.target.value },
-            }))} placeholder="MYSQL_DSN" className={inputCls} required />
-          </Field>
-          <Field label="Connect Timeout (s)">
-            <input type="number" value={form.mysql?.connectTimeoutSeconds ?? ''}
-              onChange={e => setForm(f => ({
-                ...f, mysql: { ...f.mysql!, connectTimeoutSeconds: e.target.value ? +e.target.value : undefined },
-              }))} placeholder="5" className={inputCls} />
-          </Field>
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Host" required hint="MySQL server IP or hostname">
+              <input value={form.mysql?.host ?? ''} onChange={e => setForm(f => ({
+                ...f, mysql: { ...f.mysql!, host: e.target.value },
+              }))} placeholder="192.168.1.100" className={inputCls} />
+            </Field>
+            <Field label="Port" hint="Default: 3306">
+              <input type="number" value={form.mysql?.port ?? ''} onChange={e => setForm(f => ({
+                ...f, mysql: { ...f.mysql!, port: e.target.value ? +e.target.value : undefined },
+              }))} placeholder="3306" className={inputCls} />
+            </Field>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Username" required hint="MySQL login user">
+              <input value={form.mysql?.username ?? ''} onChange={e => setForm(f => ({
+                ...f, mysql: { ...f.mysql!, username: e.target.value },
+              }))} placeholder="monitor_user" className={inputCls} />
+            </Field>
+            <Field label="Password" hint="MySQL login password">
+              <input type="password" value={form.mysql?.password ?? ''} onChange={e => setForm(f => ({
+                ...f, mysql: { ...f.mysql!, password: e.target.value },
+              }))} placeholder="••••••••" className={inputCls} />
+            </Field>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Database" hint="Default: mysql">
+              <input value={form.mysql?.database ?? ''} onChange={e => setForm(f => ({
+                ...f, mysql: { ...f.mysql!, database: e.target.value },
+              }))} placeholder="mysql" className={inputCls} />
+            </Field>
+            <Field label="Connect Timeout (s)">
+              <input type="number" value={form.mysql?.connectTimeoutSeconds ?? ''}
+                onChange={e => setForm(f => ({
+                  ...f, mysql: { ...f.mysql!, connectTimeoutSeconds: e.target.value ? +e.target.value : undefined },
+                }))} placeholder="5" className={inputCls} />
+            </Field>
+          </div>
+          <details className="text-xs text-slate-500 dark:text-slate-400">
+            <summary className="cursor-pointer hover:text-slate-700 dark:hover:text-slate-300">Advanced: Use environment variable instead</summary>
+            <div className="mt-2">
+              <Field label="DSN Environment Variable" hint="If set, overrides host/username/password above">
+                <input value={form.mysql?.dsnEnv ?? ''} onChange={e => setForm(f => ({
+                  ...f, mysql: { ...f.mysql!, dsnEnv: e.target.value },
+                }))} placeholder="MYSQL_DSN" className={inputCls} />
+              </Field>
+            </div>
+          </details>
         </div>
       )}
 

@@ -264,3 +264,11 @@ func (m *MongoMirror) upsertDashboardSnapshot(ctx context.Context, state State) 
 	_, err := m.dashboard.ReplaceOne(ctx, bson.M{"_id": "dashboard"}, doc, options.Replace().SetUpsert(true))
 	return err
 }
+
+// Ping checks whether MongoDB is reachable.
+func (m *MongoMirror) Ping(ctx context.Context) error {
+	if m == nil || m.client == nil {
+		return fmt.Errorf("mongo client is nil")
+	}
+	return m.client.Ping(ctx, nil)
+}

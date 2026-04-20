@@ -29,3 +29,13 @@ backend/data/
 
 # Root package lock (not needed)
 /package-lock.json
+
+# Additional binaries
+backend/healthmon
+backend/healthops-bin
+
+# Vite cache
+.vite/
+
+# Runtime data (root level)
+data/

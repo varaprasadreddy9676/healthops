@@ -17,18 +17,19 @@ import (
 )
 
 type Runner struct {
-	cfg             *Config
-	store           Store
-	client          *http.Client
-	metrics         *MetricsCollector
-	mysqlSampler    MySQLSampler
-	mysqlRepo       MySQLMetricsRepository
-	mysqlRuleEngine *MySQLRuleEngine
-	incidentManager *IncidentManager
-	outbox          NotificationOutboxRepository
-	snapshotRepo    IncidentSnapshotRepository
-	running         bool
-	mu              sync.Mutex
+	cfg               *Config
+	store             Store
+	client            *http.Client
+	metrics           *MetricsCollector
+	mysqlSampler      MySQLSampler
+	mysqlRepo         MySQLMetricsRepository
+	mysqlRuleEngine   *MySQLRuleEngine
+	incidentManager   *IncidentManager
+	outbox            NotificationOutboxRepository
+	snapshotRepo      IncidentSnapshotRepository
+	serverMetricsRepo *ServerMetricsRepository
+	running           bool
+	mu                sync.Mutex
 }
 
 func NewRunner(cfg *Config, store Store) *Runner {
@@ -443,6 +444,10 @@ func (r *Runner) SetSnapshotRepo(repo IncidentSnapshotRepository) {
 	r.snapshotRepo = repo
 }
 
+func (r *Runner) SetServerMetricsRepo(repo *ServerMetricsRepository) {
+	r.serverMetricsRepo = repo
+}
+
 func (r *Runner) runMySQL(ctx context.Context, check CheckConfig, result *CheckResult) error {
 	if r.mysqlSampler == nil {
 		return fmt.Errorf("mysql sampler not configured")
@@ -572,6 +577,19 @@ func (r *Runner) runSSH(ctx context.Context, check CheckConfig, result *CheckRes
 	result.Status = status
 	result.Healthy = status == "healthy"
 	result.Message = strings.Join(messages, "; ")
+
+	// Save server metrics snapshot for historical tracking
+	if r.serverMetricsRepo != nil && check.SSH != nil {
+		serverID := check.ServerId
+		if serverID == "" {
+			serverID = check.Server
+		}
+		if serverID == "" {
+			serverID = check.SSH.Host
+		}
+		snap := SnapshotFromMetrics(serverID, metrics)
+		_ = r.serverMetricsRepo.Save(snap)
+	}
 
 	return nil
 }

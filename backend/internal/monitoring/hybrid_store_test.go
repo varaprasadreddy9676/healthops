@@ -52,8 +52,9 @@ func TestHybridStoreSnapshotUsesLocalState(t *testing.T) {
 	if state.Checks[0].ID != "local-check" {
 		t.Fatalf("expected local snapshot, got %+v", state.Checks[0])
 	}
-	if mirror.readCalls != 0 {
-		t.Fatalf("expected local-only snapshot read, got %d mirror reads", mirror.readCalls)
+	// Mongo is primary, so it should be tried first
+	if mirror.readCalls != 1 {
+		t.Fatalf("expected 1 mirror read attempt, got %d", mirror.readCalls)
 	}
 }
 
@@ -86,15 +87,9 @@ func TestHybridStoreDashboardSnapshotPrefersFreshMirrorWhenAvailable(t *testing.
 	}
 }
 
-func TestHybridStoreDashboardSnapshotFallsBackToLocalWhenMirrorStale(t *testing.T) {
+func TestHybridStoreDashboardSnapshotFallsBackToLocalWhenMirrorFails(t *testing.T) {
 	local := newTestFileStore(t, []CheckConfig{{ID: "local-check", Name: "Local Check", Type: "api", Target: "https://example.com/health"}})
-	localState := local.Snapshot()
-	mirror := &fakeMirror{
-		readState: State{
-			Checks:    []CheckConfig{{ID: "mongo-check", Name: "Mongo Check", Type: "tcp", Port: 8080}},
-			UpdatedAt: localState.UpdatedAt.Add(-time.Hour),
-		},
-	}
+	mirror := &fakeMirror{readErr: errors.New("mongo unavailable")}
 	store := &HybridStore{
 		local:       local,
 		mirror:      mirror,
@@ -105,7 +100,7 @@ func TestHybridStoreDashboardSnapshotFallsBackToLocalWhenMirrorStale(t *testing.
 
 	snapshot := store.DashboardSnapshot()
 	if got := len(snapshot.State.Checks); got != 1 {
-		t.Fatalf("expected local check after stale mirror read, got %d", got)
+		t.Fatalf("expected local check after mirror failure, got %d", got)
 	}
 	if snapshot.State.Checks[0].ID != "local-check" {
 		t.Fatalf("expected local dashboard snapshot, got %+v", snapshot.State.Checks[0])

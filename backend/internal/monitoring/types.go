@@ -2,6 +2,8 @@ package monitoring
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"time"
 )
 
@@ -250,13 +252,49 @@ type AlertState struct {
 }
 
 // MySQLCheckConfig holds MySQL-specific check configuration.
+// Supports two modes:
+//   - Direct: set Host, Port, Username, Password, Database fields
+//   - Environment: set DSNEnv to the name of an env var containing the full DSN
+//
+// Direct config takes priority. If both are empty, validation fails.
 type MySQLCheckConfig struct {
-	DSNEnv                string `json:"dsnEnv" bson:"dsnEnv"`
+	DSNEnv                string `json:"dsnEnv,omitempty" bson:"dsnEnv,omitempty"`
+	Host                  string `json:"host,omitempty" bson:"host,omitempty"`
+	Port                  int    `json:"port,omitempty" bson:"port,omitempty"`
+	Username              string `json:"username,omitempty" bson:"username,omitempty"`
+	Password              string `json:"password,omitempty" bson:"password,omitempty"`
+	Database              string `json:"database,omitempty" bson:"database,omitempty"`
 	ConnectTimeoutSeconds int    `json:"connectTimeoutSeconds,omitempty" bson:"connectTimeoutSeconds,omitempty"`
 	QueryTimeoutSeconds   int    `json:"queryTimeoutSeconds,omitempty" bson:"queryTimeoutSeconds,omitempty"`
 	ProcesslistLimit      int    `json:"processlistLimit,omitempty" bson:"processlistLimit,omitempty"`
 	StatementLimit        int    `json:"statementLimit,omitempty" bson:"statementLimit,omitempty"`
 	HostUserLimit         int    `json:"hostUserLimit,omitempty" bson:"hostUserLimit,omitempty"`
+}
+
+// BuildDSN returns the MySQL DSN. Uses direct config fields first, then falls
+// back to the environment variable named in DSNEnv.
+func (c *MySQLCheckConfig) BuildDSN() (string, error) {
+	// Direct config takes priority
+	if c.Host != "" && c.Username != "" {
+		port := c.Port
+		if port <= 0 {
+			port = 3306
+		}
+		db := c.Database
+		if db == "" {
+			db = "mysql"
+		}
+		return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", c.Username, c.Password, c.Host, port, db), nil
+	}
+	// Fall back to environment variable
+	if c.DSNEnv != "" {
+		dsn := os.Getenv(c.DSNEnv)
+		if dsn == "" {
+			return "", fmt.Errorf("environment variable %q is not set", c.DSNEnv)
+		}
+		return dsn, nil
+	}
+	return "", fmt.Errorf("mysql config requires either host+username or dsnEnv")
 }
 
 // IncidentSnapshot holds evidence captured at incident open time.

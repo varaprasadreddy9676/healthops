@@ -19,21 +19,22 @@ type RouteRegistrar interface {
 }
 
 type Service struct {
-	cfg             *Config
-	store           Store
-	runner          *Runner
-	scheduler       *CheckScheduler
-	incidentManager *IncidentManager
-	alertEngine     *AlertRuleEngine
-	metrics         *MetricsCollector
-	logger          *log.Logger
-	auditLogger     *AuditLogger
-	mysqlRoutes     RouteRegistrar
-	aiRoutes        RouteRegistrar
-	notifyRoutes    RouteRegistrar
-	snapshotRepo    IncidentSnapshotRepository
-	userStore       *UserStore
-	userAPI         *UserAPIHandler
+	cfg               *Config
+	store             Store
+	runner            *Runner
+	scheduler         *CheckScheduler
+	incidentManager   *IncidentManager
+	alertEngine       *AlertRuleEngine
+	metrics           *MetricsCollector
+	logger            *log.Logger
+	auditLogger       *AuditLogger
+	mysqlRoutes       RouteRegistrar
+	aiRoutes          RouteRegistrar
+	notifyRoutes      RouteRegistrar
+	snapshotRepo      IncidentSnapshotRepository
+	userStore         *UserStore
+	userAPI           *UserAPIHandler
+	serverMetricsRepo *ServerMetricsRepository
 }
 
 func NewService(cfg *Config, store Store, logger *log.Logger) *Service {
@@ -165,6 +166,12 @@ func (s *Service) SetNotifyRoutes(r RouteRegistrar) {
 // SetSnapshotRepo sets the incident snapshot repository for the service.
 func (s *Service) SetSnapshotRepo(repo IncidentSnapshotRepository) {
 	s.snapshotRepo = repo
+}
+
+// SetServerMetricsRepo sets the server metrics repository.
+func (s *Service) SetServerMetricsRepo(repo *ServerMetricsRepository) {
+	s.serverMetricsRepo = repo
+	s.runner.SetServerMetricsRepo(repo)
 }
 
 // SetUserStore sets the user store and creates the user API handler.

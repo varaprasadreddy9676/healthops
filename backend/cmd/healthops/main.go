@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"medics-health-check/backend/internal/monitoring"
 	"medics-health-check/backend/internal/monitoring/ai"
@@ -32,15 +33,18 @@ func main() {
 	}
 
 	var store monitoring.Store
+	var hybridStore *monitoring.HybridStore
 	statePath := resolvePath("STATE_PATH", filepath.Join("backend", "data", "state.json"), filepath.Join("data", "state.json"))
 
 	if mongoURI != "" {
-		// Use HybridStore with MongoDB mirror
-		store, err = monitoring.NewHybridStore(statePath, cfg.Checks, mongoURI, mongoDB, mongoPrefix, cfg.RetentionDays, logger)
+		// Use HybridStore with MongoDB as primary, local file as fallback
+		hs, err := monitoring.NewHybridStore(statePath, cfg.Checks, mongoURI, mongoDB, mongoPrefix, cfg.RetentionDays, logger)
 		if err != nil {
 			logger.Fatalf("init hybrid store: %v", err)
 		}
-		logger.Printf("running with hybrid storage (local file + MongoDB mirror)")
+		hybridStore = hs
+		store = hs
+		logger.Printf("running with MongoDB as primary storage (local file fallback)")
 	} else {
 		// Use only local file store
 		store, err = monitoring.NewFileStore(statePath, cfg.Checks)
@@ -75,6 +79,13 @@ func main() {
 	incidentRepo := monitoring.NewMemoryIncidentRepository()
 	incidentManager := monitoring.NewIncidentManager(incidentRepo, logger)
 	service.SetIncidentManager(incidentManager)
+
+	// Start MongoDB health monitor — creates incidents when MongoDB goes down
+	if hybridStore != nil && mongoURI != "" {
+		stopMongoMonitor := make(chan struct{})
+		go monitorMongoDB(hybridStore, incidentManager, logger, stopMongoMonitor)
+		defer close(stopMongoMonitor)
+	}
 
 	// Initialize generic repositories (notification outbox, AI queue, snapshots)
 	outbox, err := notify.NewFileNotificationOutbox(filepath.Join(dataDir, "notification_outbox.jsonl"))
@@ -112,6 +123,10 @@ func main() {
 	if err != nil {
 		logger.Printf("Warning: Failed to init snapshot repository: %v", err)
 	}
+
+	// Initialize server metrics repository (for SSH process/metrics history)
+	serverMetricsRepo := monitoring.NewServerMetricsRepository(dataDir)
+	service.SetServerMetricsRepo(serverMetricsRepo)
 
 	// Initialize MySQL-specific repositories if mysql checks exist
 	hasMySQLChecks := false
@@ -174,6 +189,8 @@ func main() {
 	}
 	// Prune resolved incidents to prevent unbounded memory growth
 	retentionJob.Register("incidents", incidentRepo, retentionCfg.IncidentRetentionDays)
+	// Prune old server metric snapshots
+	retentionJob.Register("server_metrics", serverMetricsRepo, retentionCfg.SnapshotRetentionDays)
 
 	// Initialize BYOK AI service
 	aiConfigStore, err := ai.NewAIConfigStore(dataDir)
@@ -261,4 +278,49 @@ func envOrDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// monitorMongoDB periodically pings MongoDB and creates/resolves incidents.
+func monitorMongoDB(store *monitoring.HybridStore, im *monitoring.IncidentManager, logger *log.Logger, stop <-chan struct{}) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	const checkID = "internal-mongodb"
+	const checkName = "MongoDB Primary Database"
+	wasDown := store.IsMongoDown()
+
+	// If already down at startup, create an incident immediately
+	if wasDown {
+		_ = im.ProcessAlert(checkID, checkName, "internal", "critical",
+			"MongoDB is unreachable — operating in local file fallback mode",
+			map[string]string{"component": "mongodb"},
+		)
+		logger.Printf("INCIDENT: MongoDB unreachable at startup — running on local file fallback")
+	}
+
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			err := store.PingMongo(ctx)
+			cancel()
+
+			isDown := err != nil
+			if isDown && !wasDown {
+				// MongoDB just went down — create incident
+				_ = im.ProcessAlert(checkID, checkName, "internal", "critical",
+					"MongoDB is unreachable — operating in local file fallback mode: "+err.Error(),
+					map[string]string{"component": "mongodb"},
+				)
+				logger.Printf("INCIDENT: MongoDB connectivity lost: %v", err)
+			} else if !isDown && wasDown {
+				// MongoDB recovered — auto-resolve
+				_ = im.AutoResolveOnRecovery(checkID)
+				logger.Printf("RESOLVED: MongoDB connectivity restored")
+			}
+			wasDown = isDown
+		}
+	}
 }

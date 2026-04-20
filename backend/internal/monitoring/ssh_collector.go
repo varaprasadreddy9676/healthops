@@ -14,7 +14,7 @@ import (
 // SSHCheckConfig holds SSH-specific check configuration.
 type SSHCheckConfig struct {
 	Host        string   `json:"host" bson:"host"`
-	Port        int      `json:"port,omitempty" bson:"port,omitempty"`               // default 22
+	Port        int      `json:"port,omitempty" bson:"port,omitempty"` // default 22
 	User        string   `json:"user" bson:"user"`
 	KeyPath     string   `json:"keyPath,omitempty" bson:"keyPath,omitempty"`         // path to private key file
 	KeyEnv      string   `json:"keyEnv,omitempty" bson:"keyEnv,omitempty"`           // env var with path to key file
@@ -38,6 +38,17 @@ type sshMetrics struct {
 	UptimeSeconds      float64
 	DiskReadIOPS       float64
 	DiskWriteIOPS      float64
+	TopProcesses       []ProcessInfo
+}
+
+// ProcessInfo holds information about a single process on a remote server.
+type ProcessInfo struct {
+	PID     int     `json:"pid"`
+	User    string  `json:"user"`
+	CPUPct  float64 `json:"cpuPercent"`
+	MemPct  float64 `json:"memPercent"`
+	MemMB   float64 `json:"memMB"`
+	Command string  `json:"command"`
 }
 
 // collectSSHMetrics connects to a remote server via SSH and collects system metrics.
@@ -203,6 +214,10 @@ func buildMetricsCommand(metrics []string) string {
 		// diskstats: read twice with the 1s gap from CPU to compute delta
 		parts = append(parts, `echo "===DISKIO==="`, `cat /proc/diskstats`)
 	}
+	if wantAll || want["processes"] {
+		// Top 15 processes sorted by memory usage (RSS), skip header
+		parts = append(parts, `echo "===PROCS==="`, `ps aux --sort=-%mem 2>/dev/null | head -16 || ps aux | head -16`)
+	}
 
 	return strings.Join(parts, " && ")
 }
@@ -230,6 +245,9 @@ func parseMetricsOutput(raw string) (*sshMetrics, error) {
 	}
 	if ioLines, ok := sections["DISKIO"]; ok {
 		parseDiskIO(ioLines, m)
+	}
+	if procLines, ok := sections["PROCS"]; ok {
+		m.TopProcesses = parseProcesses(procLines)
 	}
 
 	return m, nil
@@ -428,6 +446,40 @@ func (m *sshMetrics) toMap() map[string]float64 {
 		r["diskWritesTotal"] = m.DiskWriteIOPS
 	}
 	return r
+}
+
+// parseProcesses parses `ps aux` output into top processes.
+// Format: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND
+func parseProcesses(lines []string) []ProcessInfo {
+	var procs []ProcessInfo
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 11 {
+			continue
+		}
+		// Skip header
+		if fields[0] == "USER" {
+			continue
+		}
+		pid, _ := strconv.Atoi(fields[1])
+		cpuPct, _ := strconv.ParseFloat(fields[2], 64)
+		memPct, _ := strconv.ParseFloat(fields[3], 64)
+		rssKB, _ := strconv.ParseFloat(fields[5], 64)
+		cmd := strings.Join(fields[10:], " ")
+		// Truncate command to 120 chars
+		if len(cmd) > 120 {
+			cmd = cmd[:120] + "..."
+		}
+		procs = append(procs, ProcessInfo{
+			PID:     pid,
+			User:    fields[0],
+			CPUPct:  cpuPct,
+			MemPct:  memPct,
+			MemMB:   round2(rssKB / 1024),
+			Command: cmd,
+		})
+	}
+	return procs
 }
 
 func round2(v float64) float64 {

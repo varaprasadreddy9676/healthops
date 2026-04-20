@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 const Login = lazy(() => import('@/pages/Login'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const Servers = lazy(() => import('@/pages/Servers'))
+const ServerDetail = lazy(() => import('@/pages/ServerDetail'))
 const Checks = lazy(() => import('@/pages/Checks'))
 const CheckDetail = lazy(() => import('@/pages/CheckDetail'))
 const Incidents = lazy(() => import('@/pages/Incidents'))
@@ -42,6 +43,7 @@ export default function App() {
           <Route element={<Layout />}>
             <Route index element={<Dashboard />} />
             <Route path="servers" element={<Servers />} />
+            <Route path="servers/:id" element={<ServerDetail />} />
             <Route path="checks" element={<Checks />} />
             <Route path="checks/:id" element={<CheckDetail />} />
             <Route path="incidents" element={<Incidents />} />

@@ -227,8 +227,13 @@ func (c *CheckConfig) validate(cfg *Config) error {
 		if c.MySQL == nil {
 			return fmt.Errorf("mysql config block is required for mysql checks")
 		}
-		if c.MySQL.DSNEnv == "" {
-			return fmt.Errorf("mysql.dsnEnv is required for mysql checks")
+		hasDirect := c.MySQL.Host != "" && c.MySQL.Username != ""
+		hasEnv := c.MySQL.DSNEnv != ""
+		if !hasDirect && !hasEnv {
+			return fmt.Errorf("mysql config requires either host+username or dsnEnv")
+		}
+		if c.MySQL.Port <= 0 {
+			c.MySQL.Port = 3306
 		}
 		if c.MySQL.ConnectTimeoutSeconds <= 0 {
 			c.MySQL.ConnectTimeoutSeconds = 3

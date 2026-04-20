@@ -31,6 +31,7 @@ type User struct {
 	PasswordHash string    `json:"-"`
 	Role         string    `json:"role"`
 	DisplayName  string    `json:"displayName,omitempty"`
+	Email        string    `json:"email,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
@@ -41,6 +42,7 @@ type userJSON struct {
 	PasswordHash string    `json:"passwordHash"`
 	Role         string    `json:"role"`
 	DisplayName  string    `json:"displayName,omitempty"`
+	Email        string    `json:"email,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
@@ -60,12 +62,14 @@ type CreateUserRequest struct {
 	Password    string `json:"password"`
 	Role        string `json:"role"`
 	DisplayName string `json:"displayName,omitempty"`
+	Email       string `json:"email,omitempty"`
 }
 
 type UpdateUserRequest struct {
 	Password    *string `json:"password,omitempty"`
 	Role        *string `json:"role,omitempty"`
 	DisplayName *string `json:"displayName,omitempty"`
+	Email       *string `json:"email,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -193,6 +197,7 @@ func NewUserStore(dataDir string) (*UserStore, error) {
 					PasswordHash: r.PasswordHash,
 					Role:         r.Role,
 					DisplayName:  r.DisplayName,
+					Email:        r.Email,
 					CreatedAt:    r.CreatedAt,
 					UpdatedAt:    r.UpdatedAt,
 				}
@@ -230,6 +235,7 @@ func (s *UserStore) save() {
 			PasswordHash: u.PasswordHash,
 			Role:         u.Role,
 			DisplayName:  u.DisplayName,
+			Email:        u.Email,
 			CreatedAt:    u.CreatedAt,
 			UpdatedAt:    u.UpdatedAt,
 		})
@@ -322,6 +328,7 @@ func (s *UserStore) Create(req CreateUserRequest) (*User, error) {
 		PasswordHash: string(hash),
 		Role:         req.Role,
 		DisplayName:  req.DisplayName,
+		Email:        req.Email,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -356,7 +363,15 @@ func (s *UserStore) Update(id string, req UpdateUserRequest) (*User, error) {
 	}
 
 	if req.DisplayName != nil {
+		if req.Email != nil {
+			u.Email = *req.Email
+		}
+
 		u.DisplayName = *req.DisplayName
+	}
+
+	if req.Email != nil {
+		u.Email = *req.Email
 	}
 
 	u.UpdatedAt = time.Now().UTC()

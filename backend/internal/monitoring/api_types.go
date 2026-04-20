@@ -96,6 +96,18 @@ func sanitizeChecksForList(checks []CheckConfig) []CheckConfig {
 	for i := range checks {
 		safe[i] = checks[i]
 		safe[i].Metadata = nil
+		// Mask MySQL password
+		if safe[i].MySQL != nil && safe[i].MySQL.Password != "" {
+			cp := *safe[i].MySQL
+			cp.Password = "********"
+			safe[i].MySQL = &cp
+		}
+		// Mask SSH password (already masked on server objects, but also mask in checks)
+		if safe[i].SSH != nil && safe[i].SSH.Password != "" {
+			cp := *safe[i].SSH
+			cp.Password = "********"
+			safe[i].SSH = &cp
+		}
 	}
 	return safe
 }

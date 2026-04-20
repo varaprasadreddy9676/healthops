@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -21,16 +20,17 @@ func NewLiveMySQLSampler() *LiveMySQLSampler {
 }
 
 // Collect gathers MySQL status variables and computes a sample.
-// SECURITY: DSN is resolved from the environment variable named in check.MySQL.DSNEnv.
+// SECURITY: DSN is resolved via BuildDSN() — either from direct config fields
+// or from the environment variable named in check.MySQL.DSNEnv.
 // The DSN value is never logged or returned in responses.
 func (s *LiveMySQLSampler) Collect(ctx context.Context, check monitoring.CheckConfig) (monitoring.MySQLSample, error) {
 	if check.MySQL == nil {
 		return monitoring.MySQLSample{}, fmt.Errorf("mysql config block is required")
 	}
 
-	dsn := os.Getenv(check.MySQL.DSNEnv)
-	if dsn == "" {
-		return monitoring.MySQLSample{}, fmt.Errorf("environment variable %q is not set (required for mysql check %q)", check.MySQL.DSNEnv, check.ID)
+	dsn, err := check.MySQL.BuildDSN()
+	if err != nil {
+		return monitoring.MySQLSample{}, fmt.Errorf("mysql check %q: %w", check.ID, err)
 	}
 
 	connectTimeout := time.Duration(check.MySQL.ConnectTimeoutSeconds) * time.Second

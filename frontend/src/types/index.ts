@@ -45,7 +45,12 @@ export interface SSHCheckConfig {
 }
 
 export interface MySQLCheckConfig {
-  dsnEnv: string
+  dsnEnv?: string
+  host?: string
+  port?: number
+  username?: string
+  password?: string
+  database?: string
   connectTimeoutSeconds?: number
   queryTimeoutSeconds?: number
   processlistLimit?: number
@@ -352,6 +357,70 @@ export interface ServerTestResult {
   success: boolean
   output?: string
   error?: string
+}
+
+// --- Server Metrics ---
+
+export interface ProcessInfo {
+  pid: number
+  user: string
+  cpuPercent: number
+  memPercent: number
+  memMB: number
+  command: string
+}
+
+export interface ServerSnapshot {
+  serverId: string
+  timestamp: string
+  cpuPercent: number
+  memoryTotalMB: number
+  memoryUsedMB: number
+  memoryPercent: number
+  diskTotalGB: number
+  diskUsedGB: number
+  diskPercent: number
+  loadAvg1: number
+  loadAvg5: number
+  loadAvg15: number
+  uptimeHours: number
+  topProcesses?: ProcessInfo[]
+}
+
+export interface MetricsPoint {
+  timestamp: string
+  cpuPercent: number
+  memoryPercent: number
+  memoryUsedMB: number
+  diskPercent: number
+  loadAvg1: number
+}
+
+// --- Users ---
+
+export interface User {
+  id: string
+  username: string
+  role: 'admin' | 'ops'
+  displayName?: string
+  email?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateUserRequest {
+  username: string
+  password: string
+  role: string
+  displayName?: string
+  email?: string
+}
+
+export interface UpdateUserRequest {
+  password?: string
+  role?: string
+  displayName?: string
+  email?: string
 }
 
 export interface SSEPayload {

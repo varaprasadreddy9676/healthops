@@ -1,8 +1,9 @@
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
-  Server, Monitor, Wifi, WifiOff, ExternalLink, CheckCircle2,
+  Server, Monitor, Wifi, ExternalLink, CheckCircle2,
   AlertTriangle, XCircle, HelpCircle, ArrowRight, Play, RefreshCw,
+  Activity,
 } from 'lucide-react'
 import { dashboardApi } from '@/api/dashboard'
 import { checksApi } from '@/api/checks'
@@ -252,18 +253,34 @@ export default function Servers() {
                   View all checks <ArrowRight className="h-3 w-3" />
                 </Link>
                 {linkedRemote && (
-                  <button
-                    onClick={() => testMutation.mutate(linkedRemote.id)}
-                    disabled={testMutation.isPending}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                  >
-                    {testMutation.isPending ? (
-                      <RefreshCw className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Play className="h-3 w-3" />
-                    )}
-                    Test SSH
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      to={`/servers/${linkedRemote.id}`}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400 dark:hover:bg-blue-900/40"
+                    >
+                      <Activity className="h-3 w-3" />
+                      Live Stats
+                    </Link>
+                    <button
+                      onClick={() => testMutation.mutate(linkedRemote.id)}
+                      disabled={testMutation.isPending}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    >
+                      {testMutation.isPending ? (
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Play className="h-3 w-3" />
+                      )}
+                      Test SSH
+                    </button>
+                    <Link
+                      to="/settings?tab=servers"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Edit
+                    </Link>
+                  </div>
                 )}
               </div>
             </div>
@@ -271,72 +288,6 @@ export default function Servers() {
         })}
       </div>
 
-      {/* Remote Servers section */}
-      {remoteServers && remoteServers.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Remote Server Connections</h2>
-            <p className="text-xs text-slate-500 mt-0.5">SSH connections configured for remote monitoring</p>
-          </div>
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {remoteServers.map(rs => {
-              // Count checks using this remote server
-              const linkedChecks = checks?.filter(c => c.serverId === rs.id) || []
-              return (
-                <div key={rs.id} className="flex items-center gap-4 px-5 py-3.5">
-                  <div className={cn(
-                    'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
-                    rs.enabled ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-slate-100 dark:bg-slate-800',
-                  )}>
-                    {rs.enabled ? (
-                      <Wifi className="h-4 w-4 text-emerald-500" />
-                    ) : (
-                      <WifiOff className="h-4 w-4 text-slate-400" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{rs.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {rs.user}@{rs.host}:{rs.port}
-                      {' · '}{linkedChecks.length} check{linkedChecks.length !== 1 ? 's' : ''} linked
-                      {rs.tags && rs.tags.length > 0 && ` · ${rs.tags.join(', ')}`}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={cn(
-                      'rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                      rs.enabled
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
-                        : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
-                    )}>
-                      {rs.enabled ? 'CONNECTED' : 'DISABLED'}
-                    </span>
-                    <button
-                      onClick={() => testMutation.mutate(rs.id)}
-                      disabled={testMutation.isPending}
-                      className="rounded p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors"
-                      title="Test SSH Connection"
-                    >
-                      {testMutation.isPending ? (
-                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-emerald-600" />
-                      ) : (
-                        <Play className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                    <Link
-                      to="/settings?tab=servers"
-                      className="rounded p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
-                      title="Edit in Settings"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </Link>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

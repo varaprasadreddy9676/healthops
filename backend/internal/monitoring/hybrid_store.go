@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type HybridStore struct {
 	readTimeout time.Duration
 	syncTimeout time.Duration
 	syncMu      sync.Mutex
+	mongoDown   atomic.Bool // tracks whether MongoDB is currently unreachable
 }
 
 var _ Store = (*HybridStore)(nil)
@@ -35,12 +37,31 @@ func NewHybridStore(statePath string, checks []CheckConfig, mongoURI, mongoDB, m
 		mirror, err := NewMongoMirror(mongoURI, mongoDB, mongoPrefix, retentionDays)
 		if err != nil {
 			if logger != nil {
-				logger.Printf("Mongo mirror disabled: %v", err)
+				logger.Printf("WARNING: MongoDB unavailable at startup, running with local file only: %v", err)
 			}
+			store.mongoDown.Store(true)
 		} else {
 			store.mirror = mirror
-			if err := store.syncBestEffort(); err != nil && logger != nil {
-				logger.Printf("initial Mongo sync skipped: %v", err)
+			// Seed local file from Mongo if local is empty (Mongo is primary)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			mongoState, readErr := mirror.ReadState(ctx)
+			cancel()
+			if readErr == nil && !isEmptyState(mongoState) && isEmptyState(local.Snapshot()) {
+				_ = local.Update(func(s *State) error {
+					s.Checks = mongoState.Checks
+					s.Results = mongoState.Results
+					s.LastRunAt = mongoState.LastRunAt
+					s.UpdatedAt = mongoState.UpdatedAt
+					return nil
+				})
+				if logger != nil {
+					logger.Printf("Seeded local file from MongoDB (%d checks, %d results)", len(mongoState.Checks), len(mongoState.Results))
+				}
+			} else if readErr == nil {
+				// Sync current local state to Mongo
+				if err := store.syncToMongo(); err != nil && logger != nil {
+					logger.Printf("initial Mongo sync skipped: %v", err)
+				}
 			}
 		}
 	}
@@ -48,66 +69,105 @@ func NewHybridStore(statePath string, checks []CheckConfig, mongoURI, mongoDB, m
 	return store, nil
 }
 
+// IsMongoDown returns true if MongoDB is currently unreachable.
+func (s *HybridStore) IsMongoDown() bool {
+	return s.mongoDown.Load()
+}
+
+// HasMongo returns true if MongoDB was configured (even if currently down).
+func (s *HybridStore) HasMongo() bool {
+	return s.mirror != nil
+}
+
+// PingMongo checks MongoDB connectivity. Returns nil if reachable.
+func (s *HybridStore) PingMongo(ctx context.Context) error {
+	if s.mirror == nil {
+		return nil
+	}
+	if mm, ok := s.mirror.(*MongoMirror); ok {
+		return mm.Ping(ctx)
+	}
+	return nil
+}
+
 func (s *HybridStore) Snapshot() State {
+	// Try Mongo first (primary), fall back to local
+	if s.mirror != nil && !s.mongoDown.Load() {
+		ctx, cancel := context.WithTimeout(context.Background(), s.readTimeout)
+		state, err := s.mirror.ReadState(ctx)
+		cancel()
+		if err == nil && !isEmptyState(state) {
+			return state
+		}
+	}
 	return s.local.Snapshot()
 }
 
 func (s *HybridStore) DashboardSnapshot() DashboardSnapshot {
-	local := s.local.DashboardSnapshot()
-	if s.mirror != nil {
+	// Try Mongo first (primary), fall back to local
+	if s.mirror != nil && !s.mongoDown.Load() {
 		ctx, cancel := context.WithTimeout(context.Background(), s.readTimeout)
 		snapshot, err := s.mirror.ReadDashboardSnapshot(ctx)
 		cancel()
-		if err == nil && !isEmptyDashboardSnapshot(snapshot) && !snapshotIsStale(snapshot, local) {
+		if err == nil && !isEmptyDashboardSnapshot(snapshot) {
 			return snapshot
 		}
 	}
-	return local
+	return s.local.DashboardSnapshot()
 }
 
 func (s *HybridStore) Update(mutator func(*State) error) error {
+	// Always update local (never lose data)
 	if err := s.local.Update(mutator); err != nil {
 		return err
 	}
-	return s.syncBestEffort()
+	// Sync to Mongo (primary) — best effort
+	s.syncToMongo()
+	return nil
 }
 
 func (s *HybridStore) ReplaceChecks(checks []CheckConfig) error {
 	if err := s.local.ReplaceChecks(checks); err != nil {
 		return err
 	}
-	return s.syncBestEffort()
+	s.syncToMongo()
+	return nil
 }
 
 func (s *HybridStore) UpsertCheck(check CheckConfig) error {
 	if err := s.local.UpsertCheck(check); err != nil {
 		return err
 	}
-	return s.syncBestEffort()
+	s.syncToMongo()
+	return nil
 }
 
 func (s *HybridStore) DeleteCheck(id string) error {
 	if err := s.local.DeleteCheck(id); err != nil {
 		return err
 	}
-	return s.syncBestEffort()
+	s.syncToMongo()
+	return nil
 }
 
 func (s *HybridStore) AppendResults(results []CheckResult, retentionDays int) error {
 	if err := s.local.AppendResults(results, retentionDays); err != nil {
 		return err
 	}
-	return s.syncBestEffort()
+	s.syncToMongo()
+	return nil
 }
 
 func (s *HybridStore) SetLastRun(at time.Time) error {
 	if err := s.local.SetLastRun(at); err != nil {
 		return err
 	}
-	return s.syncBestEffort()
+	s.syncToMongo()
+	return nil
 }
 
-func (s *HybridStore) syncBestEffort() error {
+// syncToMongo syncs local state to MongoDB. Sets mongoDown flag on failure.
+func (s *HybridStore) syncToMongo() error {
 	if s.mirror == nil {
 		return nil
 	}
@@ -119,10 +179,21 @@ func (s *HybridStore) syncBestEffort() error {
 	defer cancel()
 
 	if err := s.mirror.SyncState(ctx, s.local.Snapshot()); err != nil {
-		if s.logger != nil {
-			s.logger.Printf("Mongo sync skipped: %v", err)
+		if !s.mongoDown.Load() {
+			s.mongoDown.Store(true)
+			if s.logger != nil {
+				s.logger.Printf("ERROR: MongoDB sync failed — marked as down: %v", err)
+			}
 		}
-		return nil
+		return err
+	}
+
+	// Mongo is reachable again
+	if s.mongoDown.Load() {
+		s.mongoDown.Store(false)
+		if s.logger != nil {
+			s.logger.Printf("MongoDB connectivity restored")
+		}
 	}
 	return nil
 }
@@ -133,14 +204,4 @@ func isEmptyState(state State) bool {
 
 func isEmptyDashboardSnapshot(snapshot DashboardSnapshot) bool {
 	return isEmptyState(snapshot.State) && snapshot.Summary.TotalChecks == 0 && snapshot.GeneratedAt.IsZero()
-}
-
-func snapshotIsStale(snapshot DashboardSnapshot, local DashboardSnapshot) bool {
-	if local.State.UpdatedAt.IsZero() {
-		return false
-	}
-	if snapshot.State.UpdatedAt.IsZero() {
-		return true
-	}
-	return snapshot.State.UpdatedAt.Before(local.State.UpdatedAt)
 }
