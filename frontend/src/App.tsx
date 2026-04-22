@@ -1,28 +1,28 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { Layout } from '@/components/Layout'
-import { LoadingState } from '@/components/LoadingState'
-import { useAuth } from '@/hooks/useAuth'
+import { Layout } from "@/shared/components/Layout"
+import { LoadingState } from "@/shared/components/LoadingState"
+import { useAuth } from "@/shared/hooks/useAuth"
 
-const Login = lazy(() => import('@/pages/Login'))
-const Dashboard = lazy(() => import('@/pages/Dashboard'))
-const Servers = lazy(() => import('@/pages/Servers'))
-const ServerDetail = lazy(() => import('@/pages/ServerDetail'))
-const Checks = lazy(() => import('@/pages/Checks'))
-const CheckDetail = lazy(() => import('@/pages/CheckDetail'))
-const Incidents = lazy(() => import('@/pages/Incidents'))
-const IncidentDetail = lazy(() => import('@/pages/IncidentDetail'))
-const MySQL = lazy(() => import('@/pages/MySQL'))
-const MySQLConnections = lazy(() => import('@/pages/mysql/MySQLConnections'))
-const MySQLQueries = lazy(() => import('@/pages/mysql/MySQLQueries'))
-const MySQLThreads = lazy(() => import('@/pages/mysql/MySQLThreads'))
-const MySQLServer = lazy(() => import('@/pages/mysql/MySQLServer'))
-const Analytics = lazy(() => import('@/pages/Analytics'))
-const AIAnalysis = lazy(() => import('@/pages/AIAnalysis'))
-const Settings = lazy(() => import('@/pages/Settings'))
-const UserManagement = lazy(() => import('@/pages/UserManagement'))
-const NotificationChannels = lazy(() => import('@/pages/NotificationChannels'))
-const NotFound = lazy(() => import('@/pages/NotFound'))
+const Login = lazy(() => import('@/features/auth/pages/Login'))
+const Dashboard = lazy(() => import('@/features/dashboard/pages/Dashboard'))
+const Servers = lazy(() => import('@/features/servers/pages/Servers'))
+const ServerDetail = lazy(() => import('@/features/servers/pages/ServerDetail'))
+const Checks = lazy(() => import('@/features/checks/pages/Checks'))
+const CheckDetail = lazy(() => import('@/features/checks/pages/CheckDetail'))
+const Incidents = lazy(() => import('@/features/incidents/pages/Incidents'))
+const IncidentDetail = lazy(() => import('@/features/incidents/pages/IncidentDetail'))
+const MySQL = lazy(() => import('@/features/mysql/pages/MySQL'))
+const MySQLConnections = lazy(() => import('@/features/mysql/pages/MySQLConnections'))
+const MySQLQueries = lazy(() => import('@/features/mysql/pages/MySQLQueries'))
+const MySQLThreads = lazy(() => import('@/features/mysql/pages/MySQLThreads'))
+const MySQLServer = lazy(() => import('@/features/mysql/pages/MySQLServer'))
+const Analytics = lazy(() => import('@/features/analytics/pages/Analytics'))
+const AIAnalysis = lazy(() => import('@/features/ai/pages/AIAnalysis'))
+const Settings = lazy(() => import('@/features/settings/pages/Settings'))
+const UserManagement = lazy(() => import('@/features/users/pages/UserManagement'))
+const NotificationChannels = lazy(() => import('@/features/notifications/pages/NotificationChannels'))
+const NotFound = lazy(() => import('@/shared/components/NotFound'))
 
 export default function App() {
   const { isAuthenticated, isLoading } = useAuth()
