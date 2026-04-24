@@ -255,7 +255,10 @@ func (s *Service) Run(ctx context.Context) error {
 
 	// User management routes
 	if s.userAPI != nil {
-		mux.HandleFunc("/api/v1/auth/login", s.userAPI.HandleLogin)
+		// Stricter per-IP rate limit on login (5/min) to mitigate credential stuffing.
+		// This is layered on top of the global 100/min limit.
+		loginLimiter := httpx.NewPerIPLimiter(5, time.Minute, http.HandlerFunc(s.userAPI.HandleLogin))
+		mux.Handle("/api/v1/auth/login", loginLimiter)
 		mux.HandleFunc("/api/v1/users", s.userAPI.HandleUsers)
 		mux.HandleFunc("/api/v1/users/", s.userAPI.HandleUserByID)
 	}

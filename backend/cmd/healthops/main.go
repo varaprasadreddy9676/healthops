@@ -106,6 +106,12 @@ func main() {
 	dataDir := resolvePath("DATA_DIR", filepath.Join("backend", "data"), "data")
 	monitoring.InitJWTSecret(dataDir)
 
+	// Track which user-store backend is active so we can run prod-mode safety
+	// checks below (default-credentials detection differs by backend).
+	var activeUserStore monitoring.UserStoreBackend
+	var userStoreBackendKind string // "file" or "mongo"
+	mongoBootstrapProvided := os.Getenv("HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD") != ""
+
 	if mongoClient != nil {
 		mongoUserRepo, err := repositories.NewMongoUserRepository(mongoClient, mongoDB, mongoPrefix)
 		if err != nil {
@@ -116,6 +122,8 @@ func main() {
 				logger.Printf("Warning: Failed to init file-based user store: %v", err)
 			} else {
 				service.SetUserStore(userStore)
+				activeUserStore = userStore
+				userStoreBackendKind = "file"
 				if userStore.IsUsingDefaultCredentials() {
 					logger.Printf("WARNING: User management using default credentials — change immediately in production")
 				} else {
@@ -137,7 +145,10 @@ func main() {
 				}
 			}
 
-			service.SetUserStore(repositories.NewUserStoreAdapter(mongoUserRepo))
+			adapter := repositories.NewUserStoreAdapter(mongoUserRepo)
+			service.SetUserStore(adapter)
+			activeUserStore = adapter
+			userStoreBackendKind = "mongo"
 			logger.Printf("User management initialized (MongoDB)")
 		}
 	} else {
@@ -146,12 +157,46 @@ func main() {
 			logger.Printf("Warning: Failed to init user store: %v", err)
 		} else {
 			service.SetUserStore(userStore)
+			activeUserStore = userStore
+			userStoreBackendKind = "file"
 			if userStore.IsUsingDefaultCredentials() {
 				logger.Printf("WARNING: User management using default credentials — change immediately in production")
 			} else {
 				logger.Printf("User management initialized")
 			}
 		}
+	}
+
+	// Production hardening gate: when HEALTHOPS_REQUIRE_PROD_AUTH=true, refuse
+	// to start with insecure defaults. This is opt-in so dev/test flows keep
+	// working unchanged.
+	if envOrDefault("HEALTHOPS_REQUIRE_PROD_AUTH", "false") == "true" {
+		// Block on command-check RCE risk regardless of user-store backend.
+		if cfg.AllowCommandChecks {
+			logger.Fatalf("HEALTHOPS_REQUIRE_PROD_AUTH=true: refusing to start with allowCommandChecks=true (shell command checks are an RCE risk). Set allowCommandChecks=false in your config or via the API.")
+		}
+
+		switch userStoreBackendKind {
+		case "file":
+			if activeUserStore == nil {
+				logger.Fatalf("HEALTHOPS_REQUIRE_PROD_AUTH=true: user store failed to initialize; refusing to start without authentication.")
+			}
+			if activeUserStore.IsUsingDefaultCredentials() {
+				logger.Fatalf("HEALTHOPS_REQUIRE_PROD_AUTH=true: refusing to start with default admin credentials. Set HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD before first start, or change the admin password via the API and restart.")
+			}
+		case "mongo":
+			// The Mongo adapter cannot cheaply prove a non-default password
+			// is in use (passwords are hashed; we'd have to attempt a login).
+			// Pragmatic policy: require that the operator either bootstrapped
+			// via env or accepts responsibility for credential management.
+			if !mongoBootstrapProvided {
+				logger.Printf("WARNING: HEALTHOPS_REQUIRE_PROD_AUTH=true with MongoDB user store, but HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD was not set — cannot verify admin credentials are non-default. Set HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD or confirm out-of-band that the admin password has been rotated.")
+			}
+		default:
+			logger.Fatalf("HEALTHOPS_REQUIRE_PROD_AUTH=true: no user store backend was initialized; refusing to start without authentication.")
+		}
+
+		logger.Printf("HEALTHOPS_REQUIRE_PROD_AUTH=true: production hardening checks passed")
 	}
 
 	// Initialize incident manager

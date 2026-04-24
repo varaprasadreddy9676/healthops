@@ -114,3 +114,33 @@ func extractIP(r *http.Request) string {
 	}
 	return ip
 }
+
+// PerIPLimiter is a path-scoped per-IP rate limiter handler. It wraps an
+// inner handler and enforces a stricter limit than the global middleware
+// (e.g. for /api/v1/auth/login to mitigate credential stuffing).
+type PerIPLimiter struct {
+	limiter *rateLimiter
+	next    http.Handler
+}
+
+// NewPerIPLimiter creates a per-IP rate limiter that wraps the given handler.
+// rate is the max requests per window. When exceeded, responds with 429.
+func NewPerIPLimiter(rate int, window time.Duration, next http.Handler) *PerIPLimiter {
+	return &PerIPLimiter{
+		limiter: newRateLimiter(rate, window),
+		next:    next,
+	}
+}
+
+// ServeHTTP implements http.Handler.
+func (p *PerIPLimiter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ip := extractIP(r)
+	if !p.limiter.allow(ip) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Retry-After", "60")
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"success":false,"error":{"code":429,"message":"too many login attempts, try again later"}}`))
+		return
+	}
+	p.next.ServeHTTP(w, r)
+}

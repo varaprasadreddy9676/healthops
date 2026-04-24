@@ -243,6 +243,10 @@ healthops/
 | `MONGODB_COLLECTION_PREFIX` | `healthops` | MongoDB collection prefix |
 | `CORS_ORIGIN` | — | Allowed CORS origin (for custom domains) |
 | `MYSQL_DSN` / check `dsnEnv` | — | MySQL DSN for mysql checks |
+| `HEALTHOPS_REQUIRE_PROD_AUTH` | `false` | Production hardening gate. When `true`, refuses to start with default admin credentials or `allowCommandChecks=true`. See [Security Audit](backend/docs/security-audit.md#production-hardening-checklist). |
+| `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` | — | Sets/rotates the admin password on startup. Required for production with the Mongo user store. |
+| `HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL` | `admin@healthops.local` | Email used when bootstrapping the admin user. |
+| `HEALTHOPS_BOOTSTRAP_ADMIN_RESET` | `false` | When `true`, overwrites the admin password on every start (use only during one-off rotations). |
 
 See the [Deployment Guide](docs/deployment-guide.md) for full details on all configuration options, notification setup, SSH servers, TLS, and troubleshooting.
 

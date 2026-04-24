@@ -49,3 +49,30 @@ go test -race ./internal/monitoring -run 'Test(AllMutatingEndpointsRequireAuth|E
 ## Audit Verdict
 - For current single-tenant internal v1 scope: **Acceptable with noted follow-ups**.
 - No critical blocker found for internal deployment assuming network perimeter controls are in place.
+
+## Production Hardening Checklist
+
+Apply these before exposing the service to any untrusted network:
+
+- [ ] **Set `HEALTHOPS_REQUIRE_PROD_AUTH=true`** in the service environment. The
+      process refuses to start if it detects the default admin password
+      (file-based user store) or `allowCommandChecks=true` (RCE risk).
+- [ ] **Set `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD`** to a strong, unique password
+      before first start. For Mongo-backed deployments this is the only way
+      production mode can verify that the admin password has been rotated away
+      from any default.
+- [ ] **Do NOT enable `allowCommandChecks`** in `backend/config/default.json`
+      or via the API in production. Shell command checks execute arbitrary
+      commands and are an RCE risk if a check is mis-authored or an attacker
+      gains write access to the config.
+- [ ] **Run behind a TLS-terminating reverse proxy** (nginx, Caddy, AWS ALB,
+      Cloudflare). The Go service speaks plain HTTP; never expose it directly
+      to the internet.
+- [ ] **Verify the login endpoint rate limit** is in place. The
+      `/api/v1/auth/login` route is wrapped by a per-IP limiter (5 req/min) on
+      top of the global 100 req/min limit to mitigate credential stuffing.
+- [ ] Rotate the JWT signing secret (`backend/data/.jwt_secret`) and the AI
+      encryption key (`backend/data/.ai_enc_key`) on a documented cadence
+      following `backend/docs/ai-key-rotation.md`.
+- [ ] Audit `data/audit.json` (or the Mongo audit collection) regularly for
+      unexpected mutating actions.
