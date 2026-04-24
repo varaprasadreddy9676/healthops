@@ -1,0 +1,47 @@
+import { useEffect, useRef, useCallback, useState } from 'react'
+import type { SSEPayload } from "@/shared/types"
+import { SSE_RECONNECT_DELAY } from "@/shared/lib/constants"
+
+export function useSSE(onMessage: (payload: SSEPayload) => void) {
+  const [connected, setConnected] = useState(false)
+  const esRef = useRef<EventSource | null>(null)
+  const onMessageRef = useRef(onMessage)
+  onMessageRef.current = onMessage
+
+  const connect = useCallback(() => {
+    if (esRef.current) esRef.current.close()
+
+    const token = localStorage.getItem('healthops_token')
+    const url = token ? `/api/v1/events?token=${encodeURIComponent(token)}` : '/api/v1/events'
+    const es = new EventSource(url)
+    esRef.current = es
+
+    es.onopen = () => setConnected(true)
+
+    // Listen for both named 'snapshot' events and unnamed message events
+    const handler = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data) as SSEPayload
+        onMessageRef.current(payload)
+      } catch { /* ignore malformed events */ }
+    }
+
+    es.addEventListener('snapshot', handler as EventListener)
+    es.onmessage = handler
+
+    es.onerror = () => {
+      setConnected(false)
+      es.close()
+      setTimeout(connect, SSE_RECONNECT_DELAY)
+    }
+  }, [])
+
+  useEffect(() => {
+    connect()
+    return () => {
+      esRef.current?.close()
+    }
+  }, [connect])
+
+  return { connected }
+}

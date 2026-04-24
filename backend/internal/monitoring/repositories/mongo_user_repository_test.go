@@ -5,20 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"medics-health-check/backend/internal/util/mongotest"
 )
 
 func TestMongoUserRepository(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := mongo.Connect(clientOpts().ApplyURI("mongodb://127.0.0.1:27017"))
-	if err != nil {
-		t.Skipf("MongoDB not available: %v", err)
-		return
-	}
-	defer client.Disconnect(ctx)
+	client := mongotest.Connect(t, 2*time.Second)
 
 	repo, err := NewMongoUserRepository(client, "healthops_test", "test")
 	if err != nil {
@@ -204,10 +198,4 @@ func TestMongoUserRepository(t *testing.T) {
 			t.Fatal("expected bcrypt hash output")
 		}
 	})
-}
-
-func clientOpts() *options.ClientOptions {
-	return options.Client().
-		ApplyURI("mongodb://127.0.0.1:27017").
-		SetServerSelectionTimeout(5 * time.Second)
 }

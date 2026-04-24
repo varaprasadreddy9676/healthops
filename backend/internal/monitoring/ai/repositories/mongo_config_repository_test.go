@@ -2,21 +2,17 @@ package repositories
 
 import (
 	"context"
-	"os"
 	"testing"
+	"time"
+
+	"medics-health-check/backend/internal/util/mongotest"
 )
 
 // TestMongoAIConfigRepository tests the MongoDB AI config repository.
 func TestMongoAIConfigRepository(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	// Get MongoDB URI from environment or use default
-	mongoURI := os.Getenv("MONGODB_URI")
-	if mongoURI == "" {
-		mongoURI = "mongodb://localhost:27017"
-	}
+	// Skip cleanly when Mongo is unreachable.
+	_ = mongotest.Connect(t, 2*time.Second)
+	mongoURI := mongotest.URI()
 
 	// Create temporary directory for test encryption key
 	tempDir := t.TempDir()
@@ -397,15 +393,9 @@ func TestEncryptionDecryption(t *testing.T) {
 
 // TestKeyRotation tests the encryption key rotation functionality.
 func TestKeyRotation(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	// Get MongoDB URI from environment or use default
-	mongoURI := os.Getenv("MONGODB_URI")
-	if mongoURI == "" {
-		mongoURI = "mongodb://localhost:27017"
-	}
+	// Skip cleanly when Mongo is unreachable.
+	_ = mongotest.Connect(t, 2*time.Second)
+	mongoURI := mongotest.URI()
 
 	// Create temporary directory for test encryption keys
 	tempDir := t.TempDir()
