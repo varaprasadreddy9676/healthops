@@ -72,7 +72,9 @@ func (e *AlertRuleEngine) persist() {
 		return
 	}
 	tmp := e.filePath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o640); err != nil {
+	// Tighten file permissions to 0600 (gosec G306). Alert rules are written by
+	// the service process only; no other UID needs read access.
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		if e.logger != nil {
 			e.logger.Printf("Warning: failed to write alert rules: %v", err)
 		}

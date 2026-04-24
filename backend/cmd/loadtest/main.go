@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -39,6 +40,14 @@ var (
 	queryLatencyMax = flag.Duration("query-latency-max", 200*time.Millisecond, "Maximum acceptable query latency (p95)")
 	memoryGrowthMax = flag.Float64("memory-growth-max", 10.0, "Maximum acceptable memory growth percentage")
 	goroutineLimit  = flag.Int("goroutine-limit", defaultGoroutineLimit, "Maximum acceptable goroutine count")
+
+	// Single-endpoint mode (CSV output). Activated when -url is set.
+	singleURL = flag.String("url", "", "Single endpoint to load (enables CSV mode; overrides scenario flow)")
+	rps       = flag.Int("rps", 100, "Target requests per second (single-endpoint mode)")
+	method    = flag.String("method", "GET", "HTTP method for single-endpoint mode")
+	csvHeader = flag.Bool("csv-header", true, "Print CSV header in single-endpoint mode")
+	conns     = flag.Int("conns", 64, "Max concurrent in-flight requests in single-endpoint mode")
+	bearer    = flag.String("bearer", "", "Optional bearer token sent as Authorization header")
 )
 
 type metrics struct {
@@ -88,6 +97,15 @@ func main() {
 
 	if *verbose {
 		log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+	}
+
+	// Single-endpoint CSV mode: when -url is provided, run a focused RPS
+	// test against a single endpoint and emit a single CSV row.
+	if *singleURL != "" {
+		if err := runSingleEndpoint(*singleURL, *method, *rps, *duration, *conns, *bearer, *csvHeader); err != nil {
+			log.Fatalf("single-endpoint mode failed: %v", err)
+		}
+		return
 	}
 
 	m := &metrics{
@@ -744,4 +762,145 @@ func joinErrors(errors []string) string {
 		result += "\n  - " + errors[i]
 	}
 	return result
+}
+
+// runSingleEndpoint hammers a single URL at a target RPS for the given
+// duration and prints a single CSV row with p50/p95/p99/max latencies.
+// Output format:
+//
+//	endpoint,rps_target,duration_s,requests,errors,p50_ms,p95_ms,p99_ms,max_ms
+func runSingleEndpoint(url, httpMethod string, targetRPS int, dur time.Duration, maxConns int, bearerTok string, header bool) error {
+	if targetRPS <= 0 {
+		return fmt.Errorf("rps must be > 0")
+	}
+	if dur <= 0 {
+		return fmt.Errorf("duration must be > 0")
+	}
+	if maxConns <= 0 {
+		maxConns = 64
+	}
+
+	transport := &http.Transport{
+		MaxIdleConns:        maxConns * 2,
+		MaxIdleConnsPerHost: maxConns * 2,
+		MaxConnsPerHost:     maxConns * 2,
+		IdleConnTimeout:     30 * time.Second,
+		DisableCompression:  true,
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   10 * time.Second,
+	}
+
+	tickInterval := time.Second / time.Duration(targetRPS)
+	if tickInterval <= 0 {
+		tickInterval = time.Microsecond
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), dur)
+	defer cancel()
+
+	sem := make(chan struct{}, maxConns)
+	var (
+		mu        sync.Mutex
+		latencies = make([]time.Duration, 0, targetRPS*int(dur.Seconds())+1024)
+		requests  atomic.Int64
+		errCount  atomic.Int64
+		wg        sync.WaitGroup
+	)
+
+	doRequest := func() {
+		defer wg.Done()
+		defer func() { <-sem }()
+
+		req, err := http.NewRequestWithContext(ctx, httpMethod, url, nil)
+		if err != nil {
+			errCount.Add(1)
+			return
+		}
+		if bearerTok != "" {
+			req.Header.Set("Authorization", "Bearer "+bearerTok)
+		}
+
+		start := time.Now()
+		resp, err := client.Do(req)
+		elapsed := time.Since(start)
+		requests.Add(1)
+		if err != nil {
+			errCount.Add(1)
+			return
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode >= 400 {
+			errCount.Add(1)
+		}
+
+		mu.Lock()
+		latencies = append(latencies, elapsed)
+		mu.Unlock()
+	}
+
+	ticker := time.NewTicker(tickInterval)
+	defer ticker.Stop()
+
+	startWall := time.Now()
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			break loop
+		case <-ticker.C:
+			select {
+			case sem <- struct{}{}:
+				wg.Add(1)
+				go doRequest()
+			default:
+				// Saturated: drop tick (counted neither as request nor error).
+			}
+		}
+	}
+
+	wg.Wait()
+	actualDur := time.Since(startWall).Seconds()
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	p50ms, p95ms, p99ms, maxms := percentilesMs(latencies)
+
+	if header {
+		fmt.Println("endpoint,rps_target,duration_s,requests,errors,p50_ms,p95_ms,p99_ms,max_ms")
+	}
+	fmt.Printf("%s,%d,%.0f,%d,%d,%.2f,%.2f,%.2f,%.2f\n",
+		url,
+		targetRPS,
+		actualDur,
+		requests.Load(),
+		errCount.Load(),
+		p50ms, p95ms, p99ms, maxms,
+	)
+	return nil
+}
+
+// percentilesMs returns p50/p95/p99/max in milliseconds.
+func percentilesMs(d []time.Duration) (p50, p95, p99, maxv float64) {
+	if len(d) == 0 {
+		return 0, 0, 0, 0
+	}
+	sorted := make([]time.Duration, len(d))
+	copy(sorted, d)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	idx := func(p float64) time.Duration {
+		i := int(float64(len(sorted)-1) * p)
+		if i < 0 {
+			i = 0
+		}
+		if i >= len(sorted) {
+			i = len(sorted) - 1
+		}
+		return sorted[i]
+	}
+	toMs := func(t time.Duration) float64 { return float64(t.Microseconds()) / 1000.0 }
+	return toMs(idx(0.50)), toMs(idx(0.95)), toMs(idx(0.99)), toMs(sorted[len(sorted)-1])
 }
