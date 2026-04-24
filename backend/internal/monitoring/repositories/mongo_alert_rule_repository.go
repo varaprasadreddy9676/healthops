@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"medics-health-check/backend/internal/monitoring"
 )
 
 var (
@@ -411,19 +411,19 @@ func (a mongoAlertRuleSingleResultAdapter) Err() error {
 
 // mongoAlertRuleDocument represents the MongoDB document structure.
 type mongoAlertRuleDocument struct {
-	ID                  string                            `bson:"_id"`
-	Name                string                            `bson:"name"`
-	Description         string                            `bson:"description,omitempty"`
-	Enabled             bool                              `bson:"enabled"`
-	CheckIDs            []string                          `bson:"checkIds,omitempty"`
-	Conditions          []mongoAlertConditionDocument     `bson:"conditions,omitempty"`
-	Severity            string                            `bson:"severity"`
-	Channels            []mongoAlertChannelDocument       `bson:"channels,omitempty"`
-	CooldownMinutes     int                               `bson:"cooldownMinutes"`
-	ConsecutiveBreaches int                               `bson:"consecutiveBreaches,omitempty"`
-	RecoverySamples     int                               `bson:"recoverySamples,omitempty"`
-	ThresholdNum        float64                           `bson:"thresholdNum,omitempty"`
-	RuleCode            string                            `bson:"ruleCode,omitempty"`
+	ID                  string                        `bson:"_id"`
+	Name                string                        `bson:"name"`
+	Description         string                        `bson:"description,omitempty"`
+	Enabled             bool                          `bson:"enabled"`
+	CheckIDs            []string                      `bson:"checkIds,omitempty"`
+	Conditions          []mongoAlertConditionDocument `bson:"conditions,omitempty"`
+	Severity            string                        `bson:"severity"`
+	Channels            []mongoAlertChannelDocument   `bson:"channels,omitempty"`
+	CooldownMinutes     int                           `bson:"cooldownMinutes"`
+	ConsecutiveBreaches int                           `bson:"consecutiveBreaches,omitempty"`
+	RecoverySamples     int                           `bson:"recoverySamples,omitempty"`
+	ThresholdNum        float64                       `bson:"thresholdNum,omitempty"`
+	RuleCode            string                        `bson:"ruleCode,omitempty"`
 }
 
 // mongoAlertConditionDocument represents an alert condition in MongoDB.

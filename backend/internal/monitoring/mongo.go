@@ -260,8 +260,8 @@ func (m *MongoMirror) upsertResults(ctx context.Context, results []CheckResult) 
 
 func (m *MongoMirror) upsertState(ctx context.Context, state State) error {
 	doc := bson.M{
-		"_id":       "state",
-		"checks":    state.Checks,
+		"_id":    "state",
+		"checks": state.Checks,
 		// Don't store results here - they're already in the results collection
 		// Storing results in state document causes 16MB document size limit errors
 		"lastRunAt": state.LastRunAt,

@@ -10,13 +10,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
 	"medics-health-check/backend/internal/monitoring"
 	"medics-health-check/backend/internal/monitoring/ai"
 	airepositories "medics-health-check/backend/internal/monitoring/ai/repositories"
 	"medics-health-check/backend/internal/monitoring/mysql"
 	"medics-health-check/backend/internal/monitoring/notify"
 	"medics-health-check/backend/internal/monitoring/repositories"
+
+	"github.com/joho/godotenv"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
