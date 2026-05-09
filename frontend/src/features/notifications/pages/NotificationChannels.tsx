@@ -1,38 +1,14 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bell, Plus, Trash2, Pencil, ToggleLeft, ToggleRight, Send, Mail, Globe, MessageSquare, Hash, AlertTriangle, Filter } from 'lucide-react'
+import { Bell, Plus, Trash2, Pencil, ToggleLeft, ToggleRight, Send, Mail, Globe, MessageSquare, Hash, AlertTriangle, Filter } from '@/shared/icons/lucide'
 import { useAuth } from "@/shared/hooks/useAuth"
 import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
 import { EmptyState } from "@/shared/components/EmptyState"
 import { useToast } from "@/shared/components/Toast"
+import { useConfirm } from "@/shared/components/ConfirmDialog"
 import { checksApi } from "@/features/checks/api/checks"
-
-interface NotificationChannel {
-  id: string
-  name: string
-  type: string
-  enabled: boolean
-  webhookUrl?: string
-  email?: string
-  smtpHost?: string
-  smtpPort?: number
-  smtpUser?: string
-  fromEmail?: string
-  botToken?: string
-  chatId?: string
-  routingKey?: string
-  severities?: string[]
-  checkIds?: string[]
-  checkTypes?: string[]
-  servers?: string[]
-  tags?: string[]
-  cooldownMinutes?: number
-  notifyOnResolve?: boolean
-  headers?: Record<string, string>
-  createdAt?: string
-  updatedAt?: string
-}
+import { notificationsApi, type NotificationChannel } from "@/features/notifications/api/notifications"
 
 const CHANNEL_TYPES = [
   { value: 'email', label: 'Email', icon: Mail },
@@ -43,21 +19,9 @@ const CHANNEL_TYPES = [
   { value: 'pagerduty', label: 'PagerDuty', icon: AlertTriangle },
 ]
 
-function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('healthops_token')
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
-
-async function fetchChannels(): Promise<NotificationChannel[]> {
-  const res = await fetch('/api/v1/notification-channels', { headers: authHeaders() })
-  if (!res.ok) throw new Error('Failed to load channels')
-  const body = await res.json()
-  return body.data || []
-}
-
 const emptyForm: Partial<NotificationChannel> = {
   name: '', type: 'webhook', enabled: true, webhookUrl: '', email: '',
-  smtpHost: '', smtpPort: 587, smtpUser: '', fromEmail: '',
+  smtpHost: '', smtpPort: 587, smtpUser: '', smtpPass: '', fromEmail: '',
   botToken: '', chatId: '', routingKey: '', cooldownMinutes: 5,
   severities: [], checkIds: [], checkTypes: [], servers: [], tags: [],
   notifyOnResolve: true,
@@ -66,6 +30,7 @@ const emptyForm: Partial<NotificationChannel> = {
 export default function NotificationChannels() {
   const { isAdmin } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -73,7 +38,7 @@ export default function NotificationChannels() {
 
   const { data: channels, isLoading, error } = useQuery({
     queryKey: ['notification-channels'],
-    queryFn: fetchChannels,
+    queryFn: notificationsApi.list,
   })
 
   const { data: checks } = useQuery({
@@ -83,16 +48,8 @@ export default function NotificationChannels() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: Partial<NotificationChannel>) => {
-      const url = editId ? `/api/v1/notification-channels/${editId}` : '/api/v1/notification-channels'
-      const res = await fetch(url, {
-        method: editId ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify(data),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body?.error?.message || 'Failed to save channel')
-      }
+      if (editId) return notificationsApi.update(editId, data)
+      return notificationsApi.create(data)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notification-channels'] })
@@ -105,25 +62,13 @@ export default function NotificationChannels() {
   })
 
   const toggleMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/v1/notification-channels/${id}/toggle`, {
-        method: 'POST',
-        headers: authHeaders(),
-      })
-      if (!res.ok) throw new Error('Failed to toggle channel')
-    },
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => notificationsApi.toggle(id, enabled),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notification-channels'] }),
     onError: (err: Error) => toast.error(err.message),
   })
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/v1/notification-channels/${id}`, {
-        method: 'DELETE',
-        headers: authHeaders(),
-      })
-      if (!res.ok) throw new Error('Failed to delete channel')
-    },
+    mutationFn: notificationsApi.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notification-channels'] })
       toast.success('Channel deleted')
@@ -132,17 +77,7 @@ export default function NotificationChannels() {
   })
 
   const testMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch('/api/v1/notification-channels/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ channelId: id }),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body?.error?.message || 'Test failed')
-      }
-    },
+    mutationFn: (id: string) => notificationsApi.test(id),
     onSuccess: () => toast.success('Test notification sent'),
     onError: (err: Error) => toast.error(err.message),
   })
@@ -260,6 +195,16 @@ export default function NotificationChannels() {
                   <input
                     value={form.smtpUser || ''}
                     onChange={e => setForm(f => ({ ...f, smtpUser: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">SMTP Password</label>
+                  <input
+                    type="password"
+                    value={form.smtpPass || ''}
+                    onChange={e => setForm(f => ({ ...f, smtpPass: e.target.value }))}
+                    placeholder={editId ? 'Leave masked to keep existing password' : 'SMTP password'}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   />
                 </div>
@@ -462,7 +407,7 @@ export default function NotificationChannels() {
                 </div>
                 {isAdmin && (
                   <button
-                    onClick={() => toggleMutation.mutate(ch.id)}
+                    onClick={() => toggleMutation.mutate({ id: ch.id, enabled: !ch.enabled })}
                     className="text-slate-400 hover:text-slate-600"
                     title={ch.enabled ? 'Disable' : 'Enable'}
                   >
@@ -515,8 +460,14 @@ export default function NotificationChannels() {
                     <Pencil className="h-3 w-3" /> Edit
                   </button>
                   <button
-                    onClick={() => {
-                      if (confirm(`Delete channel "${ch.name}"?`)) deleteMutation.mutate(ch.id)
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: 'Delete Channel',
+                        message: `Delete channel "${ch.name}"?`,
+                        variant: 'danger',
+                        confirmLabel: 'Delete',
+                      })
+                      if (ok) deleteMutation.mutate(ch.id)
                     }}
                     className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50"
                   >

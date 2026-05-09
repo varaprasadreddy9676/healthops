@@ -6,7 +6,7 @@ import {
   ArrowRight, Play, TrendingUp, Shield, CheckCircle2,
   XCircle, HelpCircle, Calendar, ChevronDown, ChevronRight,
   Cpu, HardDrive, MemoryStick, Gauge, RefreshCw, Plus, X,
-} from 'lucide-react'
+} from '@/shared/icons/lucide'
 import { format } from 'date-fns'
 import { dashboardApi } from "@/features/dashboard/api/dashboard"
 import { analyticsApi } from "@/features/analytics/api/analytics"

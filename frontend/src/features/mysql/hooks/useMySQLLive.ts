@@ -10,10 +10,13 @@ export function useMySQLLive(enabled = true, interval = 3) {
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const esRef = useRef<EventSource | null>(null)
+  const reconnectRef = useRef<number | null>(null)
+  const stoppedRef = useRef(false)
 
   const connect = useCallback(() => {
-    if (!enabled) return
+    if (!enabled || stoppedRef.current) return
     if (esRef.current) esRef.current.close()
+    if (reconnectRef.current) window.clearTimeout(reconnectRef.current)
 
     const token = localStorage.getItem('healthops_token')
     let url = `${API_BASE}/mysql/live?interval=${interval}`
@@ -47,16 +50,26 @@ export function useMySQLLive(enabled = true, interval = 3) {
     es.onerror = () => {
       setConnected(false)
       es.close()
-      setTimeout(connect, SSE_RECONNECT_DELAY)
+      if (!stoppedRef.current && enabled) {
+        reconnectRef.current = window.setTimeout(connect, SSE_RECONNECT_DELAY)
+      }
     }
   }, [enabled, interval])
 
   useEffect(() => {
+    stoppedRef.current = false
     if (enabled) {
       connect()
     }
     return () => {
+      stoppedRef.current = true
+      if (reconnectRef.current) {
+        window.clearTimeout(reconnectRef.current)
+        reconnectRef.current = null
+      }
       esRef.current?.close()
+      esRef.current = null
+      setConnected(false)
     }
   }, [connect, enabled])
 

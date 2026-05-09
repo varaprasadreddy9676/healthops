@@ -1,5 +1,5 @@
 import { cn, statusColor } from "@/shared/lib/utils"
-import { CircleCheck, AlertTriangle, XCircle, HelpCircle } from 'lucide-react'
+import { CircleCheck, AlertTriangle, XCircle, HelpCircle } from '@/shared/icons/lucide'
 
 const ICONS = {
   healthy: CircleCheck,

@@ -4,7 +4,7 @@ import { mysqlApi, type MySQLAIResponse } from "@/features/mysql/api/mysql"
 import { aiApi } from "@/features/ai/api/ai"
 import { useQuery } from '@tanstack/react-query'
 import { cn } from "@/shared/lib/utils"
-import { Bot, Send, X, Sparkles, AlertTriangle, Info, Loader2, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react'
+import { Bot, Send, X, Sparkles, AlertTriangle, Info, Loader2, ChevronDown, ChevronUp, Lightbulb } from '@/shared/icons/lucide'
 
 interface Message {
   id: string

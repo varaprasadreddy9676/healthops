@@ -1,5 +1,5 @@
 import { api } from '@/shared/api/client'
-import type { AIServiceConfig, AIProviderConfig, AIPromptTemplate, AIAnalysisResult } from "@/shared/types"
+import type { AIServiceConfig, AIProviderConfig, AIPromptTemplate, AIAnalysisResult, AIProviderHealth } from "@/shared/types"
 
 export const aiApi = {
   config: () => api.get<AIServiceConfig>('/ai/config'),
@@ -13,8 +13,11 @@ export const aiApi = {
   updatePrompt: (id: string, p: Partial<AIPromptTemplate>) => api.put<AIPromptTemplate>(`/ai/prompts/${encodeURIComponent(id)}`, p),
   deletePrompt: (id: string) => api.delete(`/ai/prompts/${encodeURIComponent(id)}`),
   analyze: (incidentId: string) => api.post<AIAnalysisResult>(`/ai/analyze/${encodeURIComponent(incidentId)}`),
-  health: () => api.get<unknown>('/ai/health'),
-  providerHealth: (providerId: string) => api.get<unknown>(`/ai/providers/${encodeURIComponent(providerId)}/health`),
-  results: (incidentId: string) => api.get<AIAnalysisResult>(`/ai/results/${encodeURIComponent(incidentId)}`),
+  health: () => api.get<AIProviderHealth[]>('/ai/health'),
+  providerHealth: async (providerId: string) => {
+    const results = await api.get<AIProviderHealth[]>('/ai/health')
+    return results.find(result => result.id === providerId)
+  },
+  results: (incidentId: string) => api.get<AIAnalysisResult[]>(`/ai/results/${encodeURIComponent(incidentId)}`),
   allResults: () => api.get<AIAnalysisResult[]>('/ai/results'),
 }

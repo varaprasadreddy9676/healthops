@@ -4,7 +4,7 @@ import {
   Server, Monitor, Wifi, ExternalLink, CheckCircle2,
   AlertTriangle, XCircle, HelpCircle, ArrowRight, Play, RefreshCw,
   Activity,
-} from 'lucide-react'
+} from '@/shared/icons/lucide'
 import { dashboardApi } from "@/features/dashboard/api/dashboard"
 import { checksApi } from "@/features/checks/api/checks"
 import { serversApi } from "@/features/servers/api/servers"

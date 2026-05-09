@@ -11,7 +11,7 @@ import { ErrorState } from "@/shared/components/ErrorState"
 import { cn, relativeTime } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import { useMySQLLive } from "@/features/mysql/hooks/useMySQLLive"
-import { Server, Zap, Clock, Activity, Lock, Shield, HardDrive, Database, AlertTriangle } from 'lucide-react'
+import { Server, Zap, Clock, Activity, Lock, Shield, HardDrive, Database, AlertTriangle } from '@/shared/icons/lucide'
 
 export default function MySQLServer() {
   const { data: health, isLoading, error, refetch } = useQuery({

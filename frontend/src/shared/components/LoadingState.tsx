@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react'
+import { Loader2 } from '@/shared/icons/lucide'
 
 export function LoadingState({ message = 'Loading data…' }: { message?: string }) {
   return (

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import {
   ArrowLeft, Cpu, MemoryStick, HardDrive, Activity, Clock,
   RefreshCw, ChevronDown, ChevronUp,
-} from 'lucide-react'
+} from '@/shared/icons/lucide'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, LineChart, Line,

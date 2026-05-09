@@ -25,7 +25,7 @@ const NotificationChannels = lazy(() => import('@/features/notifications/pages/N
 const NotFound = lazy(() => import('@/shared/components/NotFound'))
 
 export default function App() {
-  const { isAuthenticated, isLoading } = useAuth()
+  const { isAuthenticated, isLoading, isAdmin } = useAuth()
 
   if (isLoading) {
     return <LoadingState message="Loading…" />
@@ -56,7 +56,7 @@ export default function App() {
             <Route path="analytics" element={<Analytics />} />
             <Route path="ai" element={<AIAnalysis />} />
             <Route path="settings" element={<Settings />} />
-            <Route path="users" element={<UserManagement />} />
+            <Route path="users" element={isAdmin ? <UserManagement /> : <Navigate to="/" replace />} />
             <Route path="notifications" element={<NotificationChannels />} />
             <Route path="login" element={<Navigate to="/" replace />} />
             <Route path="*" element={<NotFound />} />

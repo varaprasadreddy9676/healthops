@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Skull, Loader2, CheckCircle } from 'lucide-react'
+import { Skull, Loader2, CheckCircle } from '@/shared/icons/lucide'
 import { mysqlApi } from "@/features/mysql/api/mysql"
 import { DetailPageLayout } from "@/features/mysql/components/DetailPageLayout"
 import { LiveIndicator } from "@/shared/components/LiveIndicator"
@@ -10,9 +10,11 @@ import { ErrorState } from "@/shared/components/ErrorState"
 import { cn } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import { useMySQLLive } from "@/features/mysql/hooks/useMySQLLive"
+import { useConfirm } from "@/shared/components/ConfirmDialog"
 import type { MySQLProcess } from "@/shared/types"
 
 export default function MySQLThreads() {
+  const confirm = useConfirm()
   const { data: health, isLoading, error, refetch } = useQuery({
     queryKey: ['mysql', 'health'],
     queryFn: mysqlApi.health,
@@ -34,7 +36,13 @@ export default function MySQLThreads() {
   const threadsHistory = history.map(s => s.threadsRunning)
 
   const handleKill = async (processId: number) => {
-    if (!confirm(`Kill query on process ${processId}?`)) return
+    const ok = await confirm({
+      title: 'Kill Query',
+      message: `Kill query on process ${processId}?`,
+      variant: 'danger',
+      confirmLabel: 'Kill Query',
+    })
+    if (!ok) return
     setKillingId(processId)
     try {
       await mysqlApi.killQuery(processId)

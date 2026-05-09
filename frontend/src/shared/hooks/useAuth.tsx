@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { api } from "@/shared/api/client"
 import type { User } from "@/shared/types"
 
 interface AuthState {
@@ -19,6 +20,15 @@ const AuthContext = createContext<AuthContextType | null>(null)
 const TOKEN_KEY = 'healthops_token'
 const USER_KEY = 'healthops_user'
 
+interface LoginResponse {
+  token: string
+  user: User
+}
+
+interface MeResponse {
+  user: User
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(() => {
     const token = localStorage.getItem(TOKEN_KEY)
@@ -37,19 +47,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   })
 
-  // Verify token on mount
   useEffect(() => {
-    if (!state.token) return
-    
-    fetch('/api/v1/auth/me', {
-      headers: { Authorization: `Bearer ${state.token}` },
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('invalid token')
-        return res.json()
-      })
+    const token = state.token
+    if (!token) return
+
+    let cancelled = false
+
+    api.get<MeResponse>('/auth/me')
       .then(body => {
-        const user = body.data?.user
+        if (cancelled) return
+        const user = body.user
         if (user) {
           setState(s => ({
             ...s,
@@ -62,26 +69,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       })
       .catch(() => {
+        if (cancelled) return
         localStorage.removeItem(TOKEN_KEY)
         localStorage.removeItem(USER_KEY)
         setState({ user: null, token: null, isAuthenticated: false, isAdmin: false, isLoading: false })
       })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+    return () => {
+      cancelled = true
+    }
+  }, [state.token])
 
   const login = useCallback(async (username: string, password: string) => {
-    const res = await fetch('/api/v1/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    })
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      throw new Error(body?.error?.message || 'Login failed')
-    }
-
-    const body = await res.json()
-    const { token, user } = body.data
+    const { token, user } = await api.post<LoginResponse>('/auth/login', { username, password })
 
     localStorage.setItem(TOKEN_KEY, token)
     localStorage.setItem(USER_KEY, JSON.stringify(user))

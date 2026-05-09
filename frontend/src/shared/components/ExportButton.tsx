@@ -1,27 +1,44 @@
-import { Download, FileJson, FileSpreadsheet } from 'lucide-react'
+import { Download, FileJson, FileSpreadsheet } from '@/shared/icons/lucide'
+import { useState } from 'react'
+import { api } from "@/shared/api/client"
+import { useToast } from "@/shared/components/Toast"
 import { cn } from "@/shared/lib/utils"
 
 interface Props {
   onExportCSV?: () => void
   onExportJSON?: () => void
   downloadUrl?: string
+  filename?: string
   className?: string
 }
 
-export function ExportButton({ onExportCSV, onExportJSON, downloadUrl, className }: Props) {
+export function ExportButton({ onExportCSV, onExportJSON, downloadUrl, filename = 'healthops-export', className }: Props) {
+  const [downloading, setDownloading] = useState(false)
+  const toast = useToast()
+
   if (downloadUrl) {
     return (
-      <a
-        href={downloadUrl}
-        download
+      <button
+        type="button"
+        disabled={downloading}
+        onClick={async () => {
+          setDownloading(true)
+          try {
+            await api.download(downloadUrl, filename)
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Export failed')
+          } finally {
+            setDownloading(false)
+          }
+        }}
         className={cn(
-          'inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700',
+          'inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700',
           className,
         )}
       >
         <Download className="h-3.5 w-3.5" />
-        Export
-      </a>
+        {downloading ? 'Exporting…' : 'Export'}
+      </button>
     )
   }
 

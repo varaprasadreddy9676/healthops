@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
-import { AlertTriangle, X } from 'lucide-react'
+import { AlertTriangle, X } from '@/shared/icons/lucide'
 import { cn } from "@/shared/lib/utils"
 
 interface ConfirmOptions {

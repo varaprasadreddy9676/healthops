@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
-import { TrendingUp, AlertTriangle } from 'lucide-react'
+import { TrendingUp, AlertTriangle } from '@/shared/icons/lucide'
 import { format } from 'date-fns'
 import { analyticsApi } from "@/features/analytics/api/analytics"
 import { checksApi } from "@/features/checks/api/checks"

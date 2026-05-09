@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, Eye, Brain } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Eye, Brain } from '@/shared/icons/lucide'
 import { incidentsApi } from "@/features/incidents/api/incidents"
 import { aiApi } from "@/features/ai/api/ai"
 import { LoadingState } from "@/shared/components/LoadingState"
@@ -23,7 +23,7 @@ export default function IncidentDetail() {
     enabled: !!id,
   })
 
-  const { data: aiResult } = useQuery({
+  const { data: aiResults } = useQuery({
     queryKey: ['ai', 'results', id],
     queryFn: () => aiApi.results(id!),
     enabled: !!id,
@@ -48,6 +48,7 @@ export default function IncidentDetail() {
   if (isLoading) return <LoadingState />
   if (error) return <ErrorState message={error.message} retry={() => refetch()} />
   if (!incident) return null
+  const aiResult = aiResults?.[0]
 
   return (
     <div className="space-y-6 animate-fade-in">

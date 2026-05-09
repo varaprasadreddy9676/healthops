@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useMemo } from 'react'
-import { Search, ArrowUpDown, Server, X, Plus } from 'lucide-react'
+import { Search, ArrowUpDown, Server, X, Plus } from '@/shared/icons/lucide'
 import { checksApi } from "@/features/checks/api/checks"
 import { StatusBadge } from "@/shared/components/StatusBadge"
 import { LoadingState } from "@/shared/components/LoadingState"

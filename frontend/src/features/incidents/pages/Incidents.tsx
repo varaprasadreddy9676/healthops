@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
-import { AlertTriangle, CheckCircle, Clock, Filter } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Clock, Filter } from '@/shared/icons/lucide'
 import { incidentsApi } from "@/features/incidents/api/incidents"
 import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"

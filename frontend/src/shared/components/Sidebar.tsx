@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Activity, AlertTriangle, Database,
   BarChart3, Brain, Settings, ChevronsLeft, X, Heart, Server,
   Users, Bell, LogOut,
-} from 'lucide-react'
+} from '@/shared/icons/lucide'
 import { cn } from "@/shared/lib/utils"
 import { useAuth } from "@/shared/hooks/useAuth"
 
@@ -33,7 +33,8 @@ interface Props {
 }
 
 export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Props) {
-  const { user, logout } = useAuth()
+  const { user, logout, isAdmin } = useAuth()
+  const navItems = isAdmin ? NAV : NAV.filter(item => item.path !== '/users')
 
   return (
     <aside
@@ -77,7 +78,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Pr
 
       {/* Nav */}
       <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3">
-        {NAV.map((item) => {
+        {navItems.map((item) => {
           const Icon = ICON_MAP[item.icon]
           return (
             <NavLink

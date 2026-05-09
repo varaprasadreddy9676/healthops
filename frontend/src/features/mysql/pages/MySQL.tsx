@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Database, Users, Gauge, Clock, Server, Shield, Activity, AlertTriangle } from 'lucide-react'
+import { Database, Users, Gauge, Clock, Server, Shield, Activity, AlertTriangle } from '@/shared/icons/lucide'
 import { Link } from 'react-router-dom'
 import { mysqlApi } from "@/features/mysql/api/mysql"
 import { ClickableMetricCard } from "@/features/mysql/components/ClickableMetricCard"
@@ -82,7 +82,10 @@ export default function MySQL() {
             {' · Click any card for details'}
           </p>
         </div>
-        <ExportButton downloadUrl={settingsApi.exportMysqlSamples('csv')} />
+        <ExportButton
+          downloadUrl={settingsApi.exportMysqlSamples('csv', health.checkId)}
+          filename={`mysql_samples_${health.checkId}.csv`}
+        />
       </div>
 
       {/* Clickable metric cards */}

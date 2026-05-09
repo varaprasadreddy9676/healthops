@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Heart, AlertCircle } from 'lucide-react'
+import { Heart, AlertCircle } from '@/shared/icons/lucide'
 import { useAuth } from "@/shared/hooks/useAuth"
 
 export default function Login() {
@@ -89,10 +89,6 @@ export default function Login() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-
-        <p className="mt-4 text-center text-xs text-slate-400">
-          Default credentials: admin / admin
-        </p>
       </div>
     </div>
   )

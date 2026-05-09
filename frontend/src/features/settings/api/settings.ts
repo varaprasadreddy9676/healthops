@@ -10,6 +10,10 @@ export const settingsApi = {
   deleteAlertRule: (id: string) => api.delete(`/alert-rules/${encodeURIComponent(id)}`),
   exportResults: (format = 'csv') => `/api/v1/export/results?format=${format}`,
   exportIncidents: (format = 'csv') => `/api/v1/export/incidents?format=${format}`,
-  exportMysqlSamples: (format = 'csv') => `/api/v1/export/mysql/samples?format=${format}`,
-  exportAuditLog: (format = 'csv') => `/api/v1/export/audit?format=${format}`,
+  exportMysqlSamples: (format = 'csv', checkId?: string) => {
+    const qs = new URLSearchParams({ format })
+    if (checkId) qs.set('checkId', checkId)
+    return `/api/v1/export/mysql/samples?${qs.toString()}`
+  },
+  exportAuditLog: () => '/api/v1/audit?limit=1000',
 }

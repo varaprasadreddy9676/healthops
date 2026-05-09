@@ -14,7 +14,19 @@ function barColor(pct: number): string {
 }
 
 export function UptimeChart({ data, height = 260 }: Props) {
+  if (!data.length) {
+    return (
+      <div
+        className="flex items-center justify-center rounded-lg border border-dashed border-slate-200 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400"
+        style={{ height }}
+      >
+        No uptime data available
+      </div>
+    )
+  }
+
   const sorted = [...data].sort((a, b) => a.uptimePct - b.uptimePct)
+  const minUptime = Math.min(...sorted.map(d => d.uptimePct))
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -22,7 +34,7 @@ export function UptimeChart({ data, height = 260 }: Props) {
         <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #e2e8f0)" horizontal={false} />
         <XAxis
           type="number"
-          domain={[Math.min(95, Math.floor(Math.min(...data.map(d => d.uptimePct)))), 100]}
+          domain={[Math.min(95, Math.floor(minUptime)), 100]}
           tick={{ fontSize: 11, fill: 'var(--chart-tick, #94a3b8)' }}
           axisLine={false}
           tickLine={false}

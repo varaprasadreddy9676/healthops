@@ -11,7 +11,7 @@ import { cn } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import { useMySQLLive } from "@/features/mysql/hooks/useMySQLLive"
 import type { MySQLDigestStat } from "@/shared/types"
-import { AlertTriangle, Search, XCircle, Filter } from 'lucide-react'
+import { AlertTriangle, Search, XCircle, Filter } from '@/shared/icons/lucide'
 
 export default function MySQLQueries() {
   const { data: health, isLoading, error, refetch } = useQuery({

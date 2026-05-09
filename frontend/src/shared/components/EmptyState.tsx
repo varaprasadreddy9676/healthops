@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Inbox } from 'lucide-react'
+import { Inbox } from '@/shared/icons/lucide'
 
 interface Props {
   title: string

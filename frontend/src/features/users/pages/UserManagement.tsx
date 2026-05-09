@@ -1,55 +1,28 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users as UsersIcon, Plus, Trash2, Shield, Eye, Pencil } from 'lucide-react'
+import { Users as UsersIcon, Plus, Trash2, Shield, Eye, Pencil } from '@/shared/icons/lucide'
 import { useAuth } from "@/shared/hooks/useAuth"
 import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
 import { EmptyState } from "@/shared/components/EmptyState"
 import { useToast } from "@/shared/components/Toast"
-
-interface User {
-  id: string
-  username: string
-  role: 'admin' | 'ops'
-  displayName?: string
-  createdAt: string
-  updatedAt: string
-}
-
-function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('healthops_token')
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
-
-async function fetchUsers(): Promise<User[]> {
-  const res = await fetch('/api/v1/users', { headers: authHeaders() })
-  if (!res.ok) throw new Error('Failed to load users')
-  const body = await res.json()
-  return body.data
-}
+import { useConfirm } from "@/shared/components/ConfirmDialog"
+import { usersApi } from "@/features/users/api/users"
+import type { User, CreateUserRequest, UpdateUserRequest } from "@/shared/types"
 
 export default function UserManagement() {
   const { isAdmin } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState({ username: '', password: '', role: 'ops', displayName: '' })
 
-  const { data: users, isLoading, error } = useQuery({ queryKey: ['users'], queryFn: fetchUsers })
+  const { data: users, isLoading, error } = useQuery({ queryKey: ['users'], queryFn: usersApi.list })
 
   const createMutation = useMutation({
-    mutationFn: async (data: typeof form) => {
-      const res = await fetch('/api/v1/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify(data),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body?.error?.message || 'Failed to create user')
-      }
-    },
+    mutationFn: (data: CreateUserRequest) => usersApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       setShowForm(false)
@@ -60,17 +33,7 @@ export default function UserManagement() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Record<string, string | undefined> }) => {
-      const res = await fetch(`/api/v1/users/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify(data),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body?.error?.message || 'Failed to update user')
-      }
-    },
+    mutationFn: ({ id, data }: { id: string; data: UpdateUserRequest }) => usersApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       setEditId(null)
@@ -81,16 +44,7 @@ export default function UserManagement() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/v1/users/${id}`, {
-        method: 'DELETE',
-        headers: authHeaders(),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body?.error?.message || 'Failed to delete user')
-      }
-    },
+    mutationFn: usersApi.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       toast.success('User deleted')
@@ -159,14 +113,14 @@ export default function UserManagement() {
             <button
               onClick={() => {
                 if (editId) {
-                  const data: Record<string, string | undefined> = {
-                    role: form.role,
+                  const data: UpdateUserRequest = {
+                    role: form.role as User['role'],
                     displayName: form.displayName,
                   }
                   if (form.password) data.password = form.password
                   updateMutation.mutate({ id: editId, data })
                 } else {
-                  createMutation.mutate(form)
+                  createMutation.mutate({ ...form, role: form.role })
                 }
               }}
               disabled={createMutation.isPending || updateMutation.isPending}
@@ -240,10 +194,14 @@ export default function UserManagement() {
                           <Pencil className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => {
-                            if (confirm(`Delete user "${user.username}"?`)) {
-                              deleteMutation.mutate(user.id)
-                            }
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: 'Delete User',
+                              message: `Delete user "${user.username}"?`,
+                              variant: 'danger',
+                              confirmLabel: 'Delete',
+                            })
+                            if (ok) deleteMutation.mutate(user.id)
                           }}
                           className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50"
                           title="Delete"

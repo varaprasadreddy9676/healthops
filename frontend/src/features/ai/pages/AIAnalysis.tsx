@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Brain, Zap, TestTube } from 'lucide-react'
+import { Brain, Zap, TestTube } from '@/shared/icons/lucide'
 import { aiApi } from "@/features/ai/api/ai"
 import { MetricCard } from "@/shared/components/MetricCard"
 import { LoadingState } from "@/shared/components/LoadingState"
@@ -31,7 +31,7 @@ export default function AIAnalysis() {
   if (error) return <ErrorState message="AI configuration not available." retry={() => refetch()} />
 
   const providers = config?.providers ?? []
-  const activeProvider = providers.find((p: AIProviderConfig) => p.id === config?.activeProviderId)
+  const activeProvider = providers.find((p: AIProviderConfig) => p.isDefault)
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -69,7 +69,7 @@ export default function AIAnalysis() {
                 key={provider.id}
                 className={cn(
                   'flex items-center justify-between rounded-lg border px-4 py-3',
-                  provider.id === config?.activeProviderId
+                  provider.isDefault
                     ? 'border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/20'
                     : 'border-slate-200 dark:border-slate-700'
                 )}
@@ -77,7 +77,7 @@ export default function AIAnalysis() {
                 <div>
                   <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                     {provider.name}
-                    {provider.id === config?.activeProviderId && (
+                    {provider.isDefault && (
                       <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
                         ACTIVE
                       </span>

@@ -1,4 +1,4 @@
-import { Menu, RefreshCw, Moon, Sun, Wifi, WifiOff } from 'lucide-react'
+import { Menu, RefreshCw, Moon, Sun, Wifi, WifiOff } from '@/shared/icons/lucide'
 import { useState, useEffect, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { cn } from "@/shared/lib/utils"

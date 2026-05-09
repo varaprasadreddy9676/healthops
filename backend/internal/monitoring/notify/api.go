@@ -201,10 +201,29 @@ func (h *NotificationAPIHandler) handleTestChannel(w http.ResponseWriter, r *htt
 		return
 	}
 
-	var ch NotificationChannelConfig
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&ch); err != nil {
+	var req struct {
+		NotificationChannelConfig
+		ChannelID string `json:"channelId"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		monitoring.WriteAPIError(w, http.StatusBadRequest, err)
 		return
+	}
+
+	ch := req.NotificationChannelConfig
+	if req.ChannelID != "" {
+		found := false
+		for _, existing := range h.channelStore.ListRaw() {
+			if existing.ID == req.ChannelID {
+				ch = existing
+				found = true
+				break
+			}
+		}
+		if !found {
+			monitoring.WriteAPIError(w, http.StatusNotFound, fmt.Errorf("channel not found: %s", req.ChannelID))
+			return
+		}
 	}
 
 	if err := ch.Validate(); err != nil {

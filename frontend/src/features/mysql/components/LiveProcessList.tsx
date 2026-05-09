@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Skull, Loader2, CheckCircle } from 'lucide-react'
+import { Skull, Loader2, CheckCircle } from '@/shared/icons/lucide'
 import { mysqlApi } from "@/features/mysql/api/mysql"
 import type { MySQLProcess } from "@/shared/types"
 import { cn } from "@/shared/lib/utils"
+import { useConfirm } from "@/shared/components/ConfirmDialog"
 
 interface Props {
   processes: MySQLProcess[]
@@ -12,12 +13,19 @@ interface Props {
 
 /** Real-time process list with kill query action. */
 export function LiveProcessList({ processes, longRunning, className }: Props) {
+  const confirm = useConfirm()
   const [killingId, setKillingId] = useState<number | null>(null)
   const [killedIds, setKilledIds] = useState<Set<number>>(new Set())
   const [killError, setKillError] = useState<string | null>(null)
 
   const handleKill = async (processId: number) => {
-    if (!confirm(`Kill query on process ${processId}? This will cancel the running query.`)) return
+    const ok = await confirm({
+      title: 'Kill Query',
+      message: `Kill query on process ${processId}? This will cancel the running query.`,
+      variant: 'danger',
+      confirmLabel: 'Kill Query',
+    })
+    if (!ok) return
 
     setKillingId(processId)
     setKillError(null)

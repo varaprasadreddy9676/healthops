@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft } from '@/shared/icons/lucide'
 import type { ReactNode } from 'react'
 
 interface Props {

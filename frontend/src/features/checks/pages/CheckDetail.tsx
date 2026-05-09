@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { useState } from 'react'
-import { ArrowLeft, Server, Tag, Pencil, X, Save, Bell } from 'lucide-react'
+import { ArrowLeft, Server, Tag, Pencil, X, Save, Bell } from '@/shared/icons/lucide'
 import { checksApi } from "@/features/checks/api/checks"
 import { analyticsApi } from "@/features/analytics/api/analytics"
+import { notificationsApi } from "@/features/notifications/api/notifications"
 import { StatusBadge } from "@/shared/components/StatusBadge"
 import { MetricCard } from "@/shared/components/MetricCard"
 import { LoadingState } from "@/shared/components/LoadingState"
@@ -12,25 +13,6 @@ import { ResponseTimeChart } from "@/shared/charts/ResponseTimeChart"
 import { formatDuration, formatUptime, relativeTime, checkTypeLabel } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import type { CheckConfig } from "@/shared/types"
-
-interface NotificationChannel {
-  id: string
-  name: string
-  type: string
-  enabled: boolean
-}
-
-function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('healthops_token')
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
-
-async function fetchChannels(): Promise<NotificationChannel[]> {
-  const res = await fetch('/api/v1/notification-channels', { headers: authHeaders() })
-  if (!res.ok) return []
-  const body = await res.json()
-  return body.data || []
-}
 
 export default function CheckDetail() {
   const { id } = useParams<{ id: string }>()
@@ -53,7 +35,7 @@ export default function CheckDetail() {
 
   const { data: channels = [] } = useQuery({
     queryKey: ['notification-channels-list'],
-    queryFn: fetchChannels,
+    queryFn: notificationsApi.list,
     enabled: editing,
   })
 

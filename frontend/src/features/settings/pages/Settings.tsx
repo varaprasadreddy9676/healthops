@@ -5,16 +5,19 @@ import {
   Settings as SettingsIcon, Bell, Download, Key, Plus, Trash2,
   Pencil, X, Save, Globe, Terminal, FileText, Database, Activity,
   Eye, EyeOff, Zap, Monitor, Server, Play, Users,
-} from 'lucide-react'
+} from '@/shared/icons/lucide'
 import { settingsApi } from "@/features/settings/api/settings"
 import { aiApi } from "@/features/ai/api/ai"
 import { checksApi } from "@/features/checks/api/checks"
 import { serversApi } from "@/features/servers/api/servers"
 import { usersApi } from "@/features/users/api/users"
+import { notificationsApi } from "@/features/notifications/api/notifications"
 import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
+import { ExportButton } from "@/shared/components/ExportButton"
 import { useConfirm } from "@/shared/components/ConfirmDialog"
 import { useToast } from "@/shared/components/Toast"
+import { useAuth } from "@/shared/hooks/useAuth"
 import { cn } from "@/shared/lib/utils"
 import type {
   CheckConfig, AlertRule, AlertCondition, AIProviderConfig,
@@ -24,12 +27,14 @@ import type {
 type Tab = 'general' | 'users' | 'servers' | 'checks' | 'alerts' | 'ai' | 'export'
 
 export default function Settings() {
+  const { isAdmin } = useAuth()
   const [searchParams] = useSearchParams()
   const initialTab = (searchParams.get('tab') as Tab) || 'general'
   const [tab, setTab] = useState<Tab>(initialTab)
+  const activeTab = !isAdmin && tab === 'users' ? 'general' : tab
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'general', label: 'General', icon: <SettingsIcon className="h-4 w-4" /> },
-    { id: 'users', label: 'Users', icon: <Users className="h-4 w-4" /> },
+    ...(isAdmin ? [{ id: 'users' as const, label: 'Users', icon: <Users className="h-4 w-4" /> }] : []),
     { id: 'servers', label: 'Servers', icon: <Server className="h-4 w-4" /> },
     { id: 'checks', label: 'Health Checks', icon: <Activity className="h-4 w-4" /> },
     { id: 'alerts', label: 'Alert Rules', icon: <Bell className="h-4 w-4" /> },
@@ -51,7 +56,7 @@ export default function Settings() {
             onClick={() => setTab(t.id)}
             className={cn(
               'inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors',
-              tab === t.id
+              activeTab === t.id
                 ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100'
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300',
             )}
@@ -62,13 +67,13 @@ export default function Settings() {
         ))}
       </div>
 
-      {tab === 'general' && <GeneralSettings />}
-      {tab === 'users' && <UsersSettings />}
-      {tab === 'servers' && <ServersSettings />}
-      {tab === 'checks' && <ChecksSettings />}
-      {tab === 'alerts' && <AlertSettings />}
-      {tab === 'ai' && <AISettings />}
-      {tab === 'export' && <ExportSettings />}
+      {activeTab === 'general' && <GeneralSettings />}
+      {activeTab === 'users' && <UsersSettings />}
+      {activeTab === 'servers' && <ServersSettings />}
+      {activeTab === 'checks' && <ChecksSettings />}
+      {activeTab === 'alerts' && <AlertSettings />}
+      {activeTab === 'ai' && <AISettings />}
+      {activeTab === 'export' && <ExportSettings />}
     </div>
   )
 }
@@ -959,17 +964,7 @@ function CheckForm({ initial, isEdit, saving, servers, onSave, onCancel }: {
   // Fetch notification channels to show which ones target this check
   const { data: channels } = useQuery({
     queryKey: ['notification-channels-raw'],
-    queryFn: async () => {
-      const token = localStorage.getItem('healthops_token')
-      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
-      const res = await fetch('/api/v1/notification-channels', { headers })
-      if (!res.ok) return []
-      const body = await res.json()
-      return (body.data || []) as Array<{
-        id: string; name: string; type: string; enabled: boolean;
-        checkIds?: string[]; severities?: string[];
-      }>
-    },
+    queryFn: notificationsApi.list,
   })
 
   const set = <K extends keyof CheckConfig>(key: K, value: CheckConfig[K]) =>
@@ -1057,7 +1052,7 @@ function CheckForm({ initial, isEdit, saving, servers, onSave, onCancel }: {
               placeholder="nginx" className={inputCls} required />
           </Field>
           <Field label="Remote Server" hint="Run on remote server via SSH">
-            <select value={form.serverId ?? ''} onChange={e => set('serverId', e.target.value || undefined as unknown as string)}
+            <select value={form.serverId ?? ''} onChange={e => set('serverId', e.target.value || undefined)}
               className={selectCls}>
               <option value="">Local (this server)</option>
               {servers.filter(s => s.enabled).map(s => (
@@ -1081,7 +1076,7 @@ function CheckForm({ initial, isEdit, saving, servers, onSave, onCancel }: {
             </Field>
           </div>
           <Field label="Remote Server" hint="Run on remote server via SSH">
-            <select value={form.serverId ?? ''} onChange={e => set('serverId', e.target.value || undefined as unknown as string)}
+            <select value={form.serverId ?? ''} onChange={e => set('serverId', e.target.value || undefined)}
               className={cn(selectCls, 'max-w-xs')}>
               <option value="">Local (this server)</option>
               {servers.filter(s => s.enabled).map(s => (
@@ -1106,7 +1101,7 @@ function CheckForm({ initial, isEdit, saving, servers, onSave, onCancel }: {
             </Field>
           </div>
           <Field label="Remote Server" hint="Check log file on remote server via SSH">
-            <select value={form.serverId ?? ''} onChange={e => set('serverId', e.target.value || undefined as unknown as string)}
+            <select value={form.serverId ?? ''} onChange={e => set('serverId', e.target.value || undefined)}
               className={cn(selectCls, 'max-w-xs')}>
               <option value="">Local (this server)</option>
               {servers.filter(s => s.enabled).map(s => (
@@ -1978,11 +1973,21 @@ function ProviderForm({ initial, isEdit, saving, onSave, onCancel }: {
    ══════════════════════════════════════════════════════════════════ */
 
 function ExportSettings() {
+  const { data: checks } = useQuery({
+    queryKey: ['settings', 'checks'],
+    queryFn: checksApi.list,
+  })
+  const mysqlCheck = checks?.find(c => c.type === 'mysql')
   const exports = [
     { label: 'Check Results', desc: 'Historical check execution results', csv: settingsApi.exportResults('csv'), json: settingsApi.exportResults('json') },
     { label: 'Incidents', desc: 'All incidents and their lifecycle events', csv: settingsApi.exportIncidents('csv'), json: settingsApi.exportIncidents('json') },
-    { label: 'MySQL Samples', desc: 'MySQL monitoring metric samples', csv: settingsApi.exportMysqlSamples('csv'), json: settingsApi.exportMysqlSamples('json') },
-    { label: 'Audit Log', desc: 'Security and configuration audit trail', csv: settingsApi.exportAuditLog('csv'), json: settingsApi.exportAuditLog('json') },
+    ...(mysqlCheck ? [{
+      label: 'MySQL Samples',
+      desc: `MySQL monitoring metric samples for ${mysqlCheck.name}`,
+      csv: settingsApi.exportMysqlSamples('csv', mysqlCheck.id),
+      json: settingsApi.exportMysqlSamples('json', mysqlCheck.id),
+    }] : []),
+    { label: 'Audit Log', desc: 'Security and configuration audit trail', json: settingsApi.exportAuditLog() },
   ]
 
   return (
@@ -1999,14 +2004,12 @@ function ExportSettings() {
               <p className="text-xs text-slate-500">{e.desc}</p>
             </div>
             <div className="flex items-center gap-2">
-              <a href={e.csv} download
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800">
-                <Download className="h-3 w-3" /> CSV
-              </a>
-              <a href={e.json} download
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800">
-                <Download className="h-3 w-3" /> JSON
-              </a>
+              {'csv' in e && e.csv && (
+                <ExportButton downloadUrl={e.csv} filename={`${e.label.toLowerCase().replace(/\s+/g, '-')}.csv`} />
+              )}
+              {'json' in e && e.json && (
+                <ExportButton downloadUrl={e.json} filename={`${e.label.toLowerCase().replace(/\s+/g, '-')}.json`} />
+              )}
             </div>
           </div>
         ))}

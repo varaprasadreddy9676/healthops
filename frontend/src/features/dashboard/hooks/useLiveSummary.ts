@@ -31,7 +31,7 @@ export function useLiveSummary(enabled = true): LiveSummaryState {
     }
   }, [])
 
-  const { connected } = useSSE(enabled ? handleMessage : () => {})
+  const { connected } = useSSE(handleMessage, enabled)
 
   return {
     summary: enabled ? summary : null,
