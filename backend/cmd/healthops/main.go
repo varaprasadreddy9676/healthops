@@ -15,6 +15,7 @@ import (
 	"medics-health-check/backend/internal/monitoring/ai"
 	airepositories "medics-health-check/backend/internal/monitoring/ai/repositories"
 	"medics-health-check/backend/internal/monitoring/assistant"
+	"medics-health-check/backend/internal/monitoring/automation"
 	"medics-health-check/backend/internal/monitoring/evidence"
 	"medics-health-check/backend/internal/monitoring/logs"
 	"medics-health-check/backend/internal/monitoring/mysql"
@@ -637,6 +638,17 @@ func main() {
 		recsHandler := recommendations.NewHandler(store, incidentRepo, recsAICall, logger)
 		service.SetRecommendationRoutes(recsHandler)
 		logger.Printf("Recommendations engine initialized (AI available: %v)", recsAICall != nil)
+	}
+
+	// --- Assisted Automation (Phase 6) ---
+	{
+		var autoAICall automation.AIProvider
+		if aiService != nil {
+			autoAICall = aiService.CallProvider
+		}
+		autoHandler := automation.NewHandler(store, incidentRepo, autoAICall, logger)
+		service.SetAutomationRoutes(autoHandler)
+		logger.Printf("Automation engine initialized (AI available: %v)", autoAICall != nil)
 	}
 
 	stopRetention := make(chan struct{})

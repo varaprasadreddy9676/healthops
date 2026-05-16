@@ -22,6 +22,7 @@ const AIAnalysis = lazy(() => import('@/features/ai/pages/AIAnalysis'))
 const RCAReports = lazy(() => import('@/features/incidents/pages/RCAReports'))
 const OpsAssistant = lazy(() => import('@/features/assistant/pages/Assistant'))
 const Recommendations = lazy(() => import('@/features/recommendations/pages/Recommendations'))
+const Automation = lazy(() => import('@/features/automation/pages/Automation'))
 const Logs = lazy(() => import('@/features/logs/pages/Logs'))
 const LogFamilyDetail = lazy(() => import('@/features/logs/pages/LogFamilyDetail'))
 const Settings = lazy(() => import('@/features/settings/pages/Settings'))
@@ -63,6 +64,7 @@ export default function App() {
             <Route path="rca" element={<RCAReports />} />
             <Route path="assistant" element={<OpsAssistant />} />
             <Route path="recommendations" element={<Recommendations />} />
+            <Route path="automation" element={<Automation />} />
             <Route path="logs" element={<Logs />} />
             <Route path="logs/:id" element={<LogFamilyDetail />} />
             <Route path="settings" element={<Settings />} />

@@ -37,6 +37,7 @@ type Service struct {
 	evidenceRoutes        RouteRegistrar
 	assistantRoutes       RouteRegistrar
 	recommendationRoutes  RouteRegistrar
+	automationRoutes      RouteRegistrar
 	snapshotRepo      IncidentSnapshotRepository
 	userStore         UserStoreBackend
 	userAPI           *UserAPIHandler
@@ -212,6 +213,11 @@ func (s *Service) SetRecommendationRoutes(r RouteRegistrar) {
 	s.recommendationRoutes = r
 }
 
+// SetAutomationRoutes sets the assisted automation route registrar.
+func (s *Service) SetAutomationRoutes(r RouteRegistrar) {
+	s.automationRoutes = r
+}
+
 // SetSnapshotRepo sets the incident snapshot repository for the service.
 func (s *Service) SetSnapshotRepo(repo IncidentSnapshotRepository) {
 	s.snapshotRepo = repo
@@ -342,6 +348,11 @@ func (s *Service) Run(ctx context.Context) error {
 	// Register recommendations routes if handler is configured
 	if s.recommendationRoutes != nil {
 		s.recommendationRoutes.RegisterRoutes(mux)
+	}
+
+	// Register automation routes if handler is configured
+	if s.automationRoutes != nil {
+		s.automationRoutes.RegisterRoutes(mux)
 	}
 
 	// Add Prometheus metrics endpoint
