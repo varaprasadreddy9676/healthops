@@ -244,9 +244,11 @@ export interface AIAnalysisResult {
   incidentId: string
   provider?: string
   model?: string
+  summary?: string
   analysis: string
   suggestions?: string[]
   severity?: string
+  confidence?: string
   createdAt: string
 }
 

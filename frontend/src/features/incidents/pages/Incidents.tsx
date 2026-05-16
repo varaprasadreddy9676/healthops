@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
-import { AlertTriangle, CheckCircle, Clock, Filter } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Clock, Filter, Brain } from 'lucide-react'
 import { incidentsApi } from "@/features/incidents/api/incidents"
+import { aiApi } from "@/features/ai/api/ai"
 import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
 import { EmptyState } from "@/shared/components/EmptyState"
@@ -29,6 +30,17 @@ export default function Incidents() {
     queryKey: ['analytics', 'incidents'],
     queryFn: analyticsApi.incidents,
   })
+
+  const { data: aiResults } = useQuery({
+    queryKey: ['ai', 'results', 'all'],
+    queryFn: aiApi.allResults,
+    refetchInterval: REFETCH_INTERVAL,
+  })
+
+  // Map AI results by incidentId for quick lookup
+  const aiSummaryMap = new Map(
+    (aiResults ?? []).map(r => [r.incidentId, r])
+  )
 
   const live = useLiveSummary(!isLoading && !error)
 
@@ -107,8 +119,8 @@ export default function Incidents() {
                     <span className={cn(
                       'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase',
                       inc.status === 'open' ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400' :
-                      inc.status === 'acknowledged' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' :
-                      'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+                        inc.status === 'acknowledged' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' :
+                          'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
                     )}>
                       {incidentStatusLabel(inc.status)}
                     </span>
@@ -117,6 +129,12 @@ export default function Incidents() {
                     </span>
                   </div>
                   <p className="mt-0.5 truncate text-xs text-slate-500">{inc.message}</p>
+                  {aiSummaryMap.get(inc.id)?.summary && (
+                    <p className="mt-1 flex items-center gap-1 truncate text-xs text-blue-600 dark:text-blue-400">
+                      <Brain className="h-3 w-3 shrink-0" />
+                      {aiSummaryMap.get(inc.id)!.summary}
+                    </p>
+                  )}
                 </div>
                 <div className="shrink-0 text-right text-xs text-slate-400">
                   <div className="flex items-center gap-1">

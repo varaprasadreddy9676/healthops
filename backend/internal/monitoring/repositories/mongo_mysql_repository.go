@@ -66,7 +66,7 @@ func (r *MongoMySQLRepository) ensureIndexes() error {
 			},
 		},
 		{
-			Keys: bson.D{{Key: "sampleId", Value: 1}},
+			Keys:    bson.D{{Key: "sampleId", Value: 1}},
 			Options: options.Index().SetUnique(true),
 		},
 		{
@@ -82,7 +82,7 @@ func (r *MongoMySQLRepository) ensureIndexes() error {
 			},
 		},
 		{
-			Keys: bson.D{{Key: "sampleId", Value: 1}},
+			Keys:    bson.D{{Key: "sampleId", Value: 1}},
 			Options: options.Index().SetUnique(true),
 		},
 		{
@@ -141,8 +141,8 @@ func (r *MongoMySQLRepository) ComputeAndAppendDelta(sampleID string) (monitorin
 
 	// Find the previous sample for the same check (most recent before current)
 	filter := bson.M{
-		"checkId":  current.CheckID,
-		"sampleId": bson.M{"$ne": sampleID},
+		"checkId":   current.CheckID,
+		"sampleId":  bson.M{"$ne": sampleID},
 		"timestamp": bson.M{"$lt": current.Timestamp},
 	}
 	opts := options.FindOne().SetSort(bson.D{{Key: "timestamp", Value: -1}})

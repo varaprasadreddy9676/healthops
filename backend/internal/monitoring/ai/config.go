@@ -127,7 +127,7 @@ Your job is to analyze monitoring incidents by examining the evidence provided (
 
 Be concise, technical, and actionable. Prioritize the most likely root cause. 
 If evidence is insufficient, state what additional data would help.
-Format your response as structured JSON with fields: rootCause, impact, severity, suggestions (array), additionalDataNeeded (array), confidence (high/medium/low).`,
+Format your response as structured JSON with fields: summary (1-2 sentence plain-English description of what failed, when it started, and what is affected), rootCause, impact, severity, suggestions (array), additionalDataNeeded (array), confidence (high/medium/low).`,
 			UserMsg: `Analyze this monitoring incident:
 
 **Incident ID**: {{.IncidentID}}

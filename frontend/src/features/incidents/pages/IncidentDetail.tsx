@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, Eye, Brain } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Eye, Brain, ChevronDown, ShieldAlert, Activity } from 'lucide-react'
+import { useState } from 'react'
 import { incidentsApi } from "@/features/incidents/api/incidents"
 import { aiApi } from "@/features/ai/api/ai"
 import { LoadingState } from "@/shared/components/LoadingState"
@@ -29,6 +30,15 @@ export default function IncidentDetail() {
     enabled: !!id,
     retry: false,
   })
+
+  const { data: aiConfig } = useQuery({
+    queryKey: ['ai', 'config'],
+    queryFn: aiApi.config,
+    retry: false,
+    staleTime: 60_000,
+  })
+
+  const aiEnabled = aiConfig?.enabled && (aiConfig?.providers?.length ?? 0) > 0
 
   const ackMutation = useMutation({
     mutationFn: () => incidentsApi.acknowledge(id!),
@@ -63,8 +73,8 @@ export default function IncidentDetail() {
             <span className={cn(
               'rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase',
               incident.status === 'open' ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400' :
-              incident.status === 'acknowledged' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' :
-              'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+                incident.status === 'acknowledged' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' :
+                  'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
             )}>
               {incidentStatusLabel(incident.status)}
             </span>
@@ -97,14 +107,16 @@ export default function IncidentDetail() {
             <CheckCircle className="h-4 w-4" />
             Resolve
           </button>
-          <button
-            onClick={() => analyzeMutation.mutate()}
-            disabled={analyzeMutation.isPending}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400"
-          >
-            <Brain className="h-4 w-4" />
-            {analyzeMutation.isPending ? 'Analyzing…' : 'AI Analysis'}
-          </button>
+          {aiEnabled && (
+            <button
+              onClick={() => analyzeMutation.mutate()}
+              disabled={analyzeMutation.isPending}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400"
+            >
+              <Brain className="h-4 w-4" />
+              {analyzeMutation.isPending ? 'Analyzing...' : 'AI Analysis'}
+            </button>
+          )}
         </div>
       )}
 
@@ -138,26 +150,7 @@ export default function IncidentDetail() {
       </div>
 
       {/* AI Analysis */}
-      {aiResult && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-5 dark:border-blue-900 dark:bg-blue-950/20">
-          <div className="mb-3 flex items-center gap-2">
-            <Brain className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-sm font-semibold text-blue-900 dark:text-blue-300">AI Analysis</h2>
-            <span className="text-xs text-blue-500">{relativeTime(aiResult.createdAt)}</span>
-          </div>
-          <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{aiResult.analysis}</p>
-          {aiResult.suggestions && aiResult.suggestions.length > 0 && (
-            <div className="mt-4">
-              <h3 className="text-xs font-semibold uppercase text-blue-600 dark:text-blue-400">Suggestions</h3>
-              <ul className="mt-2 space-y-1">
-                {aiResult.suggestions.map((s, i) => (
-                  <li key={i} className="text-sm text-slate-600 dark:text-slate-400">• {s}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
+      {aiResult && <AIAnalysisCard aiResult={aiResult} />}
 
       {/* Evidence snapshots */}
       {snapshots && snapshots.length > 0 && (
@@ -193,6 +186,89 @@ export default function IncidentDetail() {
             ))}
           </dl>
         </div>
+      )}
+    </div>
+  )
+}
+
+function AIAnalysisCard({ aiResult }: { aiResult: { summary?: string; analysis: string; suggestions?: string[]; severity?: string; confidence?: string; createdAt: string } }) {
+  const [expanded, setExpanded] = useState(false)
+
+  const confidenceColor = aiResult.confidence === 'high'
+    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+    : aiResult.confidence === 'medium'
+      ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
+      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+
+  const severityBadge = aiResult.severity === 'critical'
+    ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
+    : aiResult.severity === 'high'
+      ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400'
+      : aiResult.severity === 'medium'
+        ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
+        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+
+  return (
+    <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/80 to-indigo-50/40 p-5 dark:border-blue-900 dark:from-blue-950/30 dark:to-indigo-950/20">
+      {/* Header */}
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Brain className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <h2 className="text-sm font-semibold text-blue-900 dark:text-blue-300">AI Analysis</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          {aiResult.confidence && (
+            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase', confidenceColor)}>
+              {aiResult.confidence} confidence
+            </span>
+          )}
+          {aiResult.severity && (
+            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase', severityBadge)}>
+              <ShieldAlert className="mr-0.5 inline h-3 w-3" />
+              {aiResult.severity}
+            </span>
+          )}
+          <span className="text-xs text-blue-400">{relativeTime(aiResult.createdAt)}</span>
+        </div>
+      </div>
+
+      {/* Summary */}
+      {aiResult.summary && (
+        <p className="mb-4 text-sm font-medium leading-relaxed text-slate-800 dark:text-slate-200">
+          {aiResult.summary}
+        </p>
+      )}
+
+      {/* Suggestions */}
+      {aiResult.suggestions && aiResult.suggestions.length > 0 && (
+        <div className="mb-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase text-blue-600 dark:text-blue-400">
+            <Activity className="h-3 w-3" />
+            Recommended Actions
+          </h3>
+          <ul className="space-y-1.5">
+            {aiResult.suggestions.map((s, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-400">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400" />
+                {s}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Expandable full analysis */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1 text-xs font-medium text-blue-600 transition-colors hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+      >
+        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', expanded && 'rotate-180')} />
+        {expanded ? 'Hide' : 'Show'} full analysis
+      </button>
+      {expanded && (
+        <pre className="mt-3 max-h-80 overflow-auto rounded-lg bg-slate-900/5 p-4 font-mono text-xs leading-relaxed text-slate-600 dark:bg-slate-950/50 dark:text-slate-400">
+          {aiResult.analysis}
+        </pre>
       )}
     </div>
   )

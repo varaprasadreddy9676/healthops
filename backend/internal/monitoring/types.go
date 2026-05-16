@@ -332,8 +332,10 @@ type AIQueueItem struct {
 // AIAnalysisResult holds the result of an AI analysis.
 type AIAnalysisResult struct {
 	IncidentID  string    `json:"incidentId" bson:"incidentId"`
+	Summary     string    `json:"summary,omitempty" bson:"summary,omitempty"`
 	Analysis    string    `json:"analysis" bson:"analysis"`
 	Suggestions []string  `json:"suggestions,omitempty" bson:"suggestions,omitempty"`
 	Severity    string    `json:"severity,omitempty" bson:"severity,omitempty"`
+	Confidence  string    `json:"confidence,omitempty" bson:"confidence,omitempty"`
 	CreatedAt   time.Time `json:"createdAt" bson:"createdAt"`
 }

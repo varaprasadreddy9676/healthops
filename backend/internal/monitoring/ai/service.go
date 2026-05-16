@@ -409,6 +409,7 @@ func (s *AIService) parseAnalysisResponse(incidentID, responseText string) monit
 	jsonStr := extractJSON(responseText)
 	if jsonStr != "" {
 		var parsed struct {
+			Summary              string      `json:"summary"`
 			RootCause            string      `json:"rootCause"`
 			Impact               string      `json:"impact"`
 			Severity             string      `json:"severity"`
@@ -453,6 +454,18 @@ func (s *AIService) parseAnalysisResponse(incidentID, responseText string) monit
 			}
 			if parsed.Severity != "" {
 				result.Severity = parsed.Severity
+			}
+			if parsed.Confidence != "" {
+				result.Confidence = parsed.Confidence
+			}
+			if parsed.Summary != "" {
+				result.Summary = parsed.Summary
+			} else if parsed.RootCause != "" {
+				// Auto-generate summary from root cause + impact
+				result.Summary = parsed.RootCause
+				if parsed.Impact != "" {
+					result.Summary += " — " + parsed.Impact
+				}
 			}
 		}
 	}
