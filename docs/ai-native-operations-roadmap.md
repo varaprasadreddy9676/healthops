@@ -54,6 +54,20 @@ Sources:
 6. Human approval remains mandatory for destructive remediation.
    AI can recommend and prepare actions. It should not kill queries, restart services, roll back deployments, or modify alerting without explicit authorization.
 
+## Non-Goals (v1)
+
+Explicitly out of scope so the product stays focused and does not drift toward a general-purpose observability suite:
+
+- Distributed tracing storage backend. We accept trace IDs as correlation keys and link out to existing tracing systems (Jaeger, Tempo, Honeycomb, Datadog). We do not store spans.
+- Long-term metrics TSDB. We keep short-window aggregates for incident evidence only. Users keep Prometheus/Mimir/Cloud TSDB for long-term metric history.
+- APM auto-instrumentation agents. We ingest OTLP from existing agents; we do not ship our own.
+- Frontend RUM and session replay.
+- Multi-tenant SaaS billing/isolation in v1. Single-tenant deployments only. The signal envelope reserves a `tenantId` field for future use, but tenant enforcement is not implemented.
+- General-purpose log search/grep over source logs at scale. We index fingerprints and short-window redacted log windows around incidents only. For full-text log archives at scale, users keep Loki/Elastic/CloudWatch.
+- Synthetic browser monitoring with full DOM scripting in v1. HTTP-step flows only.
+
+If a request lands in this list, the answer is “not in v1” unless the principle changes via ADR.
+
 ## Real User Problems To Solve
 
 ### 1. "Something is broken but I do not know where to start"
@@ -109,7 +123,7 @@ Inputs:
 - Docker container logs
 - HTTP log ingestion endpoint
 - Syslog-compatible receiver later
-- OpenTelemetry logs later
+- OpenTelemetry/OTLP logs receiver
 
 Pipeline:
 
@@ -121,7 +135,7 @@ Ingest
 → Enrich with service/host/env/deployment
 → Fingerprint
 → Sample/drop according to policy
-→ Store raw event short-term
+→ Store redacted source event short-term
 → Store fingerprint aggregates longer-term
 → Correlate to incidents
 ```
@@ -132,7 +146,7 @@ Core capabilities:
 - Spike detection per fingerprint.
 - Noise suppression for repeated identical events.
 - Secret redaction before storage and AI analysis.
-- Retention tiers: raw logs short-term, aggregates longer-term.
+- Retention tiers: redacted source logs short-term, aggregates longer-term.
 
 Why this matters:
 
@@ -429,6 +443,23 @@ AI-native behavior:
 
 ## AI-Native Architecture
 
+### Storage Decision (binding)
+
+**MongoDB is the primary and only persistence layer for all AI-native operations data.**
+
+- All new collections (`signal_events`, `log_events`, `log_fingerprints`, `correlation_groups`, `incident_events`, `deployments`, `heartbeats`, `slo_*`, `ai_*`, `runbooks`, `remediation_actions`, `telemetry_quality_findings`) are written directly to MongoDB. No file-store fallback for these collections.
+- The legacy `FileStore` / JSONL repositories (`state.json`, MySQL JSONL samples, file AI queue, file notification outbox) are migration inputs only. Phase 0 migrates them into MongoDB and removes runtime use.
+- Reads and writes for AI features assume MongoDB is reachable. The service refuses to start AI features (Incident Brief, log ingestion, correlation) if MongoDB is unavailable. After Phase 0, persisted monitoring also treats MongoDB as required; `/healthz` reports degraded/unready rather than silently writing to files.
+- This supersedes the existing “hybrid store / best-effort mirror” pattern for new features. Captured in ADR-005 (to be written before Phase 0 starts).
+
+Indexing baselines (every collection):
+
+- `{ timestamp: -1 }` for time-window queries.
+- `{ service: 1, environment: 1, timestamp: -1 }` for service-scoped lookups.
+- `{ incidentId: 1, timestamp: 1 }` on evidence-bearing collections.
+- `{ fingerprint: 1, timestamp: -1 }` on log-derived collections.
+- TTL indexes per retention policy (redacted source logs short, fingerprints/aggregates long).
+
 ### Core Pipeline
 
 ```text
@@ -441,7 +472,7 @@ Collectors
   deployment markers
   heartbeat pings
   audit events
-  future OTLP ingest
+  OTLP log ingest
 
 Normalization Layer
   parse
@@ -452,7 +483,7 @@ Normalization Layer
   assign service/env/host/deployment
 
 Signal Store
-  raw events
+  redacted source events
   aggregate windows
   fingerprints
   check results
@@ -488,19 +519,21 @@ Human Control Layer
 
 ### Mongo Collections
 
+All AI-native data lives here. No file-store equivalents.
+
 ```text
 log_sources
-log_events
-log_fingerprints
-signal_events
+log_events                  # redacted source events, short TTL (e.g. 7d)
+log_fingerprints            # aggregated, long TTL (e.g. 90d)
+signal_events               # unified envelope across all signal types
 correlation_groups
-incident_events
+incident_events             # timeline events linked to incidents
 deployments
 heartbeats
 slo_definitions
 slo_windows
-ai_investigations
-ai_feedback
+ai_investigations           # AI run inputs, outputs, evidence refs, confidence
+ai_feedback                 # human ratings on AI outputs
 runbooks
 remediation_actions
 telemetry_quality_findings
@@ -508,11 +541,12 @@ telemetry_quality_findings
 
 ### Common Signal Schema
 
-Every signal should fit a common envelope:
+Every signal fits a common envelope. This is the contract every collector, normalizer, correlator, and AI context builder uses.
 
 ```json
 {
   "id": "sig_...",
+  "tenantId": "default",
   "type": "log|check|metric|deployment|heartbeat|audit|security",
   "timestamp": "2026-05-16T12:00:00Z",
   "severity": "info|warning|critical",
@@ -524,11 +558,74 @@ Every signal should fit a common envelope:
   "traceId": "...",
   "spanId": "...",
   "deploymentId": "dep_...",
+  "incidentId": "inc_...",
   "message": "normalized message",
   "attributes": {},
   "redactionStatus": "clean|redacted|blocked"
 }
 ```
+
+`tenantId` is reserved (defaults to `"default"` in v1 single-tenant deployments) so a future multi-tenant rollout does not require a schema migration. v1 still enforces user/session boundaries; true cross-tenant authorization must be added before SaaS or multi-tenant mode.
+
+### Redaction Model (allowlist)
+
+Aligned with principle 3 (“normalized before AI sees it”) and the safety requirements:
+
+- Allowlist, not blocklist. The pipeline keeps only fields/patterns explicitly permitted; everything else in `attributes` is dropped or hashed.
+- Built-in detectors run before persistence: emails, IPv4/IPv6, JWTs, AWS keys, bearer tokens, credit-card-shaped numbers, common DSN/URL credentials, private-key headers.
+- Detected secrets are replaced with a stable hash (`<redacted:sha256:abcd1234>`) so spike detection and fingerprinting still work.
+- `redactionStatus`:
+  - `clean` — no detectors fired.
+  - `redacted` — detectors fired and were replaced.
+  - `blocked` — detector fired with high confidence on a forbidden field; the event is dropped and a `telemetry_quality_findings` record is created.
+- Redaction runs **before** writing to MongoDB and **before** any AI provider call. There is no “raw” copy stored anywhere.
+
+### Fingerprinting
+
+- Logs: Drain3-style template extraction (numbers/UUIDs/IPs/hex blobs replaced with placeholders), hashed to a stable `fingerprint`. Per-service cardinality cap (default 5,000); on overflow, low-volume fingerprints are coalesced into `fp_other_<service>` and a quality finding is raised.
+- MySQL: existing query digest from `performance_schema` reused.
+- Stack traces: top 3 frames + exception type, language-aware where possible (Go, Node, Python, JVM).
+
+### Correlation Algorithm (Phase 4)
+
+Deterministic-first, similarity-second. Online during ingest.
+
+1. **Hard-key join** on identical `(service, environment, deploymentId)` within a 5-minute sliding window. Same group.
+2. **Trace join**: any signals sharing `traceId` are in the same group regardless of service.
+3. **Host join**: signals on the same `host` within 60s of a critical event join the host’s active group.
+4. **Fingerprint similarity** (fallback): cosine similarity ≥ 0.85 on fingerprint vectors within window joins the group.
+5. **Conflict resolution**: when keys disagree (e.g. same `traceId` but different `deploymentId`), `traceId` wins; the deployment becomes a contributing factor, not a separate group.
+6. **Group lifecycle**: a group closes after 15 minutes of no new signals OR when its parent incident is resolved.
+
+Groups are recomputed only forward-in-time; closed groups are immutable. Reconciliation (re-grouping historical data) is an explicit batch job, not automatic.
+
+### AI Confidence Score
+
+Deterministic, evidence-weighted. Not LLM self-report.
+
+```
+confidence = clip(
+    0.2 * has_deployment_correlation
+  + 0.2 * has_metric_anomaly
+  + 0.2 * has_log_fingerprint_spike
+  + 0.2 * has_similar_past_incident_with_same_root_cause
+  + 0.2 * evidence_count_normalized,
+  0, 1
+)
+```
+
+Mapped to bands: `low` (<0.4), `medium` (0.4–0.75), `high` (>0.75). The breakdown is shown in the UI so operators can see why a brief is rated as it is. Calibration against `ai_feedback` outcomes is a Phase 5 task.
+
+### AI Cost and Latency Budget
+
+Applies to every AI call HealthOps makes (Incident Brief, postmortem draft, log group explanation, etc.):
+
+- Hard timeout: 20s per provider call. Fallback chain (configured per `AIService`) kicks in on timeout or 5xx.
+- Token cap: 8k input / 1k output per call by default; tunable per use case.
+- Evidence cap: max 50 evidence items in context; over the cap, items are summarized by deterministic rollups (counts, top-N fingerprints) before being sent.
+- Per-incident AI spend cap (configurable, default $0.50 USD-equivalent across all providers); exceeded calls are queued for manual trigger only.
+- Provider rate limit: token-bucket per provider in `AIService`, leaving 20% headroom for the user’s own application of the same key.
+- All costs and latencies recorded in `ai_investigations` for the AI Workload Monitoring feature.
 
 ## AI Features By Application Area
 
@@ -599,67 +696,133 @@ Every signal should fit a common envelope:
 
 ## Recommended Implementation Sequence
 
+Dependencies: Phase 0 → Phase 1 → (Phase 2a → Phase 2b) → Phase 3 → Phase 4 → Phase 5 → Phase 6. Phase 3 (deployments + heartbeats) can run in parallel with Phase 2 once Phase 1 lands.
+
+### Phase 0: Storage Unification and Migration Backbone
+
+Goal: commit to MongoDB-as-primary and migrate existing file-backed data so Phase 1 builds on solid ground.
+
+Build:
+
+1. ADR-005: “MongoDB is the primary persistence layer for AI-native features.”
+2. Migrate existing `FileMySQLRepository` (JSONL) data into a MongoDB `mysql_samples` / `mysql_deltas` collections. Keep the file repo as a one-time export source.
+3. Migrate `IncidentRepository` (in-memory) to MongoDB `incidents` collection.
+4. Migrate `FileNotificationOutbox` and `FileAIQueue` to MongoDB-backed implementations.
+5. Mongo connection becomes a hard startup dependency for the AI features (with a clear health check and failure mode).
+6. Index baselines from “Storage Decision” applied via migration script.
+
+Exit metrics:
+
+- 100% of new writes for the listed collections go to MongoDB.
+- Migration script validated on a copy of production data; row counts match within 0.1%.
+- Service refuses to enable AI features when MongoDB ping fails; `/healthz` reports degraded/unready instead of enabling file-backed writes.
+
 ### Phase 1: Evidence Backbone
 
 Goal: create the foundation AI needs.
 
 Build:
 
-1. `SignalEvent` model and repository.
+1. `SignalEvent` model and MongoDB repository (envelope from “Common Signal Schema”).
 2. `IncidentEvent` model and timeline API.
-3. Evidence linking from checks, MySQL samples, server metrics, audit events.
-4. AI context builder that retrieves evidence by incident/time window.
-5. AI Incident Brief v1.
+3. Evidence linking from checks, MySQL samples, server metrics, audit events — all written as `SignalEvent`s with `incidentId` set.
+4. AI context builder that retrieves evidence by incident/time window, applies the evidence cap and summarization rollups.
+5. AI Incident Brief v1, including deterministic confidence score and evidence citations.
+6. AI eval harness: 10–20 fixture incidents with expected briefs; runs on every prompt change; gates merges.
 
 Why first:
 
 - The current app already has checks, incidents, MySQL, audit, AI config.
 - This converts existing data into AI-ready context before adding large log ingestion.
 
-### Phase 2: Log Intelligence MVP
+Exit metrics:
 
-Goal: continuous log monitoring without uncontrolled cost.
+- ≥ 95% of newly-opened incidents get an AI brief generated within 30s.
+- Brief includes ≥ 3 evidence citations on average.
+- Operator “useful” rating ≥ 70% on `ai_feedback` over a 2-week window.
+- Eval harness pass rate ≥ 90% on the fixture set.
+
+### Phase 2a: Log Ingestion + Redaction + Storage
+
+Goal: get logs into the system safely and cheaply, before any intelligence is layered on.
 
 Build:
 
-1. `LogSource` config.
-2. SSH file tailer.
-3. Docker log tailer.
-4. HTTP ingestion endpoint.
-5. Parser/redactor/fingerprinter.
-6. Error group UI.
-7. Incident correlation from log spikes.
+1. `LogSource` config (CRUD API + Mongo collection).
+2. **OTLP logs receiver** (recommended primary path) — reuse OpenTelemetry Collector config patterns.
+3. SSH file tailer (legacy/no-agent path).
+4. Docker log tailer (legacy/no-agent path).
+5. HTTP ingestion endpoint (simple webhook path).
+6. Parser pipeline: source-specific parsers → normalize to `SignalEvent` envelope.
+7. Redaction pipeline (allowlist model from “Redaction Model” above).
+8. Backpressure: bounded in-memory queue per source; on overflow, drop oldest with a `telemetry_quality_findings` record. No unbounded buffering.
+9. Redacted `log_events` written to Mongo with TTL (default 7d).
 
 MVP constraints:
 
-- Start with line-oriented logs.
-- Store raw logs for short retention only.
-- Store fingerprints and aggregate counts longer-term.
-- Redact before persistence and before AI.
+- Line-oriented logs only.
+- No full-text search index in v1; queries are bounded by `service + time-window` only.
+
+Exit metrics:
+
+- Sustained ingest of 5k events/sec on a single node without queue overflow.
+- 100% of events pass through redaction before persistence (verified by injection test).
+- Zero raw secrets in `log_events` sample audit (100-event manual review).
+
+### Phase 2b: Fingerprinting + Error Groups
+
+Goal: turn redacted log events into a small number of meaningful signals.
+
+Build:
+
+1. Drain3-style fingerprinting on the ingest pipeline.
+2. `log_fingerprints` aggregates with longer TTL (default 90d).
+3. Per-service cardinality cap with coalescing.
+4. Error group UI: list of fingerprints, trend sparkline, sample message, linked incidents.
+5. Incident creation rule: fingerprint count exceeds baseline by N× within window → open incident or attach as evidence.
+
+Exit metrics:
+
+- Fingerprint cardinality per service ≤ 5,000 (cap enforced).
+- ≥ 80% reduction in distinct error messages shown to operators vs source line count.
+- Log-driven incidents have median time-to-first-evidence ≤ 60s.
 
 ### Phase 3: Deployment and Heartbeat Monitoring
 
-Goal: solve two very common operational gaps.
+Goal: solve two very common operational gaps. Can run in parallel with Phase 2 once Phase 1 lands.
 
 Build:
 
-1. Deployment marker API.
-2. Deployment impact view.
-3. Heartbeat API.
+1. Deployment marker API and `deployments` collection.
+2. Deployment impact view (before/after on checks, MySQL, log fingerprints).
+3. Heartbeat API and `heartbeats` collection.
 4. Missed heartbeat incidents.
-5. AI explanation for deploy regressions and missed jobs.
+5. AI explanation for deploy regressions and missed jobs (uses Phase 1 brief pipeline).
+
+Exit metrics:
+
+- Deployment markers ingested via at least one CI integration (GitHub Actions example shipped).
+- 100% of incidents starting within 15min of a deployment have a deployment correlation flag.
+- Heartbeat misses raise an incident within `expectedInterval + grace` 100% of the time in tests.
 
 ### Phase 4: Correlation Engine
 
-Goal: reduce alert fatigue.
+Goal: reduce alert fatigue. Implements the algorithm in “Correlation Algorithm” above.
 
 Build:
 
-1. Correlation rules.
-2. Incident grouping.
-3. Duplicate suppression.
-4. Alert quality scoring.
-5. Similar incident search.
+1. Online correlation worker consuming `signal_events`.
+2. `correlation_groups` collection with lifecycle.
+3. Incident grouping using the deterministic-first rules.
+4. Duplicate suppression on notifications (do not page twice for the same group).
+5. Alert quality scoring per rule.
+6. Similar incident search, starting with deterministic fingerprint/service/deployment matching; optional vector search can use MongoDB Atlas Search or a local embedding index later.
+
+Exit metrics:
+
+- Alert-to-incident ratio reduced by ≥ 60% on a 2-week sample (e.g. 3:1 → 1.2:1).
+- ≤ 5% of grouped incidents flagged by operators as “wrongly grouped.”
+- Notification suppression cuts duplicate pages by ≥ 70%.
 
 ### Phase 5: SLO and Reliability Reports
 
@@ -667,10 +830,17 @@ Goal: shift from check status to reliability management.
 
 Build:
 
-1. SLO definitions.
-2. Burn-rate windows.
+1. SLO definitions and `slo_definitions` / `slo_windows` collections.
+2. Burn-rate windows (fast 1h, slow 6h) with multi-window multi-burn-rate alerting.
 3. Reliability dashboard.
 4. Weekly AI reliability report.
+5. Confidence-score calibration job using `ai_feedback`.
+
+Exit metrics:
+
+- At least one SLO defined for every service ingesting telemetry.
+- Weekly report opened by ≥ 50% of operators within 24h of generation.
+- Confidence score calibration error (Brier score) reduced vs Phase 1 baseline.
 
 ### Phase 6: Safe Remediation Assistant
 
@@ -678,27 +848,34 @@ Goal: reduce time-to-repair without unsafe automation.
 
 Build:
 
-1. Remediation action registry.
-2. Dry-run support.
-3. Approval workflow.
+1. Remediation action registry (`remediation_actions` collection) with explicit allowlist of safe actions per service.
+2. Dry-run support for every action.
+3. Approval workflow (human-in-the-loop, two-person for destructive actions).
 4. Audit trail for AI-suggested and human-approved actions.
 5. Rollback/runbook integration.
+
+Exit metrics:
+
+- 0 destructive actions executed without explicit human approval (audit-verified).
+- Median time-to-mitigation reduced for incidents where a remediation action existed.
+- Every remediation execution has a linked rollback plan.
 
 ## Feature Prioritization Matrix
 
 | Feature | User value | Build effort | Risk | Priority |
 |---|---:|---:|---:|---:|
+| Phase 0: storage unification on MongoDB | High | Medium | Medium | P0 |
 | Evidence backbone + AI Incident Brief | Very high | Medium | Medium | P0 |
-| Log Intelligence MVP | Very high | High | Medium | P0 |
+| Log ingestion + redaction (Phase 2a) | Very high | Medium | Medium | P0 |
+| OTLP logs receiver | Very high | Medium | Low | P0 |
+| Log fingerprinting + error groups (Phase 2b) | Very high | Medium | Medium | P1 |
 | Deployment markers | High | Low | Low | P1 |
 | Heartbeat monitoring | High | Low | Low | P1 |
 | Incident correlation engine | Very high | Medium | Medium | P1 |
-| Error fingerprinting | Very high | Medium | Medium | P1 |
 | AI postmortem drafts | High | Medium | Medium | P2 |
 | SLO/error budget | High | Medium | Low | P2 |
 | Telemetry cost controls | High | Medium | Low | P2 |
 | Safe remediation assistant | High | High | High | P3 |
-| OpenTelemetry/OTLP ingest | High | High | Medium | P3 |
 | AI workload monitoring | Medium | Medium | Medium | P3 |
 
 ## First Build Candidate
@@ -706,28 +883,34 @@ Build:
 The best first product slice is:
 
 ```text
-AI Incident Brief v1 + Evidence Timeline + Log Fingerprint MVP
+Phase 0 storage unification
+  + Phase 1 AI Incident Brief + Evidence Timeline
+  + Phase 2a log ingestion via OTLP receiver (with redaction)
 ```
 
 This gives users immediate value:
 
-- Incidents become explainable.
-- Logs become grouped instead of noisy.
-- AI has evidence instead of generic guesses.
-- The architecture becomes ready for deployment markers, heartbeats, and SLOs.
+- All data lives in one place (MongoDB) and is ready for AI context.
+- Incidents become explainable with cited evidence.
+- Logs flow in via the standard OTel path — no bespoke agent required for new users.
+- The architecture becomes ready for fingerprinting, deployment markers, heartbeats, correlation, and SLOs.
 
 Minimum implementation checklist:
 
-- `SignalEvent` repository and API.
-- `LogSource` repository and API.
-- `LogEvent` and `LogFingerprint` repository.
-- Background log tailer worker.
-- Redaction utility.
-- Fingerprint utility.
+- ADR-005 written and accepted.
+- Mongo migration scripts for existing file-backed collections.
+- `SignalEvent` repository and API (Mongo).
+- `LogSource` repository and API (Mongo).
+- `LogEvent` repository (Mongo, TTL index).
+- OTLP logs receiver wired to the ingestion pipeline.
+- Redaction utility (allowlist, with injection tests).
+- Background log tailer worker for SSH/Docker (legacy paths).
 - Incident evidence API.
-- AI context builder.
+- AI context builder with evidence cap and summarization rollups.
+- AI Incident Brief endpoint with deterministic confidence score.
+- AI eval harness with 10–20 fixture incidents gating prompt changes.
 - Incident detail UI: Evidence tab and AI Brief tab.
-- Logs UI: Error Groups and Live Tail.
+- Logs UI: Live Tail (fingerprinting and error groups land in Phase 2b).
 
 ## Safety Requirements
 
@@ -738,7 +921,7 @@ AI-native operations can become dangerous if the system overstates confidence. T
 - AI must distinguish observed facts from hypotheses.
 - Destructive remediation requires human approval.
 - Secrets must be redacted before storage and before AI calls.
-- Tenant/user boundaries must be enforced before context retrieval.
+- User boundaries must be enforced before context retrieval; tenant boundaries must be enforced before enabling SaaS or multi-tenant mode.
 - Prompt templates must be versioned.
 - AI feedback must be tracked so bad analyses can be improved.
 - Postmortem root cause remains human-approved.
