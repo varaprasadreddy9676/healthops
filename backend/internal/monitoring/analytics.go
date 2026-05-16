@@ -610,7 +610,9 @@ func (s *Service) handleGetCheck(w http.ResponseWriter, r *http.Request, checkID
 	})
 
 	detail := CheckDetail{
-		Config: *found,
+		Config:        *found,
+		RecentResults: []CheckResult{},
+		OpenIncidents: []Incident{},
 	}
 
 	if len(checkResults) > 0 {

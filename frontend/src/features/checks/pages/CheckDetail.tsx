@@ -217,7 +217,7 @@ export default function CheckDetail() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {recentResults.slice(0, 20).map(r => (
+              {(recentResults ?? []).slice(0, 20).map(r => (
                 <tr key={r.id}>
                   <td className="px-4 py-2.5"><StatusBadge status={r.status} /></td>
                   <td className="px-4 py-2.5 font-mono text-xs">{formatDuration(r.durationMs)}</td>
