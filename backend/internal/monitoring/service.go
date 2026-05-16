@@ -31,11 +31,12 @@ type Service struct {
 	auditLogger       *AuditLogger
 	mysqlRoutes       RouteRegistrar
 	aiRoutes          RouteRegistrar
-	notifyRoutes      RouteRegistrar
-	logRoutes         RouteRegistrar
-	rcaRoutes         RouteRegistrar
-	evidenceRoutes    RouteRegistrar
-	assistantRoutes   RouteRegistrar
+	notifyRoutes          RouteRegistrar
+	logRoutes             RouteRegistrar
+	rcaRoutes             RouteRegistrar
+	evidenceRoutes        RouteRegistrar
+	assistantRoutes       RouteRegistrar
+	recommendationRoutes  RouteRegistrar
 	snapshotRepo      IncidentSnapshotRepository
 	userStore         UserStoreBackend
 	userAPI           *UserAPIHandler
@@ -206,6 +207,11 @@ func (s *Service) SetAssistantRoutes(r RouteRegistrar) {
 	s.assistantRoutes = r
 }
 
+// SetRecommendationRoutes sets the tuning & recommendations route registrar.
+func (s *Service) SetRecommendationRoutes(r RouteRegistrar) {
+	s.recommendationRoutes = r
+}
+
 // SetSnapshotRepo sets the incident snapshot repository for the service.
 func (s *Service) SetSnapshotRepo(repo IncidentSnapshotRepository) {
 	s.snapshotRepo = repo
@@ -331,6 +337,11 @@ func (s *Service) Run(ctx context.Context) error {
 	// Register NL ops assistant routes if handler is configured
 	if s.assistantRoutes != nil {
 		s.assistantRoutes.RegisterRoutes(mux)
+	}
+
+	// Register recommendations routes if handler is configured
+	if s.recommendationRoutes != nil {
+		s.recommendationRoutes.RegisterRoutes(mux)
 	}
 
 	// Add Prometheus metrics endpoint

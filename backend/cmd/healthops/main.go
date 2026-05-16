@@ -20,6 +20,7 @@ import (
 	"medics-health-check/backend/internal/monitoring/mysql"
 	"medics-health-check/backend/internal/monitoring/notify"
 	"medics-health-check/backend/internal/monitoring/rca"
+	"medics-health-check/backend/internal/monitoring/recommendations"
 	"medics-health-check/backend/internal/monitoring/repositories"
 
 	"github.com/joho/godotenv"
@@ -625,6 +626,17 @@ func main() {
 		assistantHandler := assistant.NewHandler(store, incidentRepo, assistantAICall, logger)
 		service.SetAssistantRoutes(assistantHandler)
 		logger.Printf("NL Ops Assistant initialized (AI available: %v)", assistantAICall != nil)
+	}
+
+	// --- Tuning & Recommendations (Phase 5) ---
+	{
+		var recsAICall recommendations.AIProvider
+		if aiService != nil {
+			recsAICall = aiService.CallProvider
+		}
+		recsHandler := recommendations.NewHandler(store, incidentRepo, recsAICall, logger)
+		service.SetRecommendationRoutes(recsHandler)
+		logger.Printf("Recommendations engine initialized (AI available: %v)", recsAICall != nil)
 	}
 
 	stopRetention := make(chan struct{})
