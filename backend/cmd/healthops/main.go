@@ -280,9 +280,24 @@ func main() {
 		}
 	}
 
-	snapshotRepo, err := monitoring.NewFileSnapshotRepository(filepath.Join(dataDir, "incident_snapshots.jsonl"))
-	if err != nil {
-		logger.Printf("Warning: Failed to init snapshot repository: %v", err)
+	var snapshotRepo monitoring.IncidentSnapshotRepository
+	var pruneSnapshotRepo monitoring.Prunable
+	if useMongoPhase0 && mongoClient != nil {
+		mongoSnap, err := repositories.NewMongoSnapshotRepository(mongoClient, mongoDB, mongoPrefix)
+		if err != nil {
+			logger.Fatalf("init mongo snapshot repository: %v", err)
+		}
+		snapshotRepo = mongoSnap
+		pruneSnapshotRepo = mongoSnap
+		logger.Printf("Snapshot repository: MongoDB (collection %s_incident_snapshots)", mongoPrefix)
+	} else {
+		fileSnap, err := monitoring.NewFileSnapshotRepository(filepath.Join(dataDir, "incident_snapshots.jsonl"))
+		if err != nil {
+			logger.Printf("Warning: Failed to init snapshot repository: %v", err)
+		} else {
+			snapshotRepo = fileSnap
+			pruneSnapshotRepo = fileSnap
+		}
 	}
 
 	// Initialize server metrics repository (for SSH process/metrics history)
@@ -292,6 +307,7 @@ func main() {
 	// Initialize MySQL-specific repositories if mysql checks exist
 	hasMySQLChecks := false
 	var mysqlRepo monitoring.MySQLMetricsRepository
+	var pruneMySQLRepo monitoring.Prunable
 	for _, check := range cfg.Checks {
 		if check.Type == "mysql" {
 			hasMySQLChecks = true
@@ -300,11 +316,22 @@ func main() {
 	}
 
 	if hasMySQLChecks {
-		repo, err := mysql.NewFileMySQLRepository(dataDir)
-		if err != nil {
-			logger.Fatalf("init mysql repository: %v", err)
+		if useMongoPhase0 && mongoClient != nil {
+			mongoMySQL, err := repositories.NewMongoMySQLRepository(mongoClient, mongoDB, mongoPrefix)
+			if err != nil {
+				logger.Fatalf("init mongo mysql repository: %v", err)
+			}
+			mysqlRepo = mongoMySQL
+			pruneMySQLRepo = mongoMySQL
+			logger.Printf("MySQL repository: MongoDB (collections %s_mysql_samples, %s_mysql_deltas)", mongoPrefix, mongoPrefix)
+		} else {
+			repo, err := mysql.NewFileMySQLRepository(dataDir)
+			if err != nil {
+				logger.Fatalf("init mysql repository: %v", err)
+			}
+			mysqlRepo = repo
+			pruneMySQLRepo = repo
 		}
-		mysqlRepo = repo
 
 		sampler := mysql.NewLiveMySQLSampler()
 		service.Runner().SetMySQLSampler(sampler)
@@ -381,8 +408,11 @@ func main() {
 	// Initialize retention job
 	retentionCfg := monitoring.DefaultRetentionConfig()
 	retentionJob := monitoring.NewRetentionJob(retentionCfg, logger)
-	if snapshotRepo != nil {
-		retentionJob.Register("snapshots", snapshotRepo, retentionCfg.SnapshotRetentionDays)
+	if pruneSnapshotRepo != nil {
+		retentionJob.Register("snapshots", pruneSnapshotRepo, retentionCfg.SnapshotRetentionDays)
+	}
+	if pruneMySQLRepo != nil {
+		retentionJob.Register("mysql_metrics", pruneMySQLRepo, retentionCfg.SnapshotRetentionDays)
 	}
 	if pruneOutbox != nil {
 		retentionJob.Register("notifications", pruneOutbox, retentionCfg.NotificationRetentionDays)
