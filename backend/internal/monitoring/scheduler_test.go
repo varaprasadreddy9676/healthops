@@ -26,7 +26,11 @@ func newMockStore(checks []CheckConfig) *mockStore {
 func (m *mockStore) Snapshot() State {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.state
+	checks := make([]CheckConfig, len(m.state.Checks))
+	copy(checks, m.state.Checks)
+	s := m.state
+	s.Checks = checks
+	return s
 }
 
 func (m *mockStore) DashboardSnapshot() DashboardSnapshot {
