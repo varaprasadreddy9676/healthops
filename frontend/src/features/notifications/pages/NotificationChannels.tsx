@@ -31,6 +31,7 @@ interface NotificationChannel {
   cooldownMinutes?: number
   notifyOnResolve?: boolean
   headers?: Record<string, string>
+  bodyTemplate?: string
   createdAt?: string
   updatedAt?: string
 }
@@ -254,6 +255,24 @@ export default function NotificationChannels() {
                 required
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               />
+              </div>
+            )}
+
+            {form.type === 'webhook' && (
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                  Body Template <span className="text-slate-400 font-normal">(optional — leave empty to send default payload)</span>
+                </label>
+                <textarea
+                  value={form.bodyTemplate || ''}
+                  onChange={e => setForm(f => ({ ...f, bodyTemplate: e.target.value }))}
+                  rows={6}
+                  placeholder={`{\n  "from": "alerts@example.com",\n  "to": "ops@example.com",\n  "subject": "[Alert] {{.CheckName}} - {{.Severity}}",\n  "html": "<h2>{{.Message}}</h2><p>Check: {{.CheckName}} | Server: {{.Server}}</p>"\n}`}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Available fields: <code className="text-slate-500">{`{{.CheckName}} {{.Severity}} {{.Status}} {{.Message}} {{.Server}} {{.CheckID}} {{.IncidentID}} {{.StartedAt}} {{.ResolvedAt}}`}</code>
+                </p>
               </div>
             )}
 

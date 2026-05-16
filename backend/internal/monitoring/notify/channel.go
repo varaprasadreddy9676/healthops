@@ -55,6 +55,15 @@ type NotificationChannelConfig struct {
 	// Headers for custom webhooks
 	Headers map[string]string `json:"headers,omitempty"`
 
+	// BodyTemplate is an optional Go text/template for webhook channels.
+	// When set, the rendered template is sent as the request body instead of
+	// the default NotificationPayload JSON. Useful for sending to APIs that
+	// expect a specific payload shape (e.g. an email gateway).
+	// Available fields: {{.IncidentID}} {{.CheckID}} {{.CheckName}} {{.CheckType}}
+	//                   {{.Server}} {{.Severity}} {{.Status}} {{.Message}}
+	//                   {{.StartedAt}} {{.ResolvedAt}}
+	BodyTemplate string `json:"bodyTemplate,omitempty"`
+
 	// Metadata
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`

@@ -10,6 +10,7 @@ import (
 	"net/smtp"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"medics-health-check/backend/internal/monitoring"
@@ -543,7 +544,22 @@ func (d *NotificationDispatcher) sendDiscord(ch NotificationChannelConfig, p Not
 // --- Generic Webhook ---
 
 func (d *NotificationDispatcher) sendWebhook(ch NotificationChannelConfig, p NotificationPayload) error {
+	if ch.BodyTemplate != "" {
+		return d.sendWebhookWithTemplate(ch, p)
+	}
 	return d.postJSON(ch.WebhookURL, p, ch.Headers)
+}
+
+func (d *NotificationDispatcher) sendWebhookWithTemplate(ch NotificationChannelConfig, p NotificationPayload) error {
+	tmpl, err := template.New("body").Parse(ch.BodyTemplate)
+	if err != nil {
+		return fmt.Errorf("parse body template: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, p); err != nil {
+		return fmt.Errorf("render body template: %w", err)
+	}
+	return d.postRaw(ch.WebhookURL, buf.Bytes(), ch.Headers)
 }
 
 // --- Email (SMTP) ---
@@ -650,6 +666,31 @@ func (d *NotificationDispatcher) postJSON(url string, body interface{}, headers 
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("unexpected status %d from %s", resp.StatusCode, url)
+	}
+	return nil
+}
+
+func (d *NotificationDispatcher) postRaw(url string, body []byte, headers map[string]string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
