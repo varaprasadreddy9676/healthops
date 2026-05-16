@@ -723,11 +723,11 @@ The Phase 0 description lists *what* to migrate but not the operational details.
 
 | Aspect | Requirement |
 |--------|-------------|
-| **Source-to-target mapping** | `FileMySQLRepository` JSONL → `mysql_samples` + `mysql_deltas` collections; in-memory `IncidentRepository` → `incidents` collection; `FileNotificationOutbox` JSONL → `notifications` collection; `FileAIQueue` JSONL → `ai_queue` collection. |
+| **Source-to-target mapping** | `FileMySQLRepository` JSONL → `mysql_samples` + `mysql_deltas` collections; in-memory `IncidentRepository` → `incidents` collection; `FileNotificationOutbox` JSONL → `healthops_notification_outbox` collection; `FileAIQueue` JSONL → `ai_queue` collection. |
 | **Idempotency** | Migration script uses `insertMany` with `ordered: false` and ignores duplicate-key errors. Re-running the script on a partially-migrated dataset must not create duplicates. Each document includes a deterministic `_id` derived from its source (e.g. SHA-256 of `checkId + timestamp` for samples). |
-| **Rollback** | Before migration, the script creates a MongoDB backup via `mongodump --archive`. On failure, operator can restore with `mongorestore --archive`. File-based repos remain untouched (read-only after migration) for 30 days as a fallback source. |
+| **Rollback** | Before migration, the script creates a MongoDB backup via `mongodump --archive`. On failure, operator can restore with `mongorestore --archive` and redeploy the previous binary (which still uses `STORAGE_BACKEND=file`). File-based repos remain untouched on disk as a read-only archive. |
 | **Backup** | The migration script refuses to run unless a fresh backup exists (checks `mongodump` output timestamp < 1 hour old or `--force` flag is passed). |
-| **Cutover sequence** | 1. Deploy new code with dual-write enabled (writes to both file + Mongo). 2. Run migration script for historical data. 3. Flip feature flag `PERSISTENCE_MODE=mongo` to read from Mongo only. 4. Validate via verification queries. 5. Remove file-write code path after 30-day bake period. |
+| **Cutover sequence** | 1. Take MongoDB backup (`mongodump --archive`). 2. Run migration script for historical data. 3. Run verification queries. 4. Deploy new code with `STORAGE_BACKEND=mongo` (Mongo-only reads and writes; file runtime writes removed in the same release). 5. Smoke-test `/healthz`, `/api/v1/checks`, `/api/v1/incidents`. File repos remain on disk as read-only archive but are not referenced at runtime. |
 | **Verification queries** | `db.incidents.countDocuments()` matches file repo count ±0.1%. `db.mysql_samples.find().sort({timestamp:-1}).limit(1)` timestamp matches latest JSONL entry. Audit log replay: every `incident.created` / `incident.resolved` audit event has a corresponding MongoDB document with matching `status` and timestamps. |
 | **Audit log prerequisite** | The exit metric "replaying the audit log" assumes the audit log fully captures incident lifecycle transitions (`created`, `acknowledged`, `resolved`). If audit events are missing for any transition today, Phase 0 must first backfill or fix the audit emission before relying on it for verification. |
 
@@ -807,9 +807,10 @@ Build:
 1. `SignalEvent` model and MongoDB repository (envelope from “Common Signal Schema”).
 2. `IncidentEvent` model and timeline API.
 3. Evidence linking from checks, MySQL samples, server metrics, audit events — all written as `SignalEvent`s with `incidentId` set.
-4. AI context builder that retrieves evidence by incident/time window, applies the evidence cap and summarization rollups.
-5. AI Incident Brief v1, including deterministic confidence score and evidence citations.
-6. AI eval harness: 10–20 fixture incidents with expected briefs; runs on every prompt change; gates merges.
+4. `EvidenceProvider` registry: interface + registration mechanism so each phase can add new evidence categories (logs, deployments, SLO burn) without modifying the context builder. Phase 1 ships with providers for checks, MySQL, server metrics, audit, and incident history.
+5. AI context builder that retrieves evidence by incident/time window via the registry, applies the evidence cap and summarization rollups.
+6. AI Incident Brief v1, including deterministic confidence score and evidence citations.
+7. AI eval harness: 10–20 fixture incidents with expected briefs; runs on every prompt change; gates merges.
 
 Why first:
 
