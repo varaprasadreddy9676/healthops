@@ -451,14 +451,24 @@ func (d *NotificationDispatcher) sendDigest(ch NotificationChannelConfig, payloa
 		}
 		digestJSON, _ := json.Marshal(payloads)
 		incidentSummary := strings.Join(ids, ",")
+		status := "sent"
+		lastErr := ""
+		if err != nil {
+			status = "failed"
+			lastErr = err.Error()
+		}
+		now := time.Now()
 		evt := monitoring.NotificationEvent{
-			NotificationID: fmt.Sprintf("notif-digest-%d", time.Now().UnixNano()),
+			NotificationID: fmt.Sprintf("notif-digest-%d", now.UnixNano()),
 			IncidentID:     incidentSummary,
 			Channel:        fmt.Sprintf("%s:%s", ch.Type, ch.Name),
 			PayloadJSON:    string(digestJSON),
+			Status:         status,
+			LastError:      lastErr,
+			CreatedAt:      now,
 		}
-		if err != nil {
-			evt.LastError = err.Error()
+		if err == nil {
+			evt.SentAt = &now
 		}
 		if enqErr := d.outbox.Enqueue(evt); enqErr != nil {
 			d.logger.Printf("notification: failed to record digest in outbox: %v", enqErr)
@@ -474,45 +484,66 @@ func (d *NotificationDispatcher) sendDigest(ch NotificationChannelConfig, payloa
 
 // --- Slack ---
 
+func slackSeverityEmoji(severity, status string) string {
+	if status == "resolved" {
+		return ":white_check_mark:"
+	}
+	switch severity {
+	case "critical":
+		return ":red_circle:"
+	case "warning":
+		return ":large_yellow_circle:"
+	default:
+		return ":large_blue_circle:"
+	}
+}
+
 func (d *NotificationDispatcher) sendSlack(ch NotificationChannelConfig, p NotificationPayload) error {
-	color := "#36a64f" // green
-	if p.Severity == "critical" {
-		color = "#e01e5a"
-	} else if p.Severity == "warning" {
-		color = "#ecb22e"
-	}
-	if p.Status == "resolved" {
-		color = "#36a64f"
-	}
+	emoji := slackSeverityEmoji(p.Severity, p.Status)
+	headerText := fmt.Sprintf("%s %s — %s", emoji, strings.ToUpper(p.Status), p.CheckName)
 
-	statusIndicator := "[CRITICAL]"
-	if p.Status == "resolved" {
-		statusIndicator = "[RESOLVED]"
-	} else if p.Severity == "warning" {
-		statusIndicator = "[WARNING]"
+	fields := []map[string]interface{}{
+		{"type": "mrkdwn", "text": fmt.Sprintf("*Severity*\n%s", strings.ToUpper(p.Severity))},
+		{"type": "mrkdwn", "text": fmt.Sprintf("*Status*\n%s", strings.ToUpper(p.Status))},
+	}
+	if p.CheckType != "" {
+		fields = append(fields, map[string]interface{}{"type": "mrkdwn", "text": fmt.Sprintf("*Type*\n%s", strings.ToUpper(p.CheckType))})
+	}
+	if p.Server != "" {
+		fields = append(fields, map[string]interface{}{"type": "mrkdwn", "text": fmt.Sprintf("*Server*\n%s", p.Server)})
 	}
 
-	title := fmt.Sprintf("%s %s — %s", statusIndicator, strings.ToUpper(p.Status), p.CheckName)
+	contextText := "HealthOps"
+	if d.dashboardURL != "" {
+		contextText = fmt.Sprintf("HealthOps  •  <%s|Open Dashboard>", strings.TrimRight(d.dashboardURL, "/"))
+	}
 
-	slackBody := map[string]interface{}{
-		"attachments": []map[string]interface{}{
+	body := map[string]interface{}{
+		// Fallback text shown in notifications / when blocks can't render
+		"text": fmt.Sprintf("[HealthOps] %s %s — %s: %s", strings.ToUpper(p.Status), p.CheckName, strings.ToUpper(p.Severity), p.Message),
+		"blocks": []map[string]interface{}{
 			{
-				"color":  color,
-				"title":  title,
-				"text":   p.Message,
-				"footer": "HealthOps",
-				"ts":     time.Now().Unix(),
-				"fields": []map[string]string{
-					{"title": "Check", "value": p.CheckName, "short": "true"},
-					{"title": "Severity", "value": strings.ToUpper(p.Severity), "short": "true"},
-					{"title": "Type", "value": p.CheckType, "short": "true"},
-					{"title": "Server", "value": p.Server, "short": "true"},
+				"type": "header",
+				"text": map[string]interface{}{"type": "plain_text", "text": headerText, "emoji": true},
+			},
+			{
+				"type": "section",
+				"text": map[string]interface{}{"type": "mrkdwn", "text": p.Message},
+			},
+			{
+				"type":   "section",
+				"fields": fields,
+			},
+			{
+				"type": "context",
+				"elements": []map[string]interface{}{
+					{"type": "mrkdwn", "text": contextText},
 				},
 			},
 		},
 	}
 
-	_, _, err := d.postJSON(ch.WebhookURL, slackBody, nil)
+	_, _, err := d.postJSON(ch.WebhookURL, body, nil)
 	return err
 }
 
@@ -903,22 +934,22 @@ func (d *NotificationDispatcher) TestChannel(ch NotificationChannelConfig) error
 
 	switch ch.Type {
 	case ChannelSlack:
-		_, _, err = d.postJSON(ch.WebhookURL, payload, ch.Headers)
 		reqURL = ch.WebhookURL
+		err = d.sendSlack(ch, payload)
 	case ChannelDiscord:
-		_, _, err = d.postJSON(ch.WebhookURL, payload, ch.Headers)
 		reqURL = ch.WebhookURL
+		err = d.sendDiscord(ch, payload)
 	case ChannelWebhook:
 		reqURL = ch.WebhookURL
 		httpStatus, httpRespBody, err = d.sendWebhook(ch, payload)
 	case ChannelEmail:
 		err = d.sendEmail(ch, payload)
 	case ChannelTelegram:
-		_, _, err = d.postJSON(ch.WebhookURL, payload, ch.Headers)
 		reqURL = ch.WebhookURL
+		err = d.sendTelegram(ch, payload)
 	case ChannelPagerDuty:
-		_, _, err = d.postJSON(ch.WebhookURL, payload, ch.Headers)
 		reqURL = ch.WebhookURL
+		err = d.sendPagerDuty(ch, payload)
 	default:
 		err = fmt.Errorf("unsupported channel type: %s", ch.Type)
 	}
@@ -985,46 +1016,60 @@ func digestSummary(payloads []NotificationPayload) (critical, warning, other int
 func (d *NotificationDispatcher) sendSlackDigest(ch NotificationChannelConfig, payloads []NotificationPayload) error {
 	critical, warning, _, highest := digestSummary(payloads)
 
-	color := "#e01e5a"
-	if highest == "warning" {
-		color = "#ecb22e"
+	headerEmoji := ":large_yellow_circle:"
+	if highest == "critical" {
+		headerEmoji = ":red_circle:"
 	}
 
-	title := fmt.Sprintf("[ALERT] %d checks failing", len(payloads))
-	summary := ""
-	if critical > 0 {
-		summary += fmt.Sprintf("%d critical", critical)
-	}
-	if warning > 0 {
-		if summary != "" {
-			summary += ", "
-		}
-		summary += fmt.Sprintf("%d warning", warning)
+	countSummary := fmt.Sprintf("%d checks failing", len(payloads))
+	if critical > 0 && warning > 0 {
+		countSummary += fmt.Sprintf(" (%d critical, %d warning)", critical, warning)
+	} else if critical > 0 {
+		countSummary += fmt.Sprintf(" (%d critical)", critical)
+	} else if warning > 0 {
+		countSummary += fmt.Sprintf(" (%d warning)", warning)
 	}
 
 	var lines []string
-	for _, p := range payloads {
-		sev := strings.ToUpper(p.Severity)
-		line := fmt.Sprintf("- *%s* [%s] %s", p.CheckName, sev, p.Message)
-		if p.Server != "" {
-			line += fmt.Sprintf(" (server: %s)", p.Server)
-		}
+	for i, p := range payloads {
+		emoji := slackSeverityEmoji(p.Severity, p.Status)
+		line := fmt.Sprintf("*%d. %s* %s\n%s %s", i+1, p.CheckName, emoji, strings.ToUpper(p.Severity), p.Message)
 		lines = append(lines, line)
 	}
 
-	slackBody := map[string]interface{}{
-		"attachments": []map[string]interface{}{
+	contextText := "HealthOps"
+	if d.dashboardURL != "" {
+		contextText = fmt.Sprintf("HealthOps  •  <%s|Open Dashboard>", strings.TrimRight(d.dashboardURL, "/"))
+	}
+
+	body := map[string]interface{}{
+		"text": fmt.Sprintf("[HealthOps] %s", countSummary),
+		"blocks": []map[string]interface{}{
 			{
-				"color":  color,
-				"title":  title,
-				"text":   strings.Join(lines, "\n"),
-				"footer": fmt.Sprintf("HealthOps | %s", summary),
-				"ts":     time.Now().Unix(),
+				"type": "header",
+				"text": map[string]interface{}{
+					"type":  "plain_text",
+					"text":  fmt.Sprintf("%s %s", headerEmoji, countSummary),
+					"emoji": true,
+				},
+			},
+			{
+				"type": "section",
+				"text": map[string]interface{}{
+					"type": "mrkdwn",
+					"text": strings.Join(lines, "\n\n"),
+				},
+			},
+			{
+				"type": "context",
+				"elements": []map[string]interface{}{
+					{"type": "mrkdwn", "text": contextText},
+				},
 			},
 		},
 	}
 
-	_, _, err := d.postJSON(ch.WebhookURL, slackBody, nil)
+	_, _, err := d.postJSON(ch.WebhookURL, body, nil)
 	return err
 }
 
