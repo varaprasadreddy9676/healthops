@@ -415,13 +415,9 @@ TTL: 300
 
 ## 8. Authentication & User Management
 
-### Default Credentials
+### First Admin User
 
-On first start, HealthOps creates a default admin user:
-- **Username:** `admin`
-- **Password:** `admin`
-
-**Change this immediately in production.**
+For Mongo-backed deployments, set `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` before first start. HealthOps creates or resets the `admin` user only when this variable is present. It does not create an insecure `admin/admin` Mongo user automatically.
 
 ### Login
 
@@ -429,7 +425,7 @@ On first start, HealthOps creates a default admin user:
 # Get JWT token
 TOKEN=$(curl -s http://localhost:8080/api/v1/auth/login \
   -X POST -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"admin"}' \
+  -d '{"username":"admin","password":"<bootstrap-password>"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['token'])")
 
 echo $TOKEN
@@ -1115,7 +1111,7 @@ Dashboard:       http://localhost:8080 (or your domain)
 API docs:        backend/docs/api-reference.md
 Metrics:         http://localhost:8080/metrics
 
-Default login:   admin / admin
+Initial login:   admin / value of HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD
 Config file:     config/default.json
 Data directory:  data/
 ```

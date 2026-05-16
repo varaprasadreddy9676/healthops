@@ -105,10 +105,11 @@ export default function NotificationChannels() {
   })
 
   const toggleMutation = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
       const res = await fetch(`/api/v1/notification-channels/${id}/toggle`, {
         method: 'POST',
-        headers: authHeaders(),
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ enabled }),
       })
       if (!res.ok) throw new Error('Failed to toggle channel')
     },
@@ -462,7 +463,7 @@ export default function NotificationChannels() {
                 </div>
                 {isAdmin && (
                   <button
-                    onClick={() => toggleMutation.mutate(ch.id)}
+                    onClick={() => toggleMutation.mutate({ id: ch.id, enabled: !ch.enabled })}
                     className="text-slate-400 hover:text-slate-600"
                     title={ch.enabled ? 'Disable' : 'Enable'}
                   >

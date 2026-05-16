@@ -97,6 +97,11 @@ func IsRequestAuthorized(cfg AuthConfig, r *http.Request) bool {
 	if !cfg.Enabled {
 		return true
 	}
+
+	if claims := ExtractJWTClaims(r); claims != nil {
+		return claims.Role == RoleAdmin
+	}
+
 	auth := r.Header.Get("Authorization")
 	if auth == "" {
 		return false

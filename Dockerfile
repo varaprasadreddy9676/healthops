@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # ---- Stage 2: Build backend ----
-FROM golang:1.23-alpine AS backend-builder
+FROM golang:1.25-alpine AS backend-builder
 WORKDIR /app
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
@@ -16,7 +16,7 @@ RUN CGO_ENABLED=0 go build -o healthops ./cmd/healthops
 
 # ---- Stage 3: Runtime ----
 FROM alpine:3.20
-RUN apk --no-cache add ca-certificates tzdata procps bind-tools openssh-client
+RUN apk --no-cache add ca-certificates tzdata procps bind-tools openssh-client su-exec
 WORKDIR /app
 
 # Create non-root user
@@ -37,9 +37,8 @@ ENV STATE_PATH=/app/data/state.json
 ENV DATA_DIR=/app/data
 ENV FRONTEND_DIR=/app/frontend/dist
 
-USER app
 EXPOSE 8080
 
 # Run healthops and tee stdout to a log file for the log freshness check
 # stdbuf ensures unbuffered output so the log file stays fresh
-CMD ["sh", "-c", "exec ./healthops 2>&1 | tee -a /app/data/healthops.log"]
+CMD ["sh", "-c", "chown -R app:app /app/data && exec su-exec app sh -c './healthops 2>&1 | tee -a /app/data/healthops.log'"]

@@ -2,7 +2,7 @@ services:
   healthops:
     build: .
     ports:
-      - "8080:8080"
+      - "${HEALTHOPS_PORT:-8080}:8080"
     environment:
       - CONFIG_PATH=/app/config/default.json
       - STATE_PATH=/app/data/state.json
@@ -11,11 +11,14 @@ services:
       - MONGODB_URI=${MONGODB_URI:-mongodb://mongo:27017}
       - MONGODB_DATABASE=${MONGODB_DATABASE:-healthops}
       - MONGODB_COLLECTION_PREFIX=${MONGODB_COLLECTION_PREFIX:-healthops}
+      - HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD=${HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD:-}
+      - HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL=${HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL:-admin@healthops.local}
+      - HEALTHOPS_BOOTSTRAP_ADMIN_RESET=${HEALTHOPS_BOOTSTRAP_ADMIN_RESET:-false}
     volumes:
       - healthops_data:/app/data
     depends_on:
       mongo:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     deploy:
       resources:
@@ -35,7 +38,7 @@ services:
   mongo:
     image: mongo:7
     ports:
-      - "127.0.0.1:27017:27017"
+      - "127.0.0.1:${MONGODB_PORT:-27017}:27017"
     volumes:
       - mongo_data:/data/db
     restart: unless-stopped

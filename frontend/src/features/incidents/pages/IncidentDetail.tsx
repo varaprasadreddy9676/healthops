@@ -23,7 +23,7 @@ export default function IncidentDetail() {
     enabled: !!id,
   })
 
-  const { data: aiResult } = useQuery({
+  const { data: aiResults } = useQuery({
     queryKey: ['ai', 'results', id],
     queryFn: () => aiApi.results(id!),
     enabled: !!id,
@@ -48,6 +48,7 @@ export default function IncidentDetail() {
   if (isLoading) return <LoadingState />
   if (error) return <ErrorState message={error.message} retry={() => refetch()} />
   if (!incident) return null
+  const aiResult = aiResults?.[0]
 
   return (
     <div className="space-y-6 animate-fade-in">

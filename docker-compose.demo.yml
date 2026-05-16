@@ -24,7 +24,7 @@ services:
       - ./backend/config/demo.json:/app/config/demo.json:ro
     depends_on:
       mongo:
-        condition: service_started
+        condition: service_healthy
       mysql:
         condition: service_healthy
       nginx:

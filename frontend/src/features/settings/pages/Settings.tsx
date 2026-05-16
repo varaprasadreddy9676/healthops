@@ -13,6 +13,7 @@ import { serversApi } from "@/features/servers/api/servers"
 import { usersApi } from "@/features/users/api/users"
 import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
+import { ExportButton } from "@/shared/components/ExportButton"
 import { useConfirm } from "@/shared/components/ConfirmDialog"
 import { useToast } from "@/shared/components/Toast"
 import { cn } from "@/shared/lib/utils"
@@ -1978,11 +1979,21 @@ function ProviderForm({ initial, isEdit, saving, onSave, onCancel }: {
    ══════════════════════════════════════════════════════════════════ */
 
 function ExportSettings() {
+  const { data: checks } = useQuery({
+    queryKey: ['settings', 'checks'],
+    queryFn: checksApi.list,
+  })
+  const mysqlCheck = checks?.find(c => c.type === 'mysql')
   const exports = [
     { label: 'Check Results', desc: 'Historical check execution results', csv: settingsApi.exportResults('csv'), json: settingsApi.exportResults('json') },
     { label: 'Incidents', desc: 'All incidents and their lifecycle events', csv: settingsApi.exportIncidents('csv'), json: settingsApi.exportIncidents('json') },
-    { label: 'MySQL Samples', desc: 'MySQL monitoring metric samples', csv: settingsApi.exportMysqlSamples('csv'), json: settingsApi.exportMysqlSamples('json') },
-    { label: 'Audit Log', desc: 'Security and configuration audit trail', csv: settingsApi.exportAuditLog('csv'), json: settingsApi.exportAuditLog('json') },
+    ...(mysqlCheck ? [{
+      label: 'MySQL Samples',
+      desc: `MySQL monitoring metric samples for ${mysqlCheck.name}`,
+      csv: settingsApi.exportMysqlSamples('csv', mysqlCheck.id),
+      json: settingsApi.exportMysqlSamples('json', mysqlCheck.id),
+    }] : []),
+    { label: 'Audit Log', desc: 'Security and configuration audit trail', json: settingsApi.exportAuditLog() },
   ]
 
   return (
@@ -1999,14 +2010,12 @@ function ExportSettings() {
               <p className="text-xs text-slate-500">{e.desc}</p>
             </div>
             <div className="flex items-center gap-2">
-              <a href={e.csv} download
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800">
-                <Download className="h-3 w-3" /> CSV
-              </a>
-              <a href={e.json} download
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800">
-                <Download className="h-3 w-3" /> JSON
-              </a>
+              {'csv' in e && e.csv && (
+                <ExportButton downloadUrl={e.csv} filename={`${e.label.toLowerCase().replace(/\s+/g, '-')}.csv`} />
+              )}
+              {'json' in e && e.json && (
+                <ExportButton downloadUrl={e.json} filename={`${e.label.toLowerCase().replace(/\s+/g, '-')}.json`} />
+              )}
             </div>
           </div>
         ))}

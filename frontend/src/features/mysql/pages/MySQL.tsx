@@ -82,7 +82,7 @@ export default function MySQL() {
             {' · Click any card for details'}
           </p>
         </div>
-        <ExportButton downloadUrl={settingsApi.exportMysqlSamples('csv')} />
+        <ExportButton downloadUrl={settingsApi.exportMysqlSamples('csv', health.checkId)} filename={`mysql_samples_${health.checkId}.csv`} />
       </div>
 
       {/* Clickable metric cards */}

@@ -227,10 +227,17 @@ export interface AIServiceConfig {
   timeoutSeconds: number
   retryCount: number
   retryDelayMs: number
-  activeProviderId?: string
   providers: AIProviderConfig[]
   defaultPromptId?: string
   prompts: AIPromptTemplate[]
+}
+
+export interface AIProviderHealth {
+  id: string
+  provider: string
+  model: string
+  healthy: boolean
+  isDefault: boolean
 }
 
 export interface AIAnalysisResult {

@@ -7,7 +7,7 @@
 ### Prerequisites
 
 - **Go 1.19+** installed
-- **MongoDB** (optional) - only if using hybrid storage
+- **MongoDB** - required for the production Docker stack and primary persistence
 - **Basic tools:** `curl`, `ps`, `netstat`
 
 ### Environment Variables
@@ -15,12 +15,17 @@
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `CONFIG_PATH` | No | `backend/config/default.json` | Path to configuration file |
-| `STATE_PATH` | No | `backend/data/state.json` | Path to state storage file |
-| `MONGODB_URI` | No | - | MongoDB connection string (enable hybrid storage) |
+| `STATE_PATH` | No | `backend/data/state.json` | Path to local fallback state file |
+| `MONGODB_URI` | Yes for production | - | MongoDB connection string for primary persistence |
 | `MONGODB_DATABASE` | No | `healthops` | MongoDB database name |
 | `MONGODB_COLLECTION_PREFIX` | No | `healthops` | MongoDB collection prefix |
+| `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` | Yes on first Mongo-backed deployment | - | Strong temporary password used to create/reset the Mongo-backed `admin` user |
+| `HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL` | No | `admin@healthops.local` | Admin email used during bootstrap |
+| `HEALTHOPS_BOOTSTRAP_ADMIN_RESET` | No | `false` | Set to `true` only when intentionally resetting the admin password |
 | `AUTH_USERNAME` | No | - | Basic auth username (if auth enabled) |
 | `AUTH_PASSWORD` | No | - | Basic auth password (if auth enabled) |
+
+For Docker/Mongo deployments, set `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` before the first start. HealthOps does not create an insecure `admin/admin` Mongo user automatically.
 
 ### Start the Service
 
@@ -190,6 +195,9 @@ Each check can have individual scheduling parameters:
 ```bash
 # Check service logs
 tail -f backend/data/state.json
+
+# Docker deployment logs
+docker compose logs -f healthops
 
 # Check audit log (if enabled)
 cat data/audit.json
@@ -393,7 +401,8 @@ The service automatically resolves incidents when the underlying check recovers:
 
 ### State File Location
 
-- **State file:** `backend/data/state.json`
+- **MongoDB:** primary persistence for production deployments
+- **State file:** `backend/data/state.json` or `/app/data/state.json` in Docker, used as local fallback/runtime state
 - **Audit log:** `backend/data/audit.json`
 - **Config file:** `backend/config/default.json`
 
@@ -409,7 +418,7 @@ cp backend/config/default.json /backup/health-monitor/$(date +%Y%m%d)/config.jso
 # Copy state files
 cp -r backend/data/ /backup/health-monitor/$(date +%Y%m%d)/
 
-# Backup MongoDB (if using hybrid storage)
+# Backup MongoDB primary persistence
 mongodump --uri="$MONGODB_URI" --db=healthops --out /backup/health-monitor/$(date +%Y%m%d)/mongodb
 
 # Verify backup
@@ -428,7 +437,7 @@ cp /backup/health-monitor/YYYYMMDD/config.json backend/config/default.json
 # Restore state
 cp -r /backup/health-monitor/YYYYMMDD/data/ backend/
 
-# Restore MongoDB (if using hybrid storage)
+# Restore MongoDB primary persistence
 mongorestore --uri="$MONGODB_URI" /backup/health-monitor/YYYYMMDD/mongodb/healthops
 
 # Start the service
