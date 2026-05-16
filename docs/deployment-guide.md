@@ -70,12 +70,12 @@ Frontend dev server runs on http://localhost:3000 with hot reload. API calls are
 # Clone and start
 git clone https://github.com/your-org/healthops.git
 cd healthops
-docker compose up -d
+HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD='change-this-strong-password' docker compose up -d --build
 ```
 
 This starts:
 - **HealthOps** on port `8080`
-- **MongoDB** on port `27017` (localhost only)
+- **MongoDB** as internal persistent storage
 
 ### Option B: Docker Compose with overrides
 
@@ -83,12 +83,12 @@ Create a `.env` file in the project root:
 
 ```env
 # .env
-MONGODB_URI=mongodb://mongo:27017
+HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD=change-this-strong-password
 MONGODB_DATABASE=healthops
 MONGODB_COLLECTION_PREFIX=healthops
 ```
 
-Create `docker-compose.override.yml` for production customizations:
+Create `compose.override.yaml` for production customizations:
 
 ```yaml
 services:
@@ -98,32 +98,10 @@ services:
     ports:
       - "127.0.0.1:8080:8080"  # Only expose to localhost (nginx forwards)
     restart: always
-
-  mongo:
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=healthops
-      - MONGO_INITDB_ROOT_PASSWORD=your-secure-password
-    restart: always
-```
-
-Then update `MONGODB_URI` in `.env`:
-```env
-MONGODB_URI=mongodb://healthops:your-secure-password@mongo:27017/healthops?authSource=admin
 ```
 
 ```bash
 docker compose up -d
-```
-
-### Option C: Docker only (no MongoDB)
-
-```bash
-docker build -t healthops .
-docker run -d \
-  --name healthops \
-  -p 8080:8080 \
-  -v healthops_data:/app/data \
-  healthops
 ```
 
 ### Verify

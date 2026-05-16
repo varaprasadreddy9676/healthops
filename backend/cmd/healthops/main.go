@@ -132,18 +132,17 @@ func main() {
 		})
 	}
 
-	// Warn about insecure auth configuration
-	if !cfg.Auth.Enabled {
-		logger.Printf("SECURITY WARNING: Authentication is disabled — set auth.enabled=true in config for production use")
-	}
-
 	// Initialize user store with MongoDB if available, otherwise file-based
 	dataDir := resolvePath("DATA_DIR", filepath.Join("backend", "data"), "data")
 	monitoring.InitJWTSecret(dataDir)
+	userStoreConfigured := false
 
 	if mongoClient != nil {
 		mongoUserRepo, err := repositories.NewMongoUserRepository(mongoClient, mongoDB, mongoPrefix)
 		if err != nil {
+			if useMongoPhase0 {
+				logger.Fatalf("init MongoDB user repository: %v", err)
+			}
 			logger.Printf("Warning: Failed to init MongoDB user repository: %v", err)
 			logger.Printf("Falling back to file-based user store")
 			userStore, err := monitoring.NewUserStore(dataDir)
@@ -151,6 +150,7 @@ func main() {
 				logger.Printf("Warning: Failed to init file-based user store: %v", err)
 			} else {
 				service.SetUserStore(userStore)
+				userStoreConfigured = true
 				if userStore.IsUsingDefaultCredentials() {
 					logger.Printf("WARNING: User management using default credentials — change immediately in production")
 				} else {
@@ -166,13 +166,21 @@ func main() {
 				changed, err := mongoUserRepo.BootstrapAdmin(bootstrapCtx, bootstrapPassword, bootstrapEmail, bootstrapReset)
 				cancel()
 				if err != nil {
-					logger.Printf("Warning: Failed to bootstrap MongoDB admin user: %v", err)
+					logger.Fatalf("bootstrap MongoDB admin user: %v", err)
 				} else if changed {
 					logger.Printf("MongoDB admin bootstrap applied")
+				}
+			} else {
+				adminCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				_, err := mongoUserRepo.FindByUsername(adminCtx, "admin")
+				cancel()
+				if err != nil {
+					logger.Fatalf("HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD is required on first startup when no MongoDB admin user exists")
 				}
 			}
 
 			service.SetUserStore(repositories.NewUserStoreAdapter(mongoUserRepo))
+			userStoreConfigured = true
 			logger.Printf("User management initialized (MongoDB)")
 		}
 	} else {
@@ -181,12 +189,17 @@ func main() {
 			logger.Printf("Warning: Failed to init user store: %v", err)
 		} else {
 			service.SetUserStore(userStore)
+			userStoreConfigured = true
 			if userStore.IsUsingDefaultCredentials() {
 				logger.Printf("WARNING: User management using default credentials — change immediately in production")
 			} else {
 				logger.Printf("User management initialized")
 			}
 		}
+	}
+
+	if !userStoreConfigured && !cfg.Auth.Enabled {
+		logger.Printf("SECURITY WARNING: Authentication is disabled - set auth.enabled=true or configure a user store")
 	}
 
 	// Initialize incident manager. STORAGE_BACKEND=mongo swaps in the
@@ -480,6 +493,10 @@ func main() {
 	}
 	var aiService *ai.AIService
 	if aiConfigStore != nil && aiQueue != nil {
+		if err := bootstrapAIProviderFromEnv(aiConfigStore, logger); err != nil {
+			logger.Printf("Warning: Failed to bootstrap AI provider from environment: %v", err)
+		}
+
 		aiService = ai.NewAIService(aiConfigStore, aiQueue, incidentRepo, snapshotRepo, store, logger)
 		aiService.StartWorker()
 		defer aiService.StopWorker()
@@ -688,6 +705,87 @@ func envOrDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func bootstrapAIProviderFromEnv(store ai.AIConfigStoreInterface, logger *log.Logger) error {
+	id := os.Getenv("HEALTHOPS_BOOTSTRAP_AI_PROVIDER_ID")
+	if id == "" {
+		return nil
+	}
+
+	baseURL := os.Getenv("HEALTHOPS_BOOTSTRAP_AI_PROVIDER_BASE_URL")
+	model := os.Getenv("HEALTHOPS_BOOTSTRAP_AI_PROVIDER_MODEL")
+	if baseURL == "" || model == "" {
+		return errors.New("HEALTHOPS_BOOTSTRAP_AI_PROVIDER_BASE_URL and HEALTHOPS_BOOTSTRAP_AI_PROVIDER_MODEL are required")
+	}
+
+	providerType := ai.AIProviderType(envOrDefault("HEALTHOPS_BOOTSTRAP_AI_PROVIDER_TYPE", string(ai.AIProviderCustom)))
+	name := envOrDefault("HEALTHOPS_BOOTSTRAP_AI_PROVIDER_NAME", id)
+	apiKey := os.Getenv("HEALTHOPS_BOOTSTRAP_AI_PROVIDER_API_KEY")
+	reset := envOrDefault("HEALTHOPS_BOOTSTRAP_AI_PROVIDER_RESET", "false") == "true"
+	now := time.Now().UTC()
+
+	changed := false
+	err := store.Update(func(cfg *ai.AIServiceConfig) error {
+		cfg.Enabled = true
+		cfg.AutoAnalyze = true
+		if cfg.MaxConcurrent <= 0 {
+			cfg.MaxConcurrent = 2
+		}
+		if cfg.TimeoutSeconds <= 0 {
+			cfg.TimeoutSeconds = 30
+		}
+		if cfg.RetryCount < 0 {
+			cfg.RetryCount = 0
+		}
+		if cfg.RetryDelayMs <= 0 {
+			cfg.RetryDelayMs = 1000
+		}
+
+		provider := ai.AIProviderConfig{
+			ID:          id,
+			Provider:    providerType,
+			Name:        name,
+			APIKey:      apiKey,
+			BaseURL:     baseURL,
+			Model:       model,
+			MaxTokens:   1200,
+			Temperature: 0.2,
+			Enabled:     true,
+			IsDefault:   true,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+
+		for i := range cfg.Providers {
+			cfg.Providers[i].IsDefault = false
+			if cfg.Providers[i].ID != id {
+				continue
+			}
+			if !reset {
+				cfg.Providers[i].IsDefault = true
+				return nil
+			}
+			provider.CreatedAt = cfg.Providers[i].CreatedAt
+			if provider.CreatedAt.IsZero() {
+				provider.CreatedAt = now
+			}
+			cfg.Providers[i] = provider
+			changed = true
+			return nil
+		}
+
+		cfg.Providers = append(cfg.Providers, provider)
+		changed = true
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if changed {
+		logger.Printf("AI bootstrap provider applied: %s", id)
+	}
+	return nil
 }
 
 // monitorMongoDB periodically pings MongoDB and creates/resolves incidents.

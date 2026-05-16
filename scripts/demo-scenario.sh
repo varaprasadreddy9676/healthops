@@ -2,8 +2,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck disable=SC1091
-source "$SCRIPT_DIR/demo-common.sh"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+HEALTHOPS_URL="${HEALTHOPS_URL:-http://localhost:${HEALTHOPS_PORT:-18080}}"
+DEMO_API_URL="${DEMO_API_URL:-http://localhost:${DEMO_API_PORT:-19100}}"
+DEMO_USERNAME="${DEMO_USERNAME:-admin}"
+DEMO_PASSWORD="${HEALTHOPS_DEMO_ADMIN_PASSWORD:-healthops-demo-admin}"
+MYSQL_USER="${MYSQL_USER:-healthops}"
+MYSQL_PASSWORD="${MYSQL_PASSWORD:-healthops123}"
+token=""
 
 usage() {
   cat <<EOF
@@ -16,15 +23,39 @@ Scenarios:
   log-spike    Push a burst of realistic application/database errors.
   mysql-load   Run a short MySQL workload spike.
   rca          Create a checkout incident, generate AI brief, and run RCA.
-  recover      Return the demo API to healthy baseline.
+  recover      Return the demo API to healthy baseline and refresh checks.
   status       Show current demo API scenario state.
 EOF
 }
 
-post_demo_api() {
-  local path="$1"
-  curl -fsS -X POST "$DEMO_API_URL$path"
-  echo
+compose_demo() {
+  docker compose -f "$ROOT_DIR/compose.demo.yaml" "$@"
+}
+
+wait_for_http() {
+  local url="$1"
+  local label="$2"
+  local attempts="${3:-45}"
+
+  for ((i = 1; i <= attempts; i++)); do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "Timed out waiting for ${label}: ${url}" >&2
+  return 1
+}
+
+login_token() {
+  local response
+  response="$(curl -fsS \
+    -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${DEMO_USERNAME}\",\"password\":\"${DEMO_PASSWORD}\"}" \
+    "$HEALTHOPS_URL/api/v1/auth/login")"
+
+  sed -n 's/.*"token":"\([^"]*\)".*/\1/p' <<<"$response"
 }
 
 require_token() {
@@ -36,8 +67,15 @@ require_token() {
   fi
 }
 
+post_demo_api() {
+  local path="$1"
+  curl -fsS -X POST "$DEMO_API_URL$path"
+  echo
+}
+
 log_spike() {
   require_token
+  local now payload
   now="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
   payload="$(cat <<JSON
 {
@@ -86,8 +124,8 @@ JSON
 }
 
 mysql_load() {
-  compose exec -T -e MYSQL_PWD="${MYSQL_PASSWORD:-healthops123}" mysql mysql \
-    -u"${MYSQL_USER:-healthops}" \
+  compose_demo exec -T -e MYSQL_PWD="${MYSQL_PASSWORD}" mysql mysql \
+    -u"${MYSQL_USER}" \
     healthops \
     -e "INSERT INTO demo_audit_events (event_type, actor, payload) VALUES ('scenario.mysql_load', 'demo-user', JSON_OBJECT('startedAt', NOW())); SELECT COUNT(*) FROM demo_orders a JOIN demo_orders b ON a.status = b.status WHERE a.description LIKE '%card checkout authorization%'; SELECT BENCHMARK(1500000, SHA2(UUID(), 256));"
 }
@@ -146,6 +184,7 @@ rca_workflow() {
     -H "Authorization: Bearer $token" \
     "$HEALTHOPS_URL/api/v1/rca/analyze/${incident_id}" >/tmp/healthops-demo-rca.json
 
+  local report_id
   report_id="$(extract_first_id </tmp/healthops-demo-rca.json)"
   if [[ -n "$report_id" ]]; then
     echo "RCA report generated: ${report_id}"

@@ -11,8 +11,6 @@ __pycache__/
 # Environment & secrets
 .env
 .env.*
-!.env.demo.example
-.demo-runtime.env
 backend/data/
 
 # IDE & OS

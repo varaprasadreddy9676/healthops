@@ -1,0 +1,62 @@
+name: healthops
+
+services:
+  healthops:
+    build: .
+    ports:
+      - "${HEALTHOPS_BIND:-0.0.0.0}:${HEALTHOPS_PORT:-8080}:8080"
+    environment:
+      CONFIG_PATH: /app/config/default.json
+      DATA_DIR: /app/data
+      FRONTEND_DIR: /app/frontend/dist
+      STORAGE_BACKEND: mongo
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-healthops}
+      MONGODB_COLLECTION_PREFIX: ${MONGODB_COLLECTION_PREFIX:-healthops}
+      HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD: ${HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD:-}
+      HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL: ${HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL:-admin@healthops.local}
+      HEALTHOPS_BOOTSTRAP_ADMIN_RESET: ${HEALTHOPS_BOOTSTRAP_ADMIN_RESET:-false}
+    volumes:
+      - healthops_data:/app/data
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  healthops_data:
+  mongo_data:

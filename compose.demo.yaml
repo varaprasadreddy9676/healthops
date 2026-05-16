@@ -1,34 +1,31 @@
-# Demo stack with realistic monitoring targets
-#
-# Usage:
-#   docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d
-#
-# This extends the base stack with demo services so you can see
-# HealthOps monitoring real infrastructure out of the box:
-#   - nginx (internal web server health target)
-#   - MySQL (database on localhost:13306 by default)
-#   - Redis (internal cache TCP target)
-#   - echo-server (internal simple API endpoint)
-#   - demo-api (controllable checkout API on localhost:19100 by default)
-#   - demo-ai-provider (local deterministic OpenAI-compatible AI for RCA demos)
-#   - demo-log-emitter (realistic logs posted into HealthOps)
-#   - mysql-workload (steady workload for MySQL monitoring pages)
-#   - linux-server-1 (SSH + nginx + python + cron on localhost:12222 by default)
-#   - linux-server-2 (SSH + nginx + python + cron on localhost:12223 by default)
-#
-# HealthOps will use config/demo.json instead of default.json,
-# which has checks pre-configured for all demo services.
+name: healthops-demo
 
 services:
   healthops:
+    build: .
+    ports:
+      - "${HEALTHOPS_DEMO_BIND:-0.0.0.0}:${HEALTHOPS_PORT:-18080}:8080"
     environment:
-      - CONFIG_PATH=/app/config/demo.json
-      - STORAGE_BACKEND=mongo
-      - MYSQL_DSN=${MYSQL_USER:-healthops}:${MYSQL_PASSWORD:-healthops123}@tcp(mysql:3306)/healthops?timeout=3s&readTimeout=5s&writeTimeout=5s&parseTime=true
-      - HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD=${HEALTHOPS_DEMO_ADMIN_PASSWORD:-healthops-demo-admin}
-      - HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL=demo@healthops.local
-      - HEALTHOPS_BOOTSTRAP_ADMIN_RESET=${HEALTHOPS_BOOTSTRAP_ADMIN_RESET:-true}
+      CONFIG_PATH: /app/config/demo.json
+      DATA_DIR: /app/data
+      FRONTEND_DIR: /app/frontend/dist
+      STORAGE_BACKEND: mongo
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-healthops}
+      MONGODB_COLLECTION_PREFIX: ${MONGODB_COLLECTION_PREFIX:-healthops}
+      MYSQL_DSN: ${MYSQL_USER:-healthops}:${MYSQL_PASSWORD:-healthops123}@tcp(mysql:3306)/healthops?timeout=3s&readTimeout=5s&writeTimeout=5s&parseTime=true
+      HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD: ${HEALTHOPS_DEMO_ADMIN_PASSWORD:-healthops-demo-admin}
+      HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL: demo@healthops.local
+      HEALTHOPS_BOOTSTRAP_ADMIN_RESET: "true"
+      HEALTHOPS_BOOTSTRAP_AI_PROVIDER_ID: local-demo-ai
+      HEALTHOPS_BOOTSTRAP_AI_PROVIDER_NAME: Local Demo AI
+      HEALTHOPS_BOOTSTRAP_AI_PROVIDER_TYPE: custom
+      HEALTHOPS_BOOTSTRAP_AI_PROVIDER_API_KEY: demo-local-key
+      HEALTHOPS_BOOTSTRAP_AI_PROVIDER_BASE_URL: http://demo-ai-provider:9200/v1
+      HEALTHOPS_BOOTSTRAP_AI_PROVIDER_MODEL: healthops-demo-ops-model
+      HEALTHOPS_BOOTSTRAP_AI_PROVIDER_RESET: "true"
     volumes:
+      - healthops_demo_data:/app/data
       - ./backend/config/demo.json:/app/config/demo.json:ro
     depends_on:
       mongo:
@@ -36,9 +33,9 @@ services:
       mysql:
         condition: service_healthy
       nginx:
-        condition: service_started
+        condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       echo-server:
         condition: service_started
       demo-api:
@@ -46,25 +43,41 @@ services:
       demo-ai-provider:
         condition: service_healthy
       linux-server-1:
-        condition: service_started
+        condition: service_healthy
       linux-server-2:
-        condition: service_started
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   mongo:
-    ports: !reset []
+    image: mongo:7
+    volumes:
+      - mongo_demo_data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   mysql:
     image: mysql:8.0
     ports:
       - "127.0.0.1:${MYSQL_PORT:-13306}:3306"
     environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpass123}
-      - MYSQL_DATABASE=healthops
-      - MYSQL_USER=${MYSQL_USER:-healthops}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-healthops123}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass123}
+      MYSQL_DATABASE: healthops
+      MYSQL_USER: ${MYSQL_USER:-healthops}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-healthops123}
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./docker/mysql-init:/docker-entrypoint-initdb.d
+      - mysql_demo_data:/var/lib/mysql
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
@@ -102,7 +115,7 @@ services:
       - "127.0.0.1:${DEMO_API_PORT:-19100}:9100"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9100/health', timeout=2).read()"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9100/health', timeout=2).read()"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -111,7 +124,7 @@ services:
   demo-ai-provider:
     build: ./docker/demo-ai-provider
     environment:
-      - DEMO_AI_MODEL=healthops-demo-ops-model
+      DEMO_AI_MODEL: healthops-demo-ops-model
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9200/health', timeout=2).read()"]
@@ -123,10 +136,10 @@ services:
   demo-log-emitter:
     build: ./docker/demo-log-emitter
     environment:
-      - HEALTHOPS_URL=http://healthops:8080
-      - HEALTHOPS_USERNAME=admin
-      - HEALTHOPS_PASSWORD=${HEALTHOPS_DEMO_ADMIN_PASSWORD:-healthops-demo-admin}
-      - BATCH_INTERVAL_SECONDS=15
+      HEALTHOPS_URL: http://healthops:8080
+      HEALTHOPS_USERNAME: admin
+      HEALTHOPS_PASSWORD: ${HEALTHOPS_DEMO_ADMIN_PASSWORD:-healthops-demo-admin}
+      BATCH_INTERVAL_SECONDS: 15
     depends_on:
       healthops:
         condition: service_healthy
@@ -136,12 +149,12 @@ services:
     image: mysql:8.0
     command: ["sh", "/demo/workload.sh"]
     environment:
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_USER=${MYSQL_USER:-healthops}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-healthops123}
-      - MYSQL_DATABASE=healthops
-      - WORKLOAD_INTERVAL_SECONDS=8
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-healthops}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-healthops123}
+      MYSQL_DATABASE: healthops
+      WORKLOAD_INTERVAL_SECONDS: 8
     volumes:
       - ./docker/mysql-workload/workload.sh:/demo/workload.sh:ro
     depends_on:
@@ -154,7 +167,7 @@ services:
     ports:
       - "127.0.0.1:${DEMO_LINUX_SSH_PORT_1:-12222}:22"
     environment:
-      - HTTP_PORT=8000
+      HTTP_PORT: 8000
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-x", "sshd"]
@@ -168,7 +181,7 @@ services:
     ports:
       - "127.0.0.1:${DEMO_LINUX_SSH_PORT_2:-12223}:22"
     environment:
-      - HTTP_PORT=9000
+      HTTP_PORT: 9000
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-x", "sshd"]
@@ -178,4 +191,6 @@ services:
       start_period: 5s
 
 volumes:
-  mysql_data:
+  healthops_demo_data:
+  mongo_demo_data:
+  mysql_demo_data:

@@ -47,38 +47,40 @@ https://github.com/user-attachments/assets/healthops-demo.mp4
 
 ## Quick Start
 
-### Option 1: Run locally (Go + Node.js required)
+### Production
+
+Run HealthOps with MongoDB persistence:
 
 ```bash
-# Build frontend
-cd frontend && npm install && npm run build && cd ..
-
-# Start the backend (serves frontend too)
-cd backend && FRONTEND_DIR=../frontend/dist go run ./cmd/healthops
+HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD='change-this-strong-password' docker compose up -d --build
 ```
 
-Open [http://localhost:8080](http://localhost:8080) — that's it.
+Open [http://localhost:8080](http://localhost:8080) and log in with:
 
-### Option 2: Docker Compose (recommended)
+| Field | Value |
+|-------|-------|
+| Username | `admin` |
+| Password | the password you provided in `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` |
+
+MongoDB is internal to the Docker network and is not published to the host. To stop the stack:
 
 ```bash
-docker compose up -d
+docker compose down
 ```
 
-This starts HealthOps + MongoDB. Open [http://localhost:8080](http://localhost:8080).
+### Demo
 
-### Option 2b: Full Docker demo with real scenarios
-
-The open-source demo is the fastest way to understand the product. It starts HealthOps, MongoDB, MySQL, Redis, nginx, SSH Linux targets, a controllable checkout API, a log emitter, and a MySQL workload generator.
+Run the full demo stack with realistic monitoring targets:
 
 ```bash
-cp .env.demo.example .env.demo
-scripts/demo-up.sh
+docker compose -f compose.demo.yaml up -d --build
 ```
 
-Open the URL printed by the script and log in with `admin` / `healthops-demo-admin`. The default URL is [http://localhost:18080](http://localhost:18080), and the script automatically chooses another free port if needed.
+Open [http://localhost:18080](http://localhost:18080) and log in with `admin` / `healthops-demo-admin`.
 
-Useful scenarios:
+The demo starts HealthOps, MongoDB, MySQL, Redis, nginx, two Linux SSH targets, a controllable checkout API, a log emitter, a MySQL workload generator, and a local OpenAI-compatible demo AI provider. AI incident briefs and RCA work immediately without an external API key.
+
+Trigger real scenarios:
 
 ```bash
 scripts/demo-scenario.sh api-slow
@@ -90,27 +92,20 @@ scripts/demo-scenario.sh rca
 scripts/demo-scenario.sh recover
 ```
 
-AI/RCA demo:
-
-The demo includes a local OpenAI-compatible provider so AI briefs and RCA can run immediately without an external key. Optional BYOK OpenRouter setup is still supported:
+To stop and delete demo data:
 
 ```bash
-# The script sends the key once to HealthOps, where it is stored encrypted in MongoDB.
-OPENROUTER_API_KEY=sk-or-v1-... scripts/demo-configure-ai.sh
+docker compose -f compose.demo.yaml down -v
 ```
 
-### Option 3: Docker only
+### Verify
 
 ```bash
-docker build -t healthops .
-docker run -p 8080:8080 healthops
-```
-
-### Verify it's running
-
-```bash
+# Production
 curl http://localhost:8080/healthz
-# {"success":true,"data":{"status":"ok"}}
+
+# Demo
+curl http://localhost:18080/healthz
 ```
 
 ## Features
@@ -247,7 +242,8 @@ healthops/
 │       └── hooks/            # SSE, export hooks
 ├── docker/                   # Docker configs & MySQL init
 ├── docs/                     # ADRs, runbook, plans
-├── docker-compose.yml        # Full stack: backend + Mongo + MySQL
+├── compose.yaml              # Production stack: HealthOps + MongoDB
+├── compose.demo.yaml         # Demo stack with realistic targets and scenarios
 ├── Dockerfile                # Multi-stage build (frontend + backend)
 └── ReadMe.md                 # This file
 ```
@@ -259,12 +255,13 @@ healthops/
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CONFIG_PATH` | `config/default.json` | Check configuration file |
-| `STATE_PATH` | `data/state.json` | Persisted state file |
 | `DATA_DIR` | `data/` | Data directory for JSONL repos |
 | `FRONTEND_DIR` | — | Path to frontend dist folder |
-| `MONGODB_URI` | — | Optional MongoDB connection |
+| `STORAGE_BACKEND` | `file` | Set to `mongo` for production Docker persistence |
+| `MONGODB_URI` | — | MongoDB connection string |
 | `MONGODB_DATABASE` | `healthops` | MongoDB database name |
 | `MONGODB_COLLECTION_PREFIX` | `healthops` | MongoDB collection prefix |
+| `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` | — | Required for the first Docker production admin user |
 | `CORS_ORIGIN` | — | Allowed CORS origin (for custom domains) |
 | `MYSQL_DSN` / check `dsnEnv` | — | MySQL DSN for mysql checks |
 
@@ -272,7 +269,7 @@ See the [Deployment Guide](docs/deployment-guide.md) for full details on all con
 
 ### Check Configuration
 
-Checks are seeded from `backend/config/default.json` on the very first run, then managed via the API (`/api/v1/checks`) and persisted in `data/state.json`. Edits to `default.json` are ignored once state exists. Each check supports:
+Checks are seeded from `backend/config/default.json` on the first run, then managed via the API (`/api/v1/checks`) and persisted in MongoDB when using Docker. Each check supports:
 
 ```json
 {

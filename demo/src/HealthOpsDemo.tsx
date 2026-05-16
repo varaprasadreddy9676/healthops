@@ -432,7 +432,7 @@ const Outro: React.FC = () => {
               fontFamily: "'SF Mono', 'Fira Code', monospace",
             }}
           >
-            docker compose up -d
+            docker compose -f compose.demo.yaml up -d
           </code>
         </div>
 

@@ -782,7 +782,7 @@ Make it possible for another engineer to run and ship the product.
 - Dockerfile for backend
 - frontend build/deploy guidance
 - `.env.example`
-- optional `docker-compose.yml` for local full stack with Mongo
+- optional `compose.yaml` for local full stack with Mongo
 
 **Tests after implementation**
 - Fresh clone local run using documented steps
@@ -1048,4 +1048,3 @@ Start with Phase 0 and Phase 1 only. Do not jump into frontend or alerting first
 
 The single highest-value first implementation move is:
 - redesigning persistence and domain boundaries so incidents, alerts, and UI can be built on stable foundations.
-

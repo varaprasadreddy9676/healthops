@@ -53,7 +53,7 @@ Evidence: Updated with final gate rerun outcomes on 2026-04-18.
 - [ ] Docker build passes (`Dockerfile`)
 Evidence: 2026-04-18 FAIL (environment): Docker daemon unavailable (`/Users/sai/.docker/run/docker.sock`).
 
-- [ ] `docker-compose.yml` boot test passes
+- [ ] `compose.yaml` boot test passes
 Evidence: 2026-04-18 FAIL (environment): Cannot connect to Docker daemon.
 
 - [x] `.env.example` validated against runtime config
