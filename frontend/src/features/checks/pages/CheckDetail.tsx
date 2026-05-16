@@ -18,6 +18,7 @@ interface NotificationChannel {
   name: string
   type: string
   enabled: boolean
+  checkIds?: string[]
 }
 
 function authHeaders(): Record<string, string> {
@@ -54,7 +55,6 @@ export default function CheckDetail() {
   const { data: channels = [] } = useQuery({
     queryKey: ['notification-channels-list'],
     queryFn: fetchChannels,
-    enabled: editing,
   })
 
   const updateMutation = useMutation({
@@ -92,7 +92,9 @@ export default function CheckDetail() {
       tags: c.tags || [],
       mysql: c.mysql,
       ssh: c.ssh,
-      notificationChannelIds: c.notificationChannelIds || [],
+      notificationChannelIds: c.notificationChannelIds?.length
+        ? c.notificationChannelIds
+        : channels.filter(ch => !ch.checkIds?.length).map(ch => ch.id),
     })
     setEditing(true)
   }
