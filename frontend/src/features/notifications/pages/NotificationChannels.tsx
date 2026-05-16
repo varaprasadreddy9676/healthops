@@ -40,12 +40,15 @@ interface NotificationLog {
   notificationId: string
   incidentId: string
   channel: string
-  payloadJSON: string
+  payloadJson: string
   status: 'pending' | 'sent' | 'failed'
   lastError?: string
   retryCount: number
   createdAt: string
   sentAt?: string
+  requestUrl?: string
+  responseStatus?: number
+  responseBody?: string
 }
 
 const CHANNEL_TYPES = [
@@ -133,25 +136,97 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-function PayloadCell({ json }: { json: string }) {
+function prettyJson(s: string) {
+  try { return JSON.stringify(JSON.parse(s), null, 2) } catch { return s }
+}
+
+function buildCurl(log: NotificationLog): string {
+  if (!log.requestUrl) return '(URL not recorded — will appear for future alerts)'
+  let cmd = `curl -X POST '${log.requestUrl}' \\\n  -H 'Content-Type: application/json'`
+  const payload = prettyJson(log.payloadJson)
+  cmd += ` \\\n  -d '${payload}'`
+  return cmd
+}
+
+function LogRow({ log }: { log: NotificationLog }) {
   const [open, setOpen] = useState(false)
-  let pretty = json
-  try { pretty = JSON.stringify(JSON.parse(json), null, 2) } catch { /* keep raw */ }
+  const fmtTime = (s?: string) => {
+    if (!s) return '—'
+    try { return new Date(s).toLocaleString() } catch { return s }
+  }
+
   return (
-    <div>
-      <button
+    <>
+      <tr
+        className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/30"
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
       >
-        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        {open ? 'hide' : 'view payload'}
-      </button>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-2">
+            {open ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-400" />}
+            <StatusBadge status={log.status} />
+          </div>
+        </td>
+        <td className="px-4 py-3 font-mono text-xs text-slate-700 dark:text-slate-300">{log.channel}</td>
+        <td className="px-4 py-3 font-mono text-xs text-slate-500 max-w-[140px] truncate" title={log.incidentId}>
+          {log.incidentId.length > 18 ? log.incidentId.slice(0, 18) + '…' : log.incidentId}
+        </td>
+        <td className="px-4 py-3 text-xs">
+          {log.responseStatus ? (
+            <span className={`font-mono font-semibold ${log.responseStatus < 300 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+              HTTP {log.responseStatus}
+            </span>
+          ) : <span className="text-slate-400">—</span>}
+        </td>
+        <td className="px-4 py-3 max-w-[200px]">
+          {log.lastError ? (
+            <span className="text-xs text-red-600 dark:text-red-400 truncate block" title={log.lastError}>
+              {log.lastError.length > 50 ? log.lastError.slice(0, 50) + '…' : log.lastError}
+            </span>
+          ) : <span className="text-xs text-slate-400">—</span>}
+        </td>
+        <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-500">{fmtTime(log.createdAt)}</td>
+        <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-500">{fmtTime(log.sentAt)}</td>
+      </tr>
+
       {open && (
-        <pre className="mt-1 max-h-40 overflow-auto rounded bg-slate-50 p-2 text-[10px] text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-          {pretty}
-        </pre>
+        <tr className="bg-slate-50 dark:bg-slate-900/50">
+          <td colSpan={7} className="px-6 py-4">
+            <div className="grid gap-4 lg:grid-cols-2">
+              {/* Request */}
+              <div>
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Request</span>
+                  <span className="text-[10px] text-slate-400">(curl equivalent)</span>
+                </div>
+                <pre className="overflow-auto rounded-lg border border-slate-200 bg-white p-3 font-mono text-[11px] leading-relaxed text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 max-h-60">
+                  {buildCurl(log)}
+                </pre>
+              </div>
+
+              {/* Response */}
+              <div>
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Response</span>
+                  {log.responseStatus && (
+                    <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${
+                      log.responseStatus < 300
+                        ? 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400'
+                        : 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400'
+                    }`}>
+                      {log.responseStatus}
+                    </span>
+                  )}
+                </div>
+                <pre className="overflow-auto rounded-lg border border-slate-200 bg-white p-3 font-mono text-[11px] leading-relaxed text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 max-h-60">
+                  {log.responseBody ? prettyJson(log.responseBody) : log.lastError || '(no response body)'}
+                </pre>
+              </div>
+            </div>
+          </td>
+        </tr>
       )}
-    </div>
+    </>
   )
 }
 
@@ -165,17 +240,11 @@ function DeliveryLogs() {
     refetchInterval: 15_000,
   })
 
-  const fmtTime = (s?: string) => {
-    if (!s) return '—'
-    try { return new Date(s).toLocaleString() } catch { return s }
-  }
-
   if (isLoading) return <LoadingState message="Loading delivery logs…" />
   if (error) return <ErrorState message="Failed to load logs" retry={() => queryClient.invalidateQueries({ queryKey: ['notification-logs'] })} />
 
   return (
     <div className="space-y-4">
-      {/* Filter bar */}
       <div className="flex items-center gap-3">
         <span className="text-xs font-medium text-slate-500">Filter:</span>
         {(['', 'sent', 'failed', 'pending'] as const).map(s => (
@@ -191,7 +260,7 @@ function DeliveryLogs() {
             {s === '' ? 'All' : s}
           </button>
         ))}
-        <span className="ml-auto text-xs text-slate-400">{logs?.length ?? 0} entries</span>
+        <span className="ml-auto text-xs text-slate-400">{logs?.length ?? 0} entries · click row to expand</span>
       </div>
 
       {!logs?.length ? (
@@ -205,44 +274,18 @@ function DeliveryLogs() {
           <table className="w-full text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Channel</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Incident</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Payload</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Error</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Created</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Sent At</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Channel</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Incident</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">HTTP</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Error</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Created</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Sent At</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {logs.map(log => (
-                <tr key={log.notificationId} className="hover:bg-slate-50 dark:hover:bg-slate-900/30">
-                  <td className="px-4 py-3">
-                    <StatusBadge status={log.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="font-mono text-xs text-slate-700 dark:text-slate-300">{log.channel}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="font-mono text-xs text-slate-500 truncate max-w-[120px] block" title={log.incidentId}>
-                      {log.incidentId.slice(0, 16)}…
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 max-w-xs">
-                    <PayloadCell json={log.payloadJSON} />
-                  </td>
-                  <td className="px-4 py-3 max-w-xs">
-                    {log.lastError ? (
-                      <span className="text-xs text-red-600 dark:text-red-400" title={log.lastError}>
-                        {log.lastError.length > 60 ? log.lastError.slice(0, 60) + '…' : log.lastError}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-500">{fmtTime(log.createdAt)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-500">{fmtTime(log.sentAt)}</td>
-                </tr>
+                <LogRow key={log.notificationId} log={log} />
               ))}
             </tbody>
           </table>

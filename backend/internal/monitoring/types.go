@@ -316,6 +316,10 @@ type NotificationEvent struct {
 	LastError      string     `json:"lastError,omitempty" bson:"lastError,omitempty"`
 	CreatedAt      time.Time  `json:"createdAt" bson:"createdAt"`
 	SentAt         *time.Time `json:"sentAt,omitempty" bson:"sentAt,omitempty"`
+	// HTTP delivery details (captured for webhook/HTTP channels)
+	RequestURL     string `json:"requestUrl,omitempty" bson:"requestUrl,omitempty"`
+	ResponseStatus int    `json:"responseStatus,omitempty" bson:"responseStatus,omitempty"`
+	ResponseBody   string `json:"responseBody,omitempty" bson:"responseBody,omitempty"`
 }
 
 // AIQueueItem represents a queued AI analysis request.

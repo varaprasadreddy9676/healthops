@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/smtp"
@@ -364,6 +365,9 @@ func (d *NotificationDispatcher) CleanupStaleTracking() {
 // sendToChannel dispatches the notification to the specific channel type.
 func (d *NotificationDispatcher) sendToChannel(ch NotificationChannelConfig, payload NotificationPayload, incidentID string) {
 	var err error
+	var httpStatus int
+	var httpRespBody string
+	var reqURL string
 
 	switch ch.Type {
 	case ChannelSlack:
@@ -371,7 +375,8 @@ func (d *NotificationDispatcher) sendToChannel(ch NotificationChannelConfig, pay
 	case ChannelDiscord:
 		err = d.sendDiscord(ch, payload)
 	case ChannelWebhook:
-		err = d.sendWebhook(ch, payload)
+		reqURL = ch.WebhookURL
+		httpStatus, httpRespBody, err = d.sendWebhook(ch, payload)
 	case ChannelEmail:
 		err = d.sendEmail(ch, payload)
 	case ChannelTelegram:
@@ -390,6 +395,9 @@ func (d *NotificationDispatcher) sendToChannel(ch NotificationChannelConfig, pay
 			IncidentID:     incidentID,
 			Channel:        fmt.Sprintf("%s:%s", ch.Type, ch.Name),
 			PayloadJSON:    string(payloadJSON),
+			RequestURL:     reqURL,
+			ResponseStatus: httpStatus,
+			ResponseBody:   httpRespBody,
 		}
 		if err != nil {
 			evt.LastError = err.Error()
@@ -502,7 +510,8 @@ func (d *NotificationDispatcher) sendSlack(ch NotificationChannelConfig, p Notif
 		},
 	}
 
-	return d.postJSON(ch.WebhookURL, slackBody, nil)
+	_, _, err := d.postJSON(ch.WebhookURL, slackBody, nil)
+	return err
 }
 
 // --- Discord ---
@@ -535,26 +544,28 @@ func (d *NotificationDispatcher) sendDiscord(ch NotificationChannelConfig, p Not
 		},
 	}
 
-	return d.postJSON(ch.WebhookURL, discordBody, nil)
+	_, _, err := d.postJSON(ch.WebhookURL, discordBody, nil)
+	return err
 }
 
 // --- Generic Webhook ---
 
-func (d *NotificationDispatcher) sendWebhook(ch NotificationChannelConfig, p NotificationPayload) error {
+// sendWebhook dispatches to a webhook channel and returns (httpStatus, responseBody, error).
+func (d *NotificationDispatcher) sendWebhook(ch NotificationChannelConfig, p NotificationPayload) (int, string, error) {
 	if ch.BodyTemplate != "" {
 		return d.sendWebhookWithTemplate(ch, p)
 	}
 	return d.postJSON(ch.WebhookURL, p, ch.Headers)
 }
 
-func (d *NotificationDispatcher) sendWebhookWithTemplate(ch NotificationChannelConfig, p NotificationPayload) error {
+func (d *NotificationDispatcher) sendWebhookWithTemplate(ch NotificationChannelConfig, p NotificationPayload) (int, string, error) {
 	tmpl, err := template.New("body").Parse(ch.BodyTemplate)
 	if err != nil {
-		return fmt.Errorf("parse body template: %w", err)
+		return 0, "", fmt.Errorf("parse body template: %w", err)
 	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, p); err != nil {
-		return fmt.Errorf("render body template: %w", err)
+		return 0, "", fmt.Errorf("render body template: %w", err)
 	}
 	return d.postRaw(ch.WebhookURL, buf.Bytes(), ch.Headers)
 }
@@ -619,7 +630,8 @@ func (d *NotificationDispatcher) sendTelegram(ch NotificationChannelConfig, p No
 		"parse_mode": "Markdown",
 	}
 
-	return d.postJSON(url, body, nil)
+	_, _, err := d.postJSON(url, body, nil)
+	return err
 }
 
 // --- PagerDuty ---
@@ -648,48 +660,29 @@ func (d *NotificationDispatcher) sendPagerDuty(ch NotificationChannelConfig, p N
 		},
 	}
 
-	return d.postJSON("https://events.pagerduty.com/v2/enqueue", pdBody, nil)
+	_, _, err := d.postJSON("https://events.pagerduty.com/v2/enqueue", pdBody, nil)
+	return err
 }
 
 // --- Helpers ---
 
-func (d *NotificationDispatcher) postJSON(url string, body interface{}, headers map[string]string) error {
+// postJSON marshals body as JSON, POSTs it, and returns (httpStatus, responseBody, error).
+func (d *NotificationDispatcher) postJSON(url string, body interface{}, headers map[string]string) (int, string, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return fmt.Errorf("marshal body: %w", err)
+		return 0, "", fmt.Errorf("marshal body: %w", err)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
-	if err != nil {
-		return fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
-	resp, err := d.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("unexpected status %d from %s", resp.StatusCode, url)
-	}
-	return nil
+	return d.postRaw(url, jsonBody, headers)
 }
 
-func (d *NotificationDispatcher) postRaw(url string, body []byte, headers map[string]string) error {
+// postRaw POSTs raw bytes and returns (httpStatus, responseBody, error).
+func (d *NotificationDispatcher) postRaw(url string, body []byte, headers map[string]string) (int, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+		return 0, "", fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	for k, v := range headers {
@@ -698,14 +691,17 @@ func (d *NotificationDispatcher) postRaw(url string, body []byte, headers map[st
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("send request: %w", err)
+		return 0, "", fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	respBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	respBody := string(respBytes)
+
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("unexpected status %d from %s", resp.StatusCode, url)
+		return resp.StatusCode, respBody, fmt.Errorf("unexpected status %d from %s", resp.StatusCode, url)
 	}
-	return nil
+	return resp.StatusCode, respBody, nil
 }
 
 func buildPayload(incident monitoring.Incident, status string) NotificationPayload {
@@ -795,7 +791,7 @@ func (d *NotificationDispatcher) TestChannel(ch NotificationChannelConfig) error
 	case ChannelDiscord:
 		err = d.sendDiscord(ch, payload)
 	case ChannelWebhook:
-		err = d.sendWebhook(ch, payload)
+		_, _, err = d.sendWebhook(ch, payload)
 	case ChannelEmail:
 		err = d.sendEmail(ch, payload)
 	case ChannelTelegram:
@@ -877,7 +873,8 @@ func (d *NotificationDispatcher) sendSlackDigest(ch NotificationChannelConfig, p
 		},
 	}
 
-	return d.postJSON(ch.WebhookURL, slackBody, nil)
+	_, _, err := d.postJSON(ch.WebhookURL, slackBody, nil)
+	return err
 }
 
 // --- Discord Digest ---
@@ -912,7 +909,8 @@ func (d *NotificationDispatcher) sendDiscordDigest(ch NotificationChannelConfig,
 		},
 	}
 
-	return d.postJSON(ch.WebhookURL, discordBody, nil)
+	_, _, err := d.postJSON(ch.WebhookURL, discordBody, nil)
+	return err
 }
 
 // --- Webhook Digest ---
@@ -924,7 +922,8 @@ func (d *NotificationDispatcher) sendWebhookDigest(ch NotificationChannelConfig,
 		"incidents": payloads,
 		"timestamp": time.Now().Format(time.RFC3339),
 	}
-	return d.postJSON(ch.WebhookURL, body, ch.Headers)
+	_, _, err := d.postJSON(ch.WebhookURL, body, ch.Headers)
+	return err
 }
 
 // --- Telegram Digest ---
@@ -960,7 +959,8 @@ func (d *NotificationDispatcher) sendTelegramDigest(ch NotificationChannelConfig
 		"parse_mode": "MarkdownV2",
 	}
 
-	return d.postJSON(url, body, nil)
+	_, _, err := d.postJSON(url, body, nil)
+	return err
 }
 
 // --- Email Digest ---
