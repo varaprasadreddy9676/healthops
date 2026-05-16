@@ -1,7 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { useState } from 'react'
-import { ArrowLeft, Server, Tag, Pencil, X, Save, Bell } from 'lucide-react'
+import { ArrowLeft, Server, Tag, Pencil, X, Save, Bell, BarChart2, List } from 'lucide-react'
+import {
+  ComposedChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  CartesianGrid, ReferenceLine,
+} from 'recharts'
 import { checksApi } from "@/features/checks/api/checks"
 import { analyticsApi } from "@/features/analytics/api/analytics"
 import { StatusBadge } from "@/shared/components/StatusBadge"
@@ -11,7 +15,136 @@ import { ErrorState } from "@/shared/components/ErrorState"
 import { ResponseTimeChart } from "@/shared/charts/ResponseTimeChart"
 import { formatDuration, formatUptime, relativeTime, checkTypeLabel } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
-import type { CheckConfig } from "@/shared/types"
+import type { CheckConfig, CheckResult } from "@/shared/types"
+
+function exactTime(s: string): string {
+  try {
+    const d = new Date(s)
+    const now = new Date()
+    const sameDay = d.toDateString() === now.toDateString()
+    const time = d.toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    if (sameDay) return time
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + time
+  } catch { return s }
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  healthy: '#16a34a',
+  critical: '#dc2626',
+  warning: '#d97706',
+  unknown: '#94a3b8',
+}
+
+function statusColor(s: string) {
+  return STATUS_COLORS[s] ?? STATUS_COLORS.unknown
+}
+
+interface ResultDot {
+  cx: number; cy: number; payload: { status: string; duration: number }
+}
+function CustomDot({ cx, cy, payload }: ResultDot) {
+  const color = statusColor(payload.status)
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={5} fill={color} stroke="#fff" strokeWidth={1.5} />
+    </g>
+  )
+}
+
+function ResultsChart({ results }: { results: CheckResult[] }) {
+  const points = [...results].reverse().map(r => ({
+    time: exactTime(r.finishedAt),
+    fullTime: r.finishedAt,
+    duration: r.durationMs ?? 0,
+    status: r.status,
+    message: r.message || '',
+  }))
+
+  const maxMs = Math.max(...points.map(p => p.duration), 100)
+  const warningThreshold = points.some(p => p.duration > 0)
+    ? Math.round(maxMs * 0.7)
+    : undefined
+
+  return (
+    <div className="p-4">
+      <ResponsiveContainer width="100%" height={240}>
+        <ComposedChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid,#e2e8f0)" vertical={false} />
+          <XAxis
+            dataKey="time"
+            tick={{ fontSize: 10, fill: 'var(--chart-tick,#94a3b8)' }}
+            axisLine={false}
+            tickLine={false}
+            interval="preserveStartEnd"
+          />
+          <YAxis
+            tick={{ fontSize: 10, fill: 'var(--chart-tick,#94a3b8)' }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={(v: number) => `${v}ms`}
+            domain={[0, Math.ceil(maxMs * 1.2)]}
+          />
+          {warningThreshold && (
+            <ReferenceLine
+              y={warningThreshold}
+              stroke="#d97706"
+              strokeDasharray="4 3"
+              strokeOpacity={0.5}
+            />
+          )}
+          <Tooltip
+            contentStyle={{
+              background: 'var(--tooltip-bg,#fff)',
+              border: '1px solid var(--tooltip-border,#e2e8f0)',
+              borderRadius: 8,
+              fontSize: 12,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            }}
+            labelFormatter={(_, payload) => payload[0]?.payload?.time ?? ''}
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null
+              const d = payload[0].payload
+              const color = statusColor(d.status)
+              return (
+                <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900" style={{ minWidth: 180 }}>
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: color }} />
+                    <span className="text-xs font-semibold capitalize" style={{ color }}>{d.status}</span>
+                    <span className="ml-auto font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">{d.duration}ms</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">{d.time}</p>
+                  {d.message && <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[200px]">{d.message}</p>}
+                </div>
+              )
+            }}
+          />
+          <Line
+            type="monotone"
+            dataKey="duration"
+            stroke="#2563eb"
+            strokeWidth={1.5}
+            dot={(props: any) => <CustomDot key={props.key} {...props} />}
+            activeDot={{ r: 6, stroke: '#2563eb', strokeWidth: 2, fill: '#fff' }}
+            connectNulls
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+      {/* Legend */}
+      <div className="mt-2 flex items-center justify-center gap-5">
+        {Object.entries(STATUS_COLORS).map(([s, c]) => (
+          <div key={s} className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ background: c }} />
+            <span className="text-[11px] capitalize text-slate-500 dark:text-slate-400">{s}</span>
+          </div>
+        ))}
+        <div className="flex items-center gap-1.5">
+          <span className="h-px w-5 border-t border-dashed border-amber-500 opacity-60" />
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">threshold</span>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 interface NotificationChannel {
   id: string
@@ -38,6 +171,7 @@ export default function CheckDetail() {
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<Partial<CheckConfig>>({})
+  const [resultView, setResultView] = useState<'table' | 'chart'>('table')
 
   const { data: detail, isLoading, error, refetch } = useQuery({
     queryKey: ['checks', id],
@@ -201,33 +335,71 @@ export default function CheckDetail() {
         </div>
       )}
 
-      {/* Recent results table */}
+      {/* Recent Results — table + chart toggle */}
       <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-100 px-5 py-3.5 dark:border-slate-800">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Recent Results</h2>
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 dark:border-slate-800">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            Recent Results
+            <span className="ml-2 text-xs font-normal text-slate-400">{(recentResults ?? []).length} entries</span>
+          </h2>
+          {/* View toggle */}
+          <div className="flex items-center rounded-lg border border-slate-200 p-0.5 dark:border-slate-700">
+            <button
+              onClick={() => setResultView('table')}
+              title="Table view"
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                resultView === 'table'
+                  ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <List className="h-3.5 w-3.5" />
+              Table
+            </button>
+            <button
+              onClick={() => setResultView('chart')}
+              title="Chart view"
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                resultView === 'chart'
+                  ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <BarChart2 className="h-3.5 w-3.5" />
+              Chart
+            </button>
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-800/30">
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Status</th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Response</th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Message</th>
-                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Time</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {(recentResults ?? []).slice(0, 20).map(r => (
-                <tr key={r.id}>
-                  <td className="px-4 py-2.5"><StatusBadge status={r.status} /></td>
-                  <td className="px-4 py-2.5 font-mono text-xs">{formatDuration(r.durationMs)}</td>
-                  <td className="max-w-xs truncate px-4 py-2.5 text-slate-500 dark:text-slate-400">{r.message || '—'}</td>
-                  <td className="px-4 py-2.5 text-xs text-slate-400">{relativeTime(r.finishedAt)}</td>
+
+        {resultView === 'chart' ? (
+          <ResultsChart results={(recentResults ?? []).slice(0, 50)} />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-800/30">
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Status</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Response</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Message</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Time</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {(recentResults ?? []).slice(0, 50).map(r => (
+                  <tr key={r.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30">
+                    <td className="px-4 py-2.5"><StatusBadge status={r.status} /></td>
+                    <td className="px-4 py-2.5 font-mono text-xs">{formatDuration(r.durationMs)}</td>
+                    <td className="max-w-xs truncate px-4 py-2.5 text-slate-500 dark:text-slate-400">{r.message || '—'}</td>
+                    <td className="px-4 py-2.5">
+                      <span className="font-mono text-xs text-slate-700 dark:text-slate-300">{exactTime(r.finishedAt)}</span>
+                      <span className="ml-1.5 text-[11px] text-slate-400">{relativeTime(r.finishedAt)}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Config details */}
