@@ -72,8 +72,8 @@ async function fetchChannels(): Promise<NotificationChannel[]> {
   return body.data || []
 }
 
-async function fetchNotificationLogs(status: string, channel: string): Promise<NotificationLog[]> {
-  const params = new URLSearchParams({ limit: '200' })
+async function fetchNotificationLogs(status: string, channel: string, limit: number): Promise<NotificationLog[]> {
+  const params = new URLSearchParams({ limit: String(limit) })
   if (status) params.set('status', status)
   if (channel) params.set('channel', channel)
   const res = await fetch(`/api/v1/notification-logs?${params}`, { headers: authHeaders() })
@@ -234,11 +234,12 @@ function LogRow({ log }: { log: NotificationLog }) {
 function DeliveryLogs({ channels }: { channels: NotificationChannel[] }) {
   const [statusFilter, setStatusFilter] = useState('')
   const [channelFilter, setChannelFilter] = useState('')
+  const [logLimit, setLogLimit] = useState(100)
   const queryClient = useQueryClient()
 
   const { data: logs, isLoading, error } = useQuery({
-    queryKey: ['notification-logs', statusFilter, channelFilter],
-    queryFn: () => fetchNotificationLogs(statusFilter, channelFilter),
+    queryKey: ['notification-logs', statusFilter, channelFilter, logLimit],
+    queryFn: () => fetchNotificationLogs(statusFilter, channelFilter, logLimit),
     refetchInterval: 15_000,
   })
 
@@ -307,26 +308,38 @@ function DeliveryLogs({ channels }: { channels: NotificationChannel[] }) {
           description="Notification events will appear here once alerts are triggered"
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-          <table className="w-full text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Channel</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Incident</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">HTTP</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Error</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Created</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Sent At</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {logs.map(log => (
-                <LogRow key={log.notificationId} log={log} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+            <table className="w-full text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Channel</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Incident</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">HTTP</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Error</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Created</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Sent At</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {logs.map(log => (
+                  <LogRow key={log.notificationId} log={log} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {logs.length >= logLimit && (
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={() => setLogLimit(prev => prev + 100)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+              >
+                Load more
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

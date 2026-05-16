@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useMemo } from 'react'
-import { Search, ArrowUpDown, Server, X, Plus } from 'lucide-react'
+import { Search, ArrowUpDown, Server, X, Plus, Pencil } from 'lucide-react'
 import { checksApi } from "@/features/checks/api/checks"
 import { StatusBadge } from "@/shared/components/StatusBadge"
 import { LoadingState } from "@/shared/components/LoadingState"
@@ -31,6 +31,7 @@ export default function Checks() {
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [sortAsc, setSortAsc] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [editingCheck, setEditingCheck] = useState<CheckConfig | null>(null)
 
   // Derive server filter from URL param
   const serverFilter = useMemo(() => {
@@ -234,7 +235,7 @@ export default function Checks() {
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-800/30">
                 {([
-                  ['Status', 'status'], ['Name', 'name'], ['Type', 'type'], ['Server', null], ['Response', 'durationMs'], ['Last Check', null],
+                  ['Status', 'status'], ['Name', 'name'], ['Type', 'type'], ['Server', null], ['Response', 'durationMs'], ['Last Check', null], ['', null],
                 ] as [string, SortKey | null][]).map(([label, key]) => (
                   <th key={label} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     {key ? (
@@ -277,6 +278,15 @@ export default function Checks() {
                     <td className="px-4 py-3 text-xs text-slate-400">
                       {lr ? relativeTime(lr.finishedAt) : 'Never'}
                     </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => setEditingCheck(check)}
+                        className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800 dark:hover:text-blue-400"
+                        title="Edit check"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
                   </tr>
                 )
               })}
@@ -293,6 +303,17 @@ export default function Checks() {
             setShowAddModal(false)
             queryClient.invalidateQueries({ queryKey: ['checks'] })
             toast.success('Check created')
+          }}
+        />
+      )}
+
+      {editingCheck && (
+        <AddCheckModal
+          initialData={editingCheck}
+          onClose={() => setEditingCheck(null)}
+          onCreated={() => {
+            setEditingCheck(null)
+            toast.success('Check updated')
           }}
         />
       )}

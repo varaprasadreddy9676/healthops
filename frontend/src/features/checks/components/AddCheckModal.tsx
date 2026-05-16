@@ -1,9 +1,29 @@
 import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { checksApi } from "@/features/checks/api/checks"
 import { checkTypeLabel, cn } from "@/shared/lib/utils"
 import { CHECK_TYPES } from "@/shared/lib/constants"
 import type { CheckConfig } from "@/shared/types"
+
+function deriveTarget(check: CheckConfig): string {
+  switch (check.type) {
+    case 'api':
+    case 'process':
+      return check.target ?? ''
+    case 'tcp':
+      return check.host ? `${check.host}:${check.port ?? ''}` : ''
+    case 'command':
+      return check.command ?? ''
+    case 'log':
+      return check.path ?? ''
+    case 'mysql':
+      return check.mysql?.dsnEnv ?? ''
+    case 'ssh':
+      return check.ssh ? `${check.ssh.host}:${check.ssh.port ?? 22}` : ''
+    default:
+      return ''
+  }
+}
 
 const TARGET_META: Record<CheckConfig['type'], { label: string; placeholder: string; hint: string }> = {
   api: {
@@ -116,24 +136,33 @@ function validatePayload(input: {
 
 export function AddCheckModal({
   defaultServer,
+  initialData,
   onClose,
   onCreated,
 }: {
   defaultServer?: string
+  initialData?: CheckConfig
   onClose: () => void
   onCreated: () => void
 }) {
-  const [name, setName] = useState('')
-  const [type, setType] = useState<CheckConfig['type']>('api')
-  const [server, setServer] = useState(defaultServer ?? '')
-  const [target, setTarget] = useState('')
-  const [sshUser, setSshUser] = useState('root')
-  const [enabled, setEnabled] = useState(true)
+  const queryClient = useQueryClient()
+  const isEditing = initialData != null
+
+  const [name, setName] = useState(initialData?.name ?? '')
+  const [type, setType] = useState<CheckConfig['type']>(initialData?.type ?? 'api')
+  const [server, setServer] = useState(initialData?.server ?? defaultServer ?? '')
+  const [target, setTarget] = useState(initialData ? deriveTarget(initialData) : '')
+  const [sshUser, setSshUser] = useState(initialData?.ssh?.user ?? 'root')
+  const [enabled, setEnabled] = useState(initialData?.enabled ?? true)
   const [validationError, setValidationError] = useState<string | null>(null)
 
   const mutation = useMutation({
-    mutationFn: (check: Partial<CheckConfig>) => checksApi.create(check),
-    onSuccess: () => onCreated(),
+    mutationFn: (check: Partial<CheckConfig>) =>
+      isEditing ? checksApi.update(initialData!.id, check) : checksApi.create(check),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['checks'] })
+      onCreated()
+    },
   })
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -164,7 +193,7 @@ export function AddCheckModal({
         className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-slate-800"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">Add Check</h2>
+        <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">{isEditing ? 'Edit Check' : 'Add Check'}</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Name</label>
@@ -250,7 +279,7 @@ export function AddCheckModal({
 
           {(validationError || mutation.isError) && (
             <p className="text-sm text-red-600 dark:text-red-400">
-              {validationError || (mutation.error instanceof Error ? mutation.error.message : 'Failed to create check')}
+              {validationError || (mutation.error instanceof Error ? mutation.error.message : isEditing ? 'Failed to update check' : 'Failed to create check')}
             </p>
           )}
 
@@ -267,7 +296,7 @@ export function AddCheckModal({
               disabled={mutation.isPending}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              {mutation.isPending ? 'Creating...' : 'Create Check'}
+              {mutation.isPending ? (isEditing ? 'Saving...' : 'Creating...') : (isEditing ? 'Save Changes' : 'Create Check')}
             </button>
           </div>
         </form>

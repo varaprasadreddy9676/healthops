@@ -11,16 +11,35 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// makeHostKeyCallback returns a HostKeyCallback that either verifies the server's
+// public key SHA-256 fingerprint against the configured value, or logs a warning
+// and falls back to InsecureIgnoreHostKey when no fingerprint is configured.
+func makeHostKeyCallback(cfg *SSHCheckConfig) ssh.HostKeyCallback {
+	if cfg.HostKeyFingerprint == "" {
+		fmt.Fprintf(os.Stderr, "WARNING: SSH host key verification disabled for %s; set hostKeyFingerprint to prevent MitM attacks\n", cfg.Host)
+		return ssh.InsecureIgnoreHostKey() //nolint:gosec
+	}
+	expected := cfg.HostKeyFingerprint
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		got := ssh.FingerprintSHA256(key)
+		if got != expected {
+			return fmt.Errorf("ssh host key mismatch for %s: got %s, want %s", hostname, got, expected)
+		}
+		return nil
+	}
+}
+
 // SSHCheckConfig holds SSH-specific check configuration.
 type SSHCheckConfig struct {
-	Host        string   `json:"host" bson:"host"`
-	Port        int      `json:"port,omitempty" bson:"port,omitempty"` // default 22
-	User        string   `json:"user" bson:"user"`
-	KeyPath     string   `json:"keyPath,omitempty" bson:"keyPath,omitempty"`         // path to private key file
-	KeyEnv      string   `json:"keyEnv,omitempty" bson:"keyEnv,omitempty"`           // env var with path to key file
-	Password    string   `json:"password,omitempty" bson:"password,omitempty"`       // password for password auth
-	PasswordEnv string   `json:"passwordEnv,omitempty" bson:"passwordEnv,omitempty"` // env var holding the password
-	Metrics     []string `json:"metrics,omitempty" bson:"metrics,omitempty"`         // cpu, memory, disk, load (empty = all)
+	Host               string   `json:"host" bson:"host"`
+	Port               int      `json:"port,omitempty" bson:"port,omitempty"` // default 22
+	User               string   `json:"user" bson:"user"`
+	KeyPath            string   `json:"keyPath,omitempty" bson:"keyPath,omitempty"`                       // path to private key file
+	KeyEnv             string   `json:"keyEnv,omitempty" bson:"keyEnv,omitempty"`                         // env var with path to key file
+	Password           string   `json:"password,omitempty" bson:"password,omitempty"`                     // password for password auth
+	PasswordEnv        string   `json:"passwordEnv,omitempty" bson:"passwordEnv,omitempty"`               // env var holding the password
+	HostKeyFingerprint string   `json:"hostKeyFingerprint,omitempty" bson:"hostKeyFingerprint,omitempty"` // SHA-256 fingerprint, e.g. "SHA256:abc123..."
+	Metrics            []string `json:"metrics,omitempty" bson:"metrics,omitempty"`                       // cpu, memory, disk, load (empty = all)
 }
 
 // sshMetrics holds the parsed metrics from a remote server.
@@ -66,7 +85,7 @@ func collectSSHMetrics(cfg *SSHCheckConfig, timeout time.Duration) (*sshMetrics,
 	sshConfig := &ssh.ClientConfig{
 		User:            cfg.User,
 		Auth:            authMethods,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // TODO: use known_hosts in production
+		HostKeyCallback: makeHostKeyCallback(cfg),
 		Timeout:         timeout,
 	}
 
@@ -138,7 +157,7 @@ func sshDialAndRun(cfg *SSHCheckConfig, command string, timeout time.Duration) (
 	sshCfg := &ssh.ClientConfig{
 		User:            cfg.User,
 		Auth:            authMethods,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: makeHostKeyCallback(cfg),
 		Timeout:         timeout,
 	}
 

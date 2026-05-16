@@ -167,11 +167,13 @@ func (s *CheckScheduler) scheduleCheck(check CheckConfig) {
 		s.runCheck(check)
 
 		// Reschedule for next run
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-s.ctx.Done():
 				return
-			case <-time.After(interval):
+			case <-ticker.C:
 				// Check if still enabled
 				state := s.repo.Snapshot()
 				currentCheck, exists := findCheckByID(state.Checks, check.ID)
