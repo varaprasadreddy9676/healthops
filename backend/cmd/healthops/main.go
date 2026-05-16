@@ -583,8 +583,11 @@ func main() {
 	} else {
 		var logCategorizer *logs.Categorizer
 		if aiConfigStore != nil {
-			// Create a bridge provider for log categorization that uses the AI service
-			logCategorizer = logs.NewCategorizer(logRepo, nil, logger) // Provider set later when AI is ready
+			var catProvider logs.AIProvider
+			if aiService != nil {
+				catProvider = logs.AIProviderFunc(aiService.CallProvider)
+			}
+			logCategorizer = logs.NewCategorizer(logRepo, catProvider, logger)
 		}
 		logAPIHandler := logs.NewAPIHandler(logRepo, logCategorizer, logger)
 		service.SetLogRoutes(logAPIHandler)

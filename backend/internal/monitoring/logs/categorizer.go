@@ -15,6 +15,13 @@ type AIProvider interface {
 	Complete(ctx context.Context, systemMsg, userMsg string) (string, error)
 }
 
+// AIProviderFunc allows using a plain function as an AIProvider.
+type AIProviderFunc func(ctx context.Context, systemMsg, userMsg string) (string, error)
+
+func (f AIProviderFunc) Complete(ctx context.Context, systemMsg, userMsg string) (string, error) {
+	return f(ctx, systemMsg, userMsg)
+}
+
 // Categorizer performs AI-assisted labeling of error families.
 type Categorizer struct {
 	mu       sync.Mutex
