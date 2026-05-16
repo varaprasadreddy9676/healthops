@@ -1,5 +1,8 @@
 # ADR 002: Primary Persistence Model
 
+Status: Accepted
+Related: ADR 005 clarifies this decision for AI-native operations data and supersedes any production runtime use of best-effort MongoDB mirroring or file-store fallback.
+
 ## Context
 The existing prototype of Medics Health Check relies on a blob-style state model, writing to a local JSON file (`data/state.json`) with an optional full-state mirror to MongoDB. This approach requires rewriting large mutable snapshots and syncing full state, which is not scalable or safe for a production environment.
 

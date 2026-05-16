@@ -450,7 +450,7 @@ AI-native behavior:
 - All new collections (`signal_events`, `log_events`, `log_fingerprints`, `correlation_groups`, `incident_events`, `deployments`, `heartbeats`, `slo_*`, `ai_*`, `runbooks`, `remediation_actions`, `telemetry_quality_findings`) are written directly to MongoDB. No file-store fallback for these collections.
 - The legacy `FileStore` / JSONL repositories (`state.json`, MySQL JSONL samples, file AI queue, file notification outbox) are migration inputs only. Phase 0 migrates them into MongoDB and removes runtime use.
 - Reads and writes for AI features assume MongoDB is reachable. The service refuses to start AI features (Incident Brief, log ingestion, correlation) if MongoDB is unavailable. After Phase 0, persisted monitoring also treats MongoDB as required; `/healthz` reports degraded/unready rather than silently writing to files.
-- This supersedes the existing “hybrid store / best-effort mirror” pattern for new features. Captured in ADR-005 (to be written before Phase 0 starts).
+- This supersedes the existing “hybrid store / best-effort mirror” pattern for new features. Captured in [ADR 005](decisions/ADR-005-mongodb-primary-persistence.md).
 
 Indexing baselines (every collection):
 
@@ -614,6 +614,8 @@ confidence = clip(
 )
 ```
 
+`evidence_count_normalized = min(evidence_count / 10, 1.0)`, where `evidence_count` counts unique, deduplicated evidence references included in the AI context.
+
 Mapped to bands: `low` (<0.4), `medium` (0.4–0.75), `high` (>0.75). The breakdown is shown in the UI so operators can see why a brief is rated as it is. Calibration against `ai_feedback` outcomes is a Phase 5 task.
 
 ### AI Cost and Latency Budget
@@ -624,6 +626,7 @@ Applies to every AI call HealthOps makes (Incident Brief, postmortem draft, log 
 - Token cap: 8k input / 1k output per call by default; tunable per use case.
 - Evidence cap: max 50 evidence items in context; over the cap, items are summarized by deterministic rollups (counts, top-N fingerprints) before being sent.
 - Per-incident AI spend cap (configurable, default $0.50 USD-equivalent across all providers); exceeded calls are queued for manual trigger only.
+- Provider/model price table is maintained in MongoDB-backed AI config as `modelPricing` with provider, model, input token cost, output token cost, currency, and effective date.
 - Provider rate limit: token-bucket per provider in `AIService`, leaving 20% headroom for the user’s own application of the same key.
 - All costs and latencies recorded in `ai_investigations` for the AI Workload Monitoring feature.
 
@@ -704,7 +707,7 @@ Goal: commit to MongoDB-as-primary and migrate existing file-backed data so Phas
 
 Build:
 
-1. ADR-005: “MongoDB is the primary persistence layer for AI-native features.”
+1. [ADR 005](decisions/ADR-005-mongodb-primary-persistence.md): “MongoDB is the primary persistence layer for AI-native features.”
 2. Migrate existing `FileMySQLRepository` (JSONL) data into a MongoDB `mysql_samples` / `mysql_deltas` collections. Keep the file repo as a one-time export source.
 3. Migrate `IncidentRepository` (in-memory) to MongoDB `incidents` collection.
 4. Migrate `FileNotificationOutbox` and `FileAIQueue` to MongoDB-backed implementations.
@@ -715,6 +718,7 @@ Exit metrics:
 
 - 100% of new writes for the listed collections go to MongoDB.
 - Migration script validated on a copy of production data; row counts match within 0.1%.
+- Incidents created during the cutover window are not lost, verified by replaying the audit log and comparing expected incident IDs/transitions against MongoDB.
 - Service refuses to enable AI features when MongoDB ping fails; `/healthz` reports degraded/unready instead of enabling file-backed writes.
 
 ### Phase 1: Evidence Backbone
@@ -739,6 +743,7 @@ Exit metrics:
 
 - ≥ 95% of newly-opened incidents get an AI brief generated within 30s.
 - Brief includes ≥ 3 evidence citations on average.
+- Baseline alert-to-incident ratio captured before Phase 4 correlation changes.
 - Operator “useful” rating ≥ 70% on `ai_feedback` over a 2-week window.
 - Eval harness pass rate ≥ 90% on the fixture set.
 
