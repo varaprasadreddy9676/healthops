@@ -1921,7 +1921,9 @@ These rules are loaded at startup and can be managed via the Alert Rules API.
 |----------|----------|---------|-------------|
 | `CONFIG_PATH` | No | `config/default.json` | Config file location |
 | `STATE_PATH` | No | `data/state.json` | Local state file |
-| `MONGODB_URI` | No | — | Enable MongoDB mirroring |
+| `DATA_DIR` | No | `backend/data` | Directory for JSONL/file-backed repositories |
+| `STORAGE_BACKEND` | No | `file` | Phase 0 repository backend. Set to `mongo` to persist incidents, notification outbox, and AI queue in MongoDB. Requires `MONGODB_URI`; service fails to start if Mongo is unreachable. |
+| `MONGODB_URI` | No | — | Enable MongoDB mirroring (HybridStore) and provide the client used by Mongo-backed repositories |
 | `MONGODB_DATABASE` | No | `healthops` | MongoDB database name |
 | `MONGODB_COLLECTION_PREFIX` | No | `healthops` | MongoDB collection prefix |
 | `{check.mysql.dsnEnv}` | Per check | — | MySQL DSN (never logged) |

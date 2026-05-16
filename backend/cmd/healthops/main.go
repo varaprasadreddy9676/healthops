@@ -7,10 +7,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
 	"medics-health-check/backend/internal/monitoring"
 	"medics-health-check/backend/internal/monitoring/ai"
 	airepositories "medics-health-check/backend/internal/monitoring/ai/repositories"
@@ -18,6 +18,7 @@ import (
 	"medics-health-check/backend/internal/monitoring/notify"
 	"medics-health-check/backend/internal/monitoring/repositories"
 
+	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
@@ -37,6 +38,11 @@ func main() {
 	mongoURI := os.Getenv("MONGODB_URI")
 	mongoDB := envOrDefault("MONGODB_DATABASE", "healthops")
 	mongoPrefix := envOrDefault("MONGODB_COLLECTION_PREFIX", "healthops")
+	storageBackend := strings.ToLower(envOrDefault("STORAGE_BACKEND", "file"))
+	useMongoPhase0 := storageBackend == "mongo"
+	if useMongoPhase0 && mongoURI == "" {
+		logger.Fatalf("STORAGE_BACKEND=mongo requires MONGODB_URI to be set")
+	}
 
 	cfg, err := monitoring.LoadConfig(configPath)
 	if err != nil {
@@ -84,6 +90,9 @@ func main() {
 		var err error
 		mongoClient, err = mongo.Connect(clientOpts)
 		if err != nil {
+			if useMongoPhase0 {
+				logger.Fatalf("STORAGE_BACKEND=mongo but failed to connect to MongoDB: %v", err)
+			}
 			logger.Printf("Warning: Failed to connect to MongoDB for repositories: %v", err)
 			logger.Printf("Repositories will use file-based fallback")
 			mongoClient = nil
@@ -91,6 +100,11 @@ func main() {
 			// Ping to verify connection
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			if err := mongoClient.Ping(ctx, nil); err != nil {
+				if useMongoPhase0 {
+					cancel()
+					_ = mongoClient.Disconnect(context.Background())
+					logger.Fatalf("STORAGE_BACKEND=mongo but MongoDB ping failed: %v", err)
+				}
 				logger.Printf("Warning: MongoDB ping for repositories failed: %v", err)
 				logger.Printf("Repositories will use file-based fallback")
 				_ = mongoClient.Disconnect(context.Background())
@@ -154,8 +168,28 @@ func main() {
 		}
 	}
 
-	// Initialize incident manager
-	incidentRepo := monitoring.NewMemoryIncidentRepository()
+	// Initialize incident manager. STORAGE_BACKEND=mongo swaps in the
+	// MongoDB-backed implementation so incidents survive process restarts.
+	var incidentRepo monitoring.IncidentRepository
+	var pruneIncidentRepo monitoring.Prunable
+	if useMongoPhase0 && mongoClient != nil {
+		mongoIncRepo, err := repositories.NewMongoIncidentRepository(mongoClient, mongoDB, mongoPrefix)
+		if err != nil {
+			logger.Fatalf("init mongo incident repository: %v", err)
+		}
+		incidentRepo = mongoIncRepo
+		pruneIncidentRepo = mongoIncRepo
+		logger.Printf("Incident repository: MongoDB (collection %s_incidents)", mongoPrefix)
+	} else {
+		memRepo := monitoring.NewMemoryIncidentRepository()
+		incidentRepo = memRepo
+		pruneIncidentRepo = memRepo
+		if useMongoPhase0 {
+			logger.Printf("WARNING: STORAGE_BACKEND=mongo requested but MongoDB unavailable — using in-memory incident repository")
+		} else {
+			logger.Printf("Incident repository: in-memory (set STORAGE_BACKEND=mongo to persist)")
+		}
+	}
 	incidentManager := monitoring.NewIncidentManager(incidentRepo, logger)
 	service.SetIncidentManager(incidentManager)
 
@@ -166,10 +200,27 @@ func main() {
 		defer close(stopMongoMonitor)
 	}
 
-	// Initialize generic repositories (notification outbox, AI queue, snapshots)
-	outbox, err := notify.NewFileNotificationOutbox(filepath.Join(dataDir, "notification_outbox.jsonl"))
-	if err != nil {
-		logger.Printf("Warning: Failed to init notification outbox: %v", err)
+	// Initialize generic repositories (notification outbox, AI queue, snapshots).
+	// outbox/aiQueue swap to MongoDB when STORAGE_BACKEND=mongo and a Mongo
+	// client is available; otherwise they fall back to file-backed JSONL stores.
+	var outbox monitoring.NotificationOutboxRepository
+	var pruneOutbox monitoring.Prunable
+	if useMongoPhase0 && mongoClient != nil {
+		mongoOutbox, err := repositories.NewMongoNotificationOutbox(mongoClient, mongoDB, mongoPrefix)
+		if err != nil {
+			logger.Fatalf("init mongo notification outbox: %v", err)
+		}
+		outbox = mongoOutbox
+		pruneOutbox = mongoOutbox
+		logger.Printf("Notification outbox: MongoDB (collection %s_notification_outbox)", mongoPrefix)
+	} else {
+		fileOutbox, err := notify.NewFileNotificationOutbox(filepath.Join(dataDir, "notification_outbox.jsonl"))
+		if err != nil {
+			logger.Printf("Warning: Failed to init notification outbox: %v", err)
+		} else {
+			outbox = fileOutbox
+			pruneOutbox = fileOutbox
+		}
 	}
 
 	// Initialize notification channel store and dispatcher
@@ -209,9 +260,24 @@ func main() {
 		logger.Printf("Notification channels initialized")
 	}
 
-	aiQueue, err := ai.NewFileAIQueue(dataDir)
-	if err != nil {
-		logger.Printf("Warning: Failed to init AI queue: %v", err)
+	var aiQueue monitoring.AIQueueRepository
+	var pruneAIQueue monitoring.Prunable
+	if useMongoPhase0 && mongoClient != nil {
+		mongoQueue, err := airepositories.NewMongoAIQueue(mongoClient, mongoDB, mongoPrefix)
+		if err != nil {
+			logger.Fatalf("init mongo ai queue: %v", err)
+		}
+		aiQueue = mongoQueue
+		pruneAIQueue = mongoQueue
+		logger.Printf("AI queue: MongoDB (collections %s_ai_queue, %s_ai_results)", mongoPrefix, mongoPrefix)
+	} else {
+		fileQueue, err := ai.NewFileAIQueue(dataDir)
+		if err != nil {
+			logger.Printf("Warning: Failed to init AI queue: %v", err)
+		} else {
+			aiQueue = fileQueue
+			pruneAIQueue = fileQueue
+		}
 	}
 
 	snapshotRepo, err := monitoring.NewFileSnapshotRepository(filepath.Join(dataDir, "incident_snapshots.jsonl"))
@@ -318,14 +384,16 @@ func main() {
 	if snapshotRepo != nil {
 		retentionJob.Register("snapshots", snapshotRepo, retentionCfg.SnapshotRetentionDays)
 	}
-	if outbox != nil {
-		retentionJob.Register("notifications", outbox, retentionCfg.NotificationRetentionDays)
+	if pruneOutbox != nil {
+		retentionJob.Register("notifications", pruneOutbox, retentionCfg.NotificationRetentionDays)
 	}
-	if aiQueue != nil {
-		retentionJob.Register("ai_queue", aiQueue, retentionCfg.AIQueueRetentionDays)
+	if pruneAIQueue != nil {
+		retentionJob.Register("ai_queue", pruneAIQueue, retentionCfg.AIQueueRetentionDays)
 	}
-	// Prune resolved incidents to prevent unbounded memory growth
-	retentionJob.Register("incidents", incidentRepo, retentionCfg.IncidentRetentionDays)
+	// Prune resolved incidents to prevent unbounded memory/collection growth
+	if pruneIncidentRepo != nil {
+		retentionJob.Register("incidents", pruneIncidentRepo, retentionCfg.IncidentRetentionDays)
+	}
 	// Prune old server metric snapshots
 	retentionJob.Register("server_metrics", serverMetricsRepo, retentionCfg.SnapshotRetentionDays)
 

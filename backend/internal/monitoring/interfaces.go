@@ -21,6 +21,10 @@ type AIQueueRepository interface {
 	PruneBefore(cutoff time.Time) error
 	ListPendingItems(limit int) ([]AIQueueItem, error)
 	AllItems() []AIQueueItem
+	// GetResults returns AI analysis results for a specific incident.
+	GetResults(incidentID string) []AIAnalysisResult
+	// AllResults returns the most recent AI analysis results, up to limit.
+	AllResults(limit int) []AIAnalysisResult
 }
 
 // MySQLMetricsRepository defines persistence for MySQL samples and deltas.
