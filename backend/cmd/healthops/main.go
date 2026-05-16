@@ -284,12 +284,16 @@ func main() {
 	if channelStore != nil {
 		notificationDispatcher = notify.NewNotificationDispatcher(channelStore, outbox, logger)
 		defer notificationDispatcher.Stop() // flush pending notifications on shutdown
-		// Set dashboard URL for email links
-		addr := cfg.Server.Addr
-		if addr == "" || addr == ":8080" {
-			addr = "http://localhost:8080"
+		// Set dashboard URL for email links.
+		// HEALTHOPS_PUBLIC_URL takes precedence (set this in production).
+		dashURL := os.Getenv("HEALTHOPS_PUBLIC_URL")
+		if dashURL == "" {
+			dashURL = cfg.Server.Addr
+			if dashURL == "" || dashURL == ":8080" {
+				dashURL = "http://localhost:8080"
+			}
 		}
-		notificationDispatcher.SetDashboardURL(addr)
+		notificationDispatcher.SetDashboardURL(dashURL)
 		notificationAPIHandler := notify.NewNotificationAPIHandler(channelStore, notificationDispatcher, cfg)
 		service.SetNotifyRoutes(notificationAPIHandler)
 		logger.Printf("Notification channels initialized")
