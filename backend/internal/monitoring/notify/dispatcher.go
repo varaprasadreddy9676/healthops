@@ -450,10 +450,12 @@ func (d *NotificationDispatcher) sendDigest(ch NotificationChannelConfig, payloa
 			ids[i] = p.IncidentID
 		}
 		digestJSON, _ := json.Marshal(payloads)
+		incidentSummary := strings.Join(ids, ",")
 		evt := monitoring.NotificationEvent{
-			IncidentID:  strings.Join(ids, ","),
-			Channel:     fmt.Sprintf("%s:%s", ch.Type, ch.Name),
-			PayloadJSON: string(digestJSON),
+			NotificationID: fmt.Sprintf("notif-digest-%d", time.Now().UnixNano()),
+			IncidentID:     incidentSummary,
+			Channel:        fmt.Sprintf("%s:%s", ch.Type, ch.Name),
+			PayloadJSON:    string(digestJSON),
 		}
 		if err != nil {
 			evt.LastError = err.Error()
@@ -566,6 +568,30 @@ type TemplateData struct {
 	Year                 int
 }
 
+// DigestTemplateData is the template context for webhook digest notifications.
+// It carries digest-level summary fields plus compatibility fields (CheckName, Status,
+// Severity) so that single-incident templates like
+//
+//	"subject": "[HealthOps] {{.CheckName}} is {{.Status}} ({{.Severity}})"
+//
+// produce readable output without any template changes.
+type DigestTemplateData struct {
+	Incidents    []NotificationPayload
+	Count        int
+	Critical     int
+	Warning      int
+	Highest      string // "critical" | "warning" | "info"
+	DashboardURL string
+	Year         int
+
+	// Compatibility fields so single-incident body templates render sensibly.
+	CheckName string // e.g. "3 checks"
+	Status    string // "failing"
+	Severity  string // mirrors Highest
+	Message   string // short summary
+	Server    string // ""
+}
+
 func (d *NotificationDispatcher) sendWebhookWithTemplate(ch NotificationChannelConfig, p NotificationPayload) (int, string, error) {
 	incidentURL := ""
 	if d.dashboardURL != "" {
@@ -578,13 +604,15 @@ func (d *NotificationDispatcher) sendWebhookWithTemplate(ch NotificationChannelC
 		Year:                 time.Now().Year(),
 	}
 
-	// htmlEmail renders the full HTML email and returns a JSON-encoded string
-	// (with surrounding quotes) safe for embedding in a JSON template field.
+	// htmlEmail / htmlDigestEmail both return a JSON-encoded HTML string (with surrounding
+	// quotes) safe for embedding directly in a JSON template field.
+	// htmlEmail is polymorphic: it handles both TemplateData (single) and DigestTemplateData.
 	funcMap := template.FuncMap{
-		"htmlEmail": func(td TemplateData) (string, error) {
-			html := buildHTMLEmail(td.NotificationPayload, td.DashboardURL)
-			b, err := json.Marshal(html)
-			return string(b), err
+		"htmlEmail": func(td interface{}) (string, error) {
+			return renderHTMLEmailForTemplate(td, d.dashboardURL)
+		},
+		"htmlDigestEmail": func(td interface{}) (string, error) {
+			return renderHTMLEmailForTemplate(td, d.dashboardURL)
 		},
 	}
 
@@ -597,6 +625,60 @@ func (d *NotificationDispatcher) sendWebhookWithTemplate(ch NotificationChannelC
 		return 0, "", fmt.Errorf("render body template: %w", err)
 	}
 	return d.postRaw(ch.WebhookURL, buf.Bytes(), ch.Headers)
+}
+
+func (d *NotificationDispatcher) sendWebhookDigestWithTemplate(ch NotificationChannelConfig, payloads []NotificationPayload) error {
+	critical, warning, _, highest := digestSummary(payloads)
+	data := DigestTemplateData{
+		Incidents:    payloads,
+		Count:        len(payloads),
+		Critical:     critical,
+		Warning:      warning,
+		Highest:      highest,
+		DashboardURL: d.dashboardURL,
+		Year:         time.Now().Year(),
+		CheckName:    fmt.Sprintf("%d checks", len(payloads)),
+		Status:       "failing",
+		Severity:     highest,
+		Message:      fmt.Sprintf("%d checks are currently failing", len(payloads)),
+	}
+
+	funcMap := template.FuncMap{
+		"htmlEmail": func(td interface{}) (string, error) {
+			return renderHTMLEmailForTemplate(td, d.dashboardURL)
+		},
+		"htmlDigestEmail": func(td interface{}) (string, error) {
+			return renderHTMLEmailForTemplate(td, d.dashboardURL)
+		},
+	}
+
+	tmpl, err := template.New("body").Funcs(funcMap).Parse(ch.BodyTemplate)
+	if err != nil {
+		return fmt.Errorf("parse body template: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return fmt.Errorf("render body template: %w", err)
+	}
+	_, _, err = d.postRaw(ch.WebhookURL, buf.Bytes(), ch.Headers)
+	return err
+}
+
+// renderHTMLEmailForTemplate is the shared implementation behind both {{htmlEmail .}} and
+// {{htmlDigestEmail .}}. It inspects the runtime type and produces the appropriate HTML,
+// then JSON-encodes it so it is safe to embed as a JSON string value.
+func renderHTMLEmailForTemplate(td interface{}, dashURL string) (string, error) {
+	var html string
+	switch v := td.(type) {
+	case TemplateData:
+		html = buildHTMLEmail(v.NotificationPayload, v.DashboardURL)
+	case DigestTemplateData:
+		html = buildDigestHTMLEmail(v.Incidents, v.Critical, v.Warning, v.Highest, v.DashboardURL)
+	default:
+		return "", fmt.Errorf("htmlEmail: unsupported template data type %T", td)
+	}
+	b, err := json.Marshal(html)
+	return string(b), err
 }
 
 // --- Email (SMTP) ---
@@ -985,6 +1067,9 @@ func (d *NotificationDispatcher) sendDiscordDigest(ch NotificationChannelConfig,
 // --- Webhook Digest ---
 
 func (d *NotificationDispatcher) sendWebhookDigest(ch NotificationChannelConfig, payloads []NotificationPayload) error {
+	if ch.BodyTemplate != "" {
+		return d.sendWebhookDigestWithTemplate(ch, payloads)
+	}
 	body := map[string]interface{}{
 		"type":      "digest",
 		"count":     len(payloads),
