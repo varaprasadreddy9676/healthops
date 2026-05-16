@@ -15,7 +15,7 @@ COPY backend/ ./
 RUN CGO_ENABLED=0 go build -o healthops ./cmd/healthops
 
 # ---- Stage 3: Runtime ----
-FROM alpine:3.20
+FROM alpine:3.23
 RUN apk --no-cache add ca-certificates tzdata procps bind-tools openssh-client su-exec
 WORKDIR /app
 
