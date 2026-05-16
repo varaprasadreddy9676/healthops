@@ -1,13 +1,13 @@
 # HealthOps
 
-> **Self-hosted infrastructure monitoring that runs on a $6/month server and replaces tools costing $300–500/month.**
+> **AI-native infrastructure monitoring that runs on a $6/month server and replaces tools costing $300–500/month.**
 
 [![License](https://img.shields.io/github/license/varaprasadreddy9676/healthops)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/varaprasadreddy9676/healthops/ci.yml?label=CI)](https://github.com/varaprasadreddy9676/healthops/actions)
 [![Docker](https://img.shields.io/badge/Docker-ready-blue)](https://github.com/varaprasadreddy9676/healthops/pkgs/container/healthops)
 [![Go](https://img.shields.io/badge/Go-1.23-00ADD8)](https://golang.org)
 
-HealthOps monitors your servers, APIs, databases, and services — alerts you the moment something breaks, and uses AI to tell you why.
+HealthOps monitors your servers, APIs, databases, and services — alerts you the moment something breaks, **automatically runs AI root-cause analysis**, and tells you exactly what to fix. All self-hosted. All open source.
 
 One Docker Compose command. No agents to install. No per-host fees. No seat limits.
 
@@ -33,19 +33,153 @@ One Docker Compose command. No agents to install. No per-host fees. No seat limi
 
 ---
 
+## What makes HealthOps different
+
+Most monitoring tools tell you **that** something broke. HealthOps tells you **why** — automatically, before you even open the dashboard.
+
+| Capability | Datadog | New Relic | PagerDuty | Nagios/Zabbix | **HealthOps** |
+|-----------|---------|-----------|-----------|---------------|---------------|
+| HTTP/API checks | ✅ | ✅ | ❌ | ✅ | ✅ |
+| MySQL deep monitoring | ✅ (agent) | ✅ (agent) | ❌ | ⚠️ limited | ✅ agentless |
+| SSH agentless server monitoring | ❌ | ❌ | ❌ | ✅ complex config | ✅ modern UI |
+| Auto AI incident analysis | 💰 enterprise only | 💰 enterprise only | 💰 enterprise only | ❌ | ✅ free (BYOK) |
+| Auto RCA on every incident | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Self-hosted / data sovereignty | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Runs on $6/month VPS | ❌ | ❌ | ❌ | ⚠️ complex | ✅ |
+| Monthly cost for 5-person team | $300–500 | $250 | $100 (alerts only) | free (but your time) | **$6–10** |
+
+---
+
+## AI-native operations — not AI bolted on
+
+Most tools treat AI as an upsell. HealthOps is built AI-first: every incident automatically triggers analysis, so by the time you open the dashboard, the answer is already there.
+
+### How it works — zero clicks required
+
+```
+Check fails
+    ↓
+Alert rule triggers → Incident created + Evidence snapshot captured
+    ↓
+Incident auto-enqueued for AI analysis (no manual action needed)
+    ↓
+AI worker picks it up within 5 seconds
+    ↓
+AI reads: check type, target, failure message, response metrics,
+          historical pattern, evidence snapshot at failure time
+    ↓
+AI produces: what failed, probable root cause, what to check next
+    ↓
+Analysis saved to incident detail view — ready when you open it
+```
+
+You wake up, open the incident, and the RCA is already written. Not a vague "something failed" — a specific, context-aware analysis of your actual infrastructure.
+
+### Bring any AI provider — including free local models
+
+| Provider | Cost | Privacy | Models |
+|----------|------|---------|--------|
+| **Ollama** | Free | 100% local, no data leaves your server | Llama 3, Mistral, Phi, any GGUF |
+| OpenAI | ~$0.01–0.05 per analysis | OpenAI's policy | GPT-4o, GPT-4, GPT-3.5 |
+| Anthropic | ~$0.01–0.05 per analysis | Anthropic's policy | Claude 3.5 Sonnet, Haiku |
+| Google | ~$0.01 per analysis | Google's policy | Gemini 1.5 Flash/Pro |
+| Custom | Varies | Your control | Any OpenAI-compatible API |
+
+**Using Ollama means completely free, completely private AI analysis.** Run a local model on the same server as HealthOps — no API keys, no internet calls, no per-analysis cost.
+
+API keys are stored encrypted with AES-256-GCM at rest.
+
+### What the AI actually analyzes
+
+When an incident fires, the AI receives full context:
+
+- **Check details** — what type of check (API, MySQL, SSH, TCP), what target, what the expected behavior was
+- **Failure message** — the exact error: HTTP 503, connection refused, process not found, replication lag 45s
+- **Response metrics** — latency at failure time, how it compares to the check's normal baseline
+- **Evidence snapshot** — a freeze-frame of your system state at the moment of failure: MySQL status variables, process list, disk usage — whatever was collected
+- **Incident history** — has this check failed before? What pattern? First time, or recurring?
+
+The AI uses all of this to produce a targeted analysis — not a generic "check your logs" response.
+
+### Configurable AI prompts
+
+You control exactly what the AI looks for. Edit the prompt template per check type:
+
+- API checks: focus on upstream dependencies, DNS, certificate expiry
+- MySQL checks: focus on connection exhaustion, slow query patterns, replication
+- Process checks: focus on OOM kills, crash loops, dependency failures
+- SSH server checks: focus on resource saturation, disk full, load spike causes
+
+No need to re-explain your infrastructure to the AI every time — the prompt template carries that context automatically.
+
+### AI for MySQL deep analysis
+
+MySQL issues are notoriously hard to diagnose from a "database is slow" alert alone. HealthOps captures 30+ MySQL status variables at incident time and feeds them directly to the AI:
+
+```
+Connections: 245/256 (95.7% utilized)        ← near max_connections
+Slow queries: 847/sec (normally ~2/sec)       ← 400x spike
+Lock wait time: 12,400ms avg                  ← writes blocking reads
+InnoDB buffer pool hit: 62% (normally 98%)    ← cache thrashing
+```
+
+The AI sees this snapshot and can say: *"Connection pool is near exhaustion — likely caused by a query holding locks which is causing downstream queries to pile up waiting. Check for long-running transactions with SHOW PROCESSLIST. Consider increasing innodb_lock_wait_timeout or finding the blocking query."*
+
+That's a specific, actionable RCA — not "database might be slow."
+
+---
+
+## SSH server monitoring — agentless, modern UI
+
+Most modern monitoring tools require installing an agent (a daemon process) on every server you want to monitor. This creates real problems:
+
+- You need SSH access and sudo permissions just to set up monitoring
+- Agents don't work on servers you don't control (client servers, managed hosting)
+- Agents add processes, RAM usage, and maintenance burden to every server
+- If the agent crashes, you're blind
+
+**HealthOps monitors remote servers over SSH — nothing installed on the target.** If you can SSH in, you can monitor it.
+
+What HealthOps collects over SSH every interval:
+- **CPU usage** — computed from `/proc/stat` (two samples, accurate %)
+- **Memory** — total, used, usage % from `free -b`
+- **Disk** — total, used, usage % from `df -B1`
+- **Load averages** — 1m, 5m, 15m from `/proc/loadavg`
+- **Top processes** — top 15 by memory from `ps aux`
+- **Disk I/O** — read/write IOPS from `/proc/diskstats`
+- **Uptime** — seconds since boot
+
+Built-in thresholds fire alerts automatically: CPU >80% = warning, >95% = critical. Memory >85% = warning. Disk >85% = warning. All configurable.
+
+### Who has SSH monitoring?
+
+| Tool | SSH monitoring | Setup experience |
+|------|---------------|-----------------|
+| Datadog | ❌ agent only | Install agent on every host |
+| New Relic | ❌ agent only | Install agent on every host |
+| UptimeRobot | ❌ | HTTP, port, ping only |
+| Better Uptime | ❌ | HTTP, keyword, port only |
+| Prometheus | ❌ | Install Node Exporter on every host |
+| Nagios | ✅ | `check_by_ssh` plugin — config files, no UI |
+| Zabbix | ✅ | SSH mode buried in complex interface |
+| **HealthOps** | ✅ | Add SSH credentials in UI → monitoring starts |
+
+Nagios and Zabbix have SSH checks but require writing config files by hand, navigating decade-old interfaces, and typically a dedicated engineer to manage. HealthOps gives you the same capability in a modern UI, deployed in one command.
+
+---
+
 ## The problem with existing tools
 
-Most monitoring tools are priced for enterprises — not the teams that need them most.
+| Tool | Monthly cost (5-person team) | What you get |
+|------|------------------------------|--------------|
+| Datadog | $300–500 | Monitoring + alerts. AI only on Enterprise. |
+| New Relic | $250 | Monitoring + alerts. AI is extra. |
+| PagerDuty | $100 | On-call routing only. No monitoring. |
+| Better Uptime | $30–80 | Basic uptime + status page. No deep monitoring. |
+| Nagios/Zabbix | Free software, $200+/month your time | Full monitoring, decade-old UX, no AI. |
+| **HealthOps** | **$6–10 (your VPS)** | **Monitoring + SSH + MySQL + AI RCA + alerting** |
 
-| Tool | Typical cost for a 5-person team | What you get |
-|------|----------------------------------|--------------|
-| Datadog | $300–500/month | Monitoring + alerts |
-| New Relic | $250/month | Monitoring + alerts |
-| PagerDuty | $100/month | On-call only, no monitoring |
-| Better Uptime | $30–80/month | Basic uptime checks only |
-| **HealthOps** | **$6–10/month** (your VPS) | **Monitoring + alerting + AI analysis + MySQL deep monitoring** |
-
-A $6/month Hetzner or DigitalOcean server with 2GB RAM runs HealthOps comfortably for 50+ checks and a small team. Unlimited users, unlimited checks, unlimited notification channels — all included.
+A $6/month Hetzner or DigitalOcean server runs HealthOps for 100+ checks. Unlimited users, unlimited checks, unlimited channels.
 
 ---
 
@@ -53,124 +187,121 @@ A $6/month Hetzner or DigitalOcean server with 2GB RAM runs HealthOps comfortabl
 
 ### Startups and small teams who can't justify enterprise pricing
 
-You have 5–15 servers, a handful of APIs, and a MySQL database. You need to know when things break — before your users do. You don't need a $400/month contract.
-
-HealthOps runs alongside your stack on a small VPS. Configure 30 checks in 20 minutes. Get Slack alerts when anything fails. Done.
+5–15 servers, a few APIs, a MySQL database. You need to know when things break — and why — without a $400/month contract. HealthOps runs on a small VPS next to your stack. Configure 30 checks in 20 minutes. When something breaks, the AI tells you why before you've finished reading the Slack alert.
 
 ### Freelancers and agencies managing multiple clients
 
-You're responsible for 10–30 client websites. One dashboard shows you everything. You know about the outage before your client calls. You look professional.
+Responsible for 10–30 client websites and servers. One dashboard shows everything. You know about the outage before the client calls. The AI analysis gives you something specific to say when they do. No per-site pricing — add as many clients as you want.
 
-No per-site pricing. Add as many clients as you want.
+### DevOps engineers who hate noisy alerts and manual RCA
 
-### DevOps engineers who hate noisy alerts
+Alert fatigue is real. HealthOps groups failures into single incidents, deduplicates across channels, and respects cooldowns. You get one Slack message, not thirty. And when it fires, you open the incident and the root-cause analysis is already written. Less 2am debugging. Less "why did this happen again?"
 
-Alert fatigue is real. HealthOps groups related failures into a single incident, deduplicates notifications across channels, and respects cooldowns. You get one Slack message — not thirty.
+### Self-hosted operators who care about privacy and compliance
 
-And when something does fire, the AI analysis tells you exactly what happened and what to check first.
-
-### Self-hosted SaaS operators who care about data sovereignty
-
-Your monitoring data doesn't need to live in a vendor's cloud. HealthOps is fully self-hosted — your data stays on your servers, behind your firewall. GDPR, SOC 2, internal compliance — all simpler when you own the stack.
+Your monitoring data — and your AI analysis — stays on your servers. Use Ollama for completely local, private AI with no external API calls. GDPR, SOC 2, HIPAA-adjacent compliance is simpler when nothing leaves your network.
 
 ---
 
 ## Real-world scenarios
 
-### "My checkout API went down at 2am and I didn't know for 45 minutes"
+### "My checkout API went down at 2am. I didn't know for 45 minutes."
 
-Set up an API check on your checkout endpoint. When it fails:
-- HealthOps creates an incident immediately
-- Slack/PagerDuty fires within 60 seconds
-- The AI analyzes the failure pattern and tells you whether it's a database connection issue, a timeout spike, or an upstream dependency
+With HealthOps:
+- API check detects failure within 60 seconds
+- Incident created, evidence captured, Slack alert fires
+- AI analyzes: response code, latency pattern, whether it's a total outage or degradation
+- You wake up to: "Checkout API returning 503. Likely cause: upstream payment service timeout based on response pattern. Check payment-service logs and connection pool."
 
-No more waking up to angry customer emails.
-
----
-
-### "Our MySQL database is slow but we don't know why"
-
-HealthOps's MySQL deep monitoring runs `SHOW GLOBAL STATUS` every 30 seconds and tracks:
-- Connection pool utilization (how close to max_connections?)
-- Slow query rate (queries/sec taking >1s)
-- Lock wait time (are writes blocking reads?)
-- InnoDB buffer pool hit rate (is MySQL actually using RAM?)
-- Replication lag (if you have replicas)
-
-When connection utilization hits 85%, you get a warning. At 95%, a critical alert fires. You fix it before the database starts rejecting connections.
+You fix it in minutes. Customers never notice.
 
 ---
 
-### "We have 5 microservices and I'm manually SSHing into servers to check if processes are running"
+### "Our MySQL is slow. We spent 3 hours on a call trying to figure out why."
 
-Add a process check for each service:
+HealthOps MySQL monitoring captures 30+ status variables every 30 seconds. When a threshold is breached:
 
-| Service | Check type | Target |
-|---------|-----------|--------|
-| API server | `process` | `node` |
-| Background worker | `process` | `worker.py` |
-| nginx | `process` | `nginx` |
-| Redis | `tcp` | `localhost:6379` |
-| Your app's API | `api` | `https://api.myapp.com/health` |
+- Alert fires with current connection count, slow query rate, lock wait time
+- Incident created with a full MySQL snapshot as evidence
+- AI analyzes the snapshot: "Connection utilization at 94%. Slow query rate spiked 400x at 03:42 UTC. InnoDB buffer pool hit rate dropped to 62%. A long-running transaction is likely holding locks and causing a pile-up. Run: `SHOW PROCESSLIST` to identify blocking queries."
 
-If any process dies, you get a Slack message in under 60 seconds. No more SSH loops.
+3 hours of debugging → 10 minutes of reading.
 
 ---
 
-### "A client called to say their website is down and I had no idea"
+### "We're manually SSHing into 6 servers every morning to check if things are running."
 
-Add an API check for each client's domain. Set the interval to 60 seconds. Configure a separate Slack channel (or email) per client if you want.
+Add SSH-based server checks and process checks:
 
-When their site goes down, you know before they do. When it recovers, you get a resolution alert so you know the issue cleared — without having to check manually.
+| What to check | Type | Config |
+|--------------|------|--------|
+| CPU / memory / disk on prod server | `ssh` | Host + SSH key |
+| nginx process running | `process` | `nginx` |
+| Background worker running | `process` | `worker.py` |
+| Database port open | `tcp` | `db.internal:5432` |
+| Application API healthy | `api` | `https://api.myapp.com/health` |
+
+Dashboard shows everything green or red. If anything goes wrong overnight, you get a Slack alert — and an AI analysis — while it's still dark outside.
 
 ---
 
-### "I deployed a change and response times went up but I didn't catch it for hours"
+### "A client called to say their site is down. We had no idea."
 
-Set a `warningThresholdMs` on your API checks. If your endpoint normally responds in 150ms and it starts taking 800ms after a deploy, HealthOps fires a warning alert immediately.
+Add an API check per client domain, 60-second interval. Optional: separate Slack channel per client.
 
-The analytics page shows you response time trends over the last 7 days — so you can see exactly when the degradation started and correlate it with your deployment.
+When their site goes down, you know first. When it recovers, you get a resolution alert — no need to manually verify. The AI gives you a summary of what happened and how long it was down, ready to forward to the client.
 
 ---
 
-### "We have 3 monitoring tools and none of them talk to each other"
+### "We deployed a change. Response times degraded. We caught it 4 hours later."
 
-HealthOps replaces:
+Set `warningThresholdMs: 500` on your API checks. If your endpoint normally responds in 150ms and spikes to 800ms after a deploy, HealthOps fires a warning within 60 seconds.
 
-- **UptimeRobot / Better Uptime** — API and TCP checks ✓
-- **Basic server monitoring (htop over SSH)** — SSH-based CPU, memory, disk, load monitoring ✓
-- **Manual MySQL inspection** — MySQL deep monitoring with 9 built-in alert rules ✓
-- **PagerDuty** (for small teams) — notification channels with deduplication ✓
-- **AI RCA tools** — incident analysis with your own API key ✓
+The analytics page shows response time trends over 7 days with a timeline. You see the exact minute the degradation started, correlated with your deploy.
 
-One dashboard. One place to look. One tool to maintain.
+---
+
+### "We're running Datadog, PagerDuty, and a custom Grafana dashboard. None of them talk to each other."
+
+HealthOps replaces the whole stack:
+
+| What you have | What HealthOps replaces it with |
+|-------------|-------------------------------|
+| UptimeRobot / Better Uptime | API, TCP, process checks with retry + cooldown |
+| SSH + htop for server stats | SSH-based CPU, memory, disk, load monitoring |
+| Manual MySQL inspection | MySQL deep monitoring, 9 alert rules, AI analysis |
+| PagerDuty | Multi-channel notifications with smart dedup |
+| Postmortem doc writing | Auto-generated AI incident analysis and RCA |
+| Grafana dashboards | Built-in analytics with uptime, response time, failure rate |
+
+One tool. One dashboard. One place to look at 3am.
 
 ---
 
 ## Why it runs on minimal infrastructure
 
-Most monitoring tools run heavy agents on every server you monitor. HealthOps is different:
+Most monitoring tools run agents on every server. HealthOps is agentless:
 
-- **Agentless** — HealthOps reaches out to your services over HTTP, TCP, SSH, or MySQL connections. Nothing runs on your monitored servers (except an SSH key file for remote checks).
-- **Go backend** — the entire backend is a single compiled binary using ~50–80MB RAM at rest.
-- **Efficient scheduler** — checks run on per-check timers, not a global polling loop. 100 checks at 60-second intervals generates 100 requests/minute — trivial for any server.
-- **File-first storage** — works without MongoDB. Add MongoDB when you want persistence across restarts and a larger team.
+- **No agent installation** — HealthOps reaches out over HTTP, TCP, SSH, or MySQL. Nothing runs on monitored servers except your existing SSH key.
+- **Go binary** — single compiled binary, ~50–80MB RAM at rest. No JVM, no runtime, no interpreter.
+- **Efficient scheduler** — per-check timers, not a global polling loop. 100 checks at 60-second intervals = 100 requests/minute. Trivial.
+- **File-first storage** — works without MongoDB. Add it when you need team access and persistence across restarts.
 
-**Tested resource usage:**
+**Measured resource usage:**
 
-| Setup | RAM | CPU (idle) | Disk |
-|-------|-----|-----------|------|
+| Setup | RAM | CPU (idle) | Disk/month |
+|-------|-----|-----------|------------|
 | 20 checks, file storage | ~60 MB | <1% | <100 MB |
-| 50 checks, MongoDB | ~120 MB | <2% | ~1 GB/month (with 7-day retention) |
-| 100 checks, MongoDB | ~180 MB | <3% | ~2 GB/month |
+| 50 checks + MongoDB | ~120 MB | <2% | ~1 GB |
+| 100 checks + MongoDB | ~180 MB | <3% | ~2 GB |
 
-A $6/month Hetzner CX11 (2 vCPU, 2GB RAM) handles 100+ checks with room to spare.
+A $6/month Hetzner CX11 (2 vCPU, 2GB RAM) runs 100+ checks, MongoDB, and AI analysis with room to spare.
 
 ---
 
 ## Quick Start
 
-### Option A — Try the Demo (no config needed)
+### Option A — Try the Demo (2 minutes, no config)
 
 ```bash
 git clone https://github.com/varaprasadreddy9676/healthops.git
@@ -178,21 +309,21 @@ cd healthops
 docker compose -f compose.demo.yaml up -d --build
 ```
 
-Open **http://localhost:18080** and log in with `admin` / `healthops-demo-admin`.
+Open **http://localhost:18080** — log in with `admin` / `healthops-demo-admin`.
 
-The demo includes HealthOps, MongoDB, MySQL, Redis, nginx, two Linux SSH targets, a controllable API, a log emitter, and a built-in AI provider. AI incident analysis works immediately — no external API key needed.
+The demo includes a full stack: HealthOps, MongoDB, MySQL, Redis, nginx, two Linux SSH targets, a controllable API, a log emitter, and a **built-in local AI provider**. AI analysis works immediately — no API key, no internet call, no cost.
 
-Trigger realistic failure scenarios:
+Trigger realistic failure scenarios and watch AI RCA in action:
 
 ```bash
-scripts/demo-scenario.sh api-slow    # API response times spike
-scripts/demo-scenario.sh api-down    # API goes offline → incident fires
-scripts/demo-scenario.sh mysql-load  # MySQL under load → alert triggers
-scripts/demo-scenario.sh rca         # AI root-cause analysis runs
-scripts/demo-scenario.sh recover     # everything goes green
+scripts/demo-scenario.sh api-down    # API goes offline → incident + AI analysis fires
+scripts/demo-scenario.sh api-slow    # API slows → warning alert
+scripts/demo-scenario.sh mysql-load  # MySQL under load → alert + AI MySQL analysis
+scripts/demo-scenario.sh rca         # Trigger full AI root-cause analysis
+scripts/demo-scenario.sh recover     # Everything goes green, resolution alerts fire
 ```
 
-Stop and wipe demo data:
+Stop and wipe:
 
 ```bash
 docker compose -f compose.demo.yaml down -v
@@ -200,21 +331,21 @@ docker compose -f compose.demo.yaml down -v
 
 ---
 
-### Option B — Production Setup (persistent data)
+### Option B — Production Setup
 
-**Step 1 — Create a `.env` file:**
+**Step 1 — Create `.env`:**
 
 ```bash
 cat > .env << 'EOF'
 # Required: admin password for first login
 HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD=choose-a-strong-password-here
 
-# Recommended: your public URL (needed for email notification links)
+# Recommended: your public URL (email notification links won't work without this)
 # HEALTHOPS_PUBLIC_URL=https://healthops.yourcompany.com
 EOF
 ```
 
-**Step 2 — Clone and start:**
+**Step 2 — Start:**
 
 ```bash
 git clone https://github.com/varaprasadreddy9676/healthops.git
@@ -222,12 +353,9 @@ cd healthops
 docker compose up -d --build
 ```
 
-**Step 3 — Open** http://localhost:8080 — log in with `admin` / your password.
-
-> **Data persists** in Docker volumes. Restart any time with `docker compose up -d`.
+**Step 3 — Open** http://localhost:8080, log in with `admin` / your password.
 
 **Startup timeline:**
-
 ```
 Building image...       (2–5 min first run, ~15 sec after)
 Starting MongoDB...     (~10 seconds)
@@ -236,8 +364,7 @@ Ready at http://localhost:8080
 ```
 
 ```bash
-curl http://localhost:8080/healthz
-# → {"success":true,"data":{"status":"ok"}}
+curl http://localhost:8080/healthz   # → {"success":true,"data":{"status":"ok"}}
 ```
 
 ---
@@ -256,27 +383,50 @@ curl http://localhost:8080/healthz
 
 3. **Save** — check runs immediately, dashboard updates in real time
 
-**All check types:**
+### All check types
 
-| Type | Use for | Example target |
-|------|---------|---------------|
+| Type | Use for | Example |
+|------|---------|---------|
 | `api` | HTTP endpoints, REST APIs, websites | `https://api.myapp.com/health` |
-| `tcp` | Ports — databases, Redis, any TCP service | `db.internal:5432` |
-| `process` | Running processes on monitored servers | `nginx` |
-| `command` | Custom shell scripts, disk checks, anything | `df -h \| grep '9[0-9]%'` |
-| `log` | Log file freshness (has it been written to recently?) | `/var/log/app.log` |
-| `mysql` | MySQL/MariaDB health and performance | DSN via env var |
-| `ssh` | Remote server CPU, memory, disk, load | SSH credentials in config |
+| `tcp` | Ports — databases, Redis, any service | `db.internal:5432` |
+| `process` | Running processes | `nginx` |
+| `command` | Custom scripts, disk checks | `df -h \| awk '$5>90'` |
+| `log` | Log file freshness | `/var/log/app.log` |
+| `mysql` | MySQL/MariaDB health + performance | DSN via env var |
+| `ssh` | Remote server CPU, memory, disk, load | Host + SSH key |
+
+---
+
+## Set Up AI Analysis (5 minutes)
+
+### Option 1: Ollama — free, local, private
+
+```bash
+# Install Ollama on your server
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull llama3
+
+# In HealthOps: Settings → AI Configuration → Add Provider
+# Type: Ollama, URL: http://localhost:11434, Model: llama3
+```
+
+No API key. No cost. No data leaves your server.
+
+### Option 2: OpenAI / Anthropic / Google
+
+In HealthOps: **Settings** → **AI Configuration** → **Add Provider** → paste your API key → **Save**.
+
+AI analysis starts automatically on the next incident. Cost: typically $0.01–0.05 per incident analysis.
 
 ---
 
 ## Set Up Slack Alerts in 3 Steps
 
-1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **Incoming Webhooks** → create a webhook → copy the URL
-2. In HealthOps: **Settings** → **Notification Channels** → **Add Channel** → **Slack** → paste URL
+1. [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **Incoming Webhooks** → create a webhook → copy the URL
+2. HealthOps → **Settings** → **Notification Channels** → **Add Channel** → **Slack** → paste URL
 3. Click **Test** → **Save**
 
-Done. You'll get a Slack message every time a check fails. Same flow for **Email**, **Discord**, **Telegram**, **PagerDuty**, and custom **Webhooks**.
+Same flow for **Email**, **Discord**, **Telegram**, **PagerDuty**, and custom **Webhooks**.
 
 ---
 
@@ -290,15 +440,15 @@ Done. You'll get a Slack message every time a check fails. Same flow for **Email
 | Docker Compose | v2.20+ | Latest |
 | OS | Linux, macOS, Windows (WSL2) | Linux |
 
-**Works on:** Hetzner CX11 ($6/mo) · DigitalOcean Droplet · Linode Nanode · AWS t3.micro (free tier) · Any VPS with Docker
+**Works on:** Hetzner CX11 ($6/mo) · DigitalOcean Droplet · Linode Nanode · AWS t3.micro · Any VPS with Docker
 
 ---
 
 ## Prerequisites
 
 ```bash
-docker --version        # Must be 24.x or later
-docker compose version  # Must be v2.x or later
+docker --version        # 24.x or later
+docker compose version  # v2.x or later
 ```
 
 Install Docker: [docs.docker.com/get-docker](https://docs.docker.com/get-docker/)
@@ -311,89 +461,100 @@ Install Docker: [docs.docker.com/get-docker](https://docs.docker.com/get-docker/
 
 | Type | What it monitors |
 |------|-----------------|
-| `api` | HTTP/HTTPS endpoints — status code, response body, latency |
-| `tcp` | Port connectivity and latency |
+| `api` | HTTP/HTTPS — status code, response body, latency threshold |
+| `tcp` | Port connectivity and response time |
 | `process` | Process existence by name or command |
 | `command` | Shell command exit code and output |
-| `log` | Log file modification time |
-| `mysql` | MySQL health, performance, and replication |
-| `ssh` | Remote server CPU, memory, disk, load, top processes |
+| `log` | Log file modification recency |
+| `mysql` | 30+ MySQL status variables, delta rates, 9 alert rules |
+| `ssh` | Remote CPU, memory, disk, load, top processes over SSH |
+
+### AI-Powered Incident Analysis
+
+- **Zero-click** — every incident auto-enqueued, no manual trigger
+- **Context-aware** — AI sees check details, failure message, metrics, evidence snapshot
+- **Root-cause analysis** — specific, actionable, not generic
+- **MySQL AI analysis** — reads actual MySQL status variables at failure time
+- **5 providers** — Ollama (free/local), OpenAI, Anthropic, Google, Custom
+- **Configurable prompts** — customize per check type
+- **Background processing** — AI queue runs async, never slows alerting
+- **Persistent results** — analysis saved and browsable in the UI
 
 ### Notification Channels
 
 - **6 channel types** — Email, Slack, Discord, Telegram, Webhooks, PagerDuty
-- **Smart filters** — route by severity, check, type, server, or tag
-- **Deduplication** — one notification per incident, not one per check run
+- **Smart filters** — route by severity, check, type, server, tag
+- **Deduplication** — one alert per incident, not one per check run
+- **Digest mode** — multiple failures batched into one message
 - **Test button** — verify before going live
-- **Resolution alerts** — know when incidents clear
+- **Resolution alerts** — know when incidents clear automatically
 
 ### Incident Management
 
-- Auto-created from configurable alert rules
-- Lifecycle: open → acknowledge → resolve
-- Evidence snapshots at creation time
+- Auto-created by configurable alert rules
+- Full lifecycle: open → acknowledge → resolve
+- Evidence snapshots captured at creation
 - MTTA/MTTR analytics
+- AI analysis attached to every incident
 
 ### Alert Rules
 
-- 5 built-in rules (critical failure, warning failure, high failure rate, extended downtime, response time degradation)
+- 5 built-in rules out of the box
 - Configurable thresholds, cooldowns, consecutive-breach logic
 - Per-check or global scope
-
-### AI-Powered Analysis (BYOK)
-
-| Provider | Models |
-|----------|--------|
-| OpenAI | GPT-4, GPT-3.5 |
-| Anthropic | Claude |
-| Google | Gemini |
-| Ollama | Local models (free, private) |
-| Custom | Any OpenAI-compatible endpoint |
-
-AI auto-analyzes new incidents. API keys encrypted with AES-256-GCM at rest.
+- Custom rules per check type
 
 ### MySQL Deep Monitoring
 
-- Tracks 30+ MySQL status variables every 30 seconds
-- Computes delta rates (queries/sec, connections/sec, etc.)
-- 9 built-in alert rules: connection utilization, slow queries, lock waits, replication lag, InnoDB buffer pool, and more
-- Dedicated dashboard pages: connections, queries, threads, server stats
+- 30+ status variables tracked every check interval
+- Delta rate computation (queries/sec, connections/sec, etc.)
+- 9 built-in alert rules: connection utilization, slow queries, lock waits, InnoDB buffer pool, replication lag, and more
+- Dedicated dashboard: connections, queries, threads, server stats
+- AI analysis on MySQL incidents with full status snapshot
+
+### SSH Agentless Server Monitoring
+
+- CPU, memory, disk, load, top processes — over existing SSH connection
+- Nothing installed on the target server
+- Works on any Linux server you can SSH into
+- Built-in alert thresholds (CPU >80%, disk >85%, etc.)
+- SSH host key fingerprint verification to prevent MitM attacks
 
 ### Analytics & Observability
 
 - 7-day uptime per check
-- Response time charts with p50/p95/p99
+- Response time charts (p50/p95/p99)
 - Failure rate trends
 - Prometheus metrics at `/metrics`
 - Audit log for all mutations
 - Real-time SSE dashboard updates
-- CSV/JSON export
+- CSV/JSON export for incidents and results
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   React Frontend                     │
-│        (Vite + TypeScript + Tailwind + Recharts)     │
-└──────────────────────┬──────────────────────────────┘
-                       │ REST API + SSE
-┌──────────────────────┴──────────────────────────────┐
-│                   Go Backend                         │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐ │
-│  │Scheduler │ │ Runner   │ │ Incident │ │  AI    │ │
-│  │(per-check│ │(7 types) │ │ Manager  │ │Service │ │
-│  │ timers)  │ │          │ │          │ │(BYOK)  │ │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └───┬────┘ │
-│       └─────────────┴────────────┴────────────┘      │
-│  ┌──────────────────────────────────────────────┐    │
-│  │              Hybrid Store                    │    │
-│  │   (File-based primary + optional MongoDB)    │    │
-│  └──────────────────────────────────────────────┘    │
-│  JWT Auth · Users · Notifications · Alert Rules      │
-│  Audit · Prometheus · Validation · Deduplication     │
-└──────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                    React Frontend                        │
+│         (Vite + TypeScript + Tailwind + Recharts)        │
+└───────────────────────┬─────────────────────────────────┘
+                        │ REST API + SSE
+┌───────────────────────┴─────────────────────────────────┐
+│                    Go Backend                            │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────┐  │
+│  │Scheduler │  │ Runner   │  │ Incident │  │  AI    │  │
+│  │(per-check│  │(7 types) │  │ Manager  │  │Service │  │
+│  │ timers)  │  │          │  │          │  │(BYOK)  │  │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └───┬────┘  │
+│       └──────────────┴─────────────┴─────────────┘       │
+│  ┌───────────────────────────────────────────────────┐   │
+│  │                  Hybrid Store                     │   │
+│  │      (File-based primary + optional MongoDB)      │   │
+│  └───────────────────────────────────────────────────┘   │
+│  JWT Auth · Users · Notifications · Alert Rules           │
+│  Audit · Prometheus · AI Queue · Deduplication            │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -402,11 +563,11 @@ AI auto-analyzes new incidents. API keys encrypted with AES-256-GCM at rest.
 
 | Document | Description |
 |----------|-------------|
-| [Deployment Guide](docs/deployment-guide.md) | Full setup: Docker, bare metal, TLS/SSL, reverse proxy, notifications, SSH, MySQL |
+| [Deployment Guide](docs/deployment-guide.md) | Docker, bare metal, TLS, reverse proxy, notifications, SSH, MySQL |
 | [API Reference](backend/docs/api-reference.md) | All 62+ REST endpoints |
 | [OpenAPI Spec](docs/openapi.yaml) | Machine-readable OpenAPI 3.0 |
 | [Runbook](docs/runbook.md) | Day-to-day ops, backup/restore, performance tuning |
-| [Architecture Decisions](docs/) | ADRs for scope, persistence, auth, incidents |
+| [Architecture Decisions](docs/) | ADRs for persistence, auth, incidents, AI |
 
 ---
 
@@ -418,9 +579,9 @@ healthops/
 ├── frontend/                 # React + TypeScript + Vite
 ├── docker/                   # Init scripts, workload generators
 ├── docs/                     # Guides, ADRs, screenshots
-├── .github/                  # CI/CD, issue templates
+├── .github/                  # CI/CD workflows, issue templates
 ├── compose.yaml              # Production: HealthOps + MongoDB
-├── compose.demo.yaml         # Demo with realistic targets
+├── compose.demo.yaml         # Demo with full realistic stack
 └── Dockerfile                # Multi-stage build
 ```
 
@@ -428,27 +589,27 @@ healthops/
 
 ## Configuration
 
-### Environment Variables
+### Key Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` | — | Admin password for first run |
-| `HEALTHOPS_PUBLIC_URL` | — | Your public URL — required for email links |
+| `HEALTHOPS_PUBLIC_URL` | — | Public URL — required for email links |
 | `STORAGE_BACKEND` | `file` | Set to `mongo` for MongoDB persistence |
 | `MONGODB_URI` | — | MongoDB connection string |
 | `MONGODB_DATABASE` | `healthops` | MongoDB database name |
-| `DATA_DIR` | `data/` | Data directory for file storage |
+| `DATA_DIR` | `data/` | Data directory |
 | `CORS_ORIGIN` | — | CORS origin for custom domains |
 
-See the [Deployment Guide](docs/deployment-guide.md) for full details.
+See the [Deployment Guide](docs/deployment-guide.md) for all options.
 
 ---
 
 ## Testing
 
 ```bash
-cd backend && go test ./... -race   # Backend tests with race detector
-cd frontend && npm run typecheck     # Frontend type check
+cd backend && go test ./... -race   # backend
+cd frontend && npm run typecheck     # frontend
 ```
 
 ---
@@ -457,12 +618,12 @@ cd frontend && npm run typecheck     # Frontend type check
 
 - JWT auth with role-based access (admin/viewer)
 - Bcrypt passwords; login rate-limited (10 attempts/min per IP)
-- Security headers on all responses (CSP, X-Frame-Options, etc.)
+- Security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy)
 - AES-256-GCM encryption for AI API keys at rest
-- SSH host key fingerprint verification (set `hostKeyFingerprint` in SSH checks)
-- Command checks disabled by default
+- SSH host key fingerprint verification
+- Command checks disabled by default (`allowCommandChecks=false`)
 
-Found a vulnerability? See [SECURITY.md](SECURITY.md) for private disclosure.
+Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 ---
 
@@ -475,16 +636,16 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md) for private disclosure.
 | Charts | Recharts |
 | State | TanStack React Query |
 | Storage | File-based (primary) + MongoDB (optional) |
-| Monitoring | Prometheus client, SSE |
+| Observability | Prometheus client, SSE |
 | Container | Docker multi-stage build |
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). We welcome bug fixes, new check types, notification channels, and documentation improvements.
+See [CONTRIBUTING.md](CONTRIBUTING.md) — we welcome new check types, notification channels, AI prompt improvements, and bug fixes.
 
-Report security issues privately — see [SECURITY.md](SECURITY.md).
+Security issues: [SECURITY.md](SECURITY.md).
 
 ---
 
