@@ -88,6 +88,7 @@ func (a *ChannelStoreAdapter) Update(id string, ch notify.NotificationChannelCon
 	merged.MinConsecutiveFailures = ch.MinConsecutiveFailures
 	merged.NotifyOnResolve = ch.NotifyOnResolve
 	merged.Headers = cloneStringMap(ch.Headers)
+	merged.BodyTemplate = ch.BodyTemplate
 	merged.CreatedAt = existing.CreatedAt
 
 	if ch.SMTPPass != "" && ch.SMTPPass != "••••••••" {
@@ -152,6 +153,7 @@ func (a *ChannelStoreAdapter) toNotify(channel NotificationChannel) notify.Notif
 		MinConsecutiveFailures: channel.MinConsecutiveFailures,
 		NotifyOnResolve:        channel.NotifyOnResolve,
 		Headers:                cloneStringMap(channel.Headers),
+		BodyTemplate:           channel.BodyTemplate,
 		CreatedAt:              channel.CreatedAt,
 		UpdatedAt:              channel.UpdatedAt,
 	}
@@ -182,6 +184,7 @@ func (a *ChannelStoreAdapter) toRepository(channel notify.NotificationChannelCon
 		MinConsecutiveFailures: channel.MinConsecutiveFailures,
 		NotifyOnResolve:        channel.NotifyOnResolve,
 		Headers:                cloneStringMap(channel.Headers),
+		BodyTemplate:           channel.BodyTemplate,
 		CreatedAt:              channel.CreatedAt,
 		UpdatedAt:              channel.UpdatedAt,
 	}

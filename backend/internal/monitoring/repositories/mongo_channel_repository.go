@@ -97,6 +97,7 @@ type channelModel struct {
 	MinConsecutiveFailures int                    `bson:"minConsecutiveFailures,omitempty"`
 	NotifyOnResolve        bool                   `bson:"notifyOnResolve,omitempty"`
 	Headers                map[string]string      `bson:"headers,omitempty"`
+	BodyTemplate           string                 `bson:"bodyTemplate,omitempty"`
 	Config                 map[string]interface{} `bson:"config,omitempty"`
 	SmartFilters           smartFiltersModel      `bson:"smartFilters,omitempty"`
 	CreatedAt              time.Time              `bson:"createdAt"`
@@ -311,6 +312,7 @@ func (r *MongoChannelRepository) modelToChannel(model channelModel) Notification
 		MinConsecutiveFailures: model.MinConsecutiveFailures,
 		NotifyOnResolve:        model.NotifyOnResolve,
 		Headers:                cloneMap(model.Headers),
+		BodyTemplate:           model.BodyTemplate,
 		CreatedAt:              model.CreatedAt,
 		UpdatedAt:              model.UpdatedAt,
 	}
@@ -379,6 +381,7 @@ func (r *MongoChannelRepository) channelToModel(channel *NotificationChannel) ch
 		MinConsecutiveFailures: channel.MinConsecutiveFailures,
 		NotifyOnResolve:        channel.NotifyOnResolve,
 		Headers:                cloneMap(channel.Headers),
+		BodyTemplate:           channel.BodyTemplate,
 		Config:                 config,
 		SmartFilters: smartFiltersModel{
 			Severities: append([]string(nil), channel.Severities...),

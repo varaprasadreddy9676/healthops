@@ -79,6 +79,7 @@ type NotificationChannel struct {
 	MinConsecutiveFailures int               `json:"minConsecutiveFailures,omitempty"`
 	NotifyOnResolve        bool              `json:"notifyOnResolve,omitempty"`
 	Headers                map[string]string `json:"headers,omitempty"`
+	BodyTemplate           string            `json:"bodyTemplate,omitempty"`
 	CreatedAt              time.Time         `json:"created_at"`
 	UpdatedAt              time.Time         `json:"updated_at"`
 }
