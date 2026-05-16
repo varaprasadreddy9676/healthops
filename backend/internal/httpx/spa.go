@@ -40,10 +40,23 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Vite content-hashed assets — safe to cache forever.
+	// Files under /assets/ have hashes in their names (e.g. RCAReports-CX6cBlbm.js)
+	// so the URL changes on every build; browsers can cache indefinitely.
+	if strings.HasPrefix(p, "/assets/") {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		h.fs.ServeHTTP(w, r)
+		return
+	}
+
 	// Try to serve the actual file
 	filePath := path.Join(h.dir, p)
 	_, err := os.Stat(filePath)
 	if err == nil {
+		// Non-asset static file (favicon, etc.) — short cache
+		if p != "/" {
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+		}
 		h.fs.ServeHTTP(w, r)
 		return
 	}
@@ -55,13 +68,15 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if it looks like a static asset (has a file extension)
+	// Check if it looks like a static asset (has a file extension) — 404 it
 	if ext := path.Ext(p); ext != "" {
 		http.NotFound(w, r)
 		return
 	}
 
-	// Serve index.html for SPA routes
+	// SPA route fallback — always serve fresh index.html so browsers never
+	// cache a stale version that references old chunk hashes.
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	indexPath := path.Join(h.dir, "index.html")
 	http.ServeFile(w, r, indexPath)
 }
