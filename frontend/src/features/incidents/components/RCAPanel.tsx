@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Activity, ChevronDown, Zap, AlertTriangle, Database, Network, Settings, Code } from 'lucide-react'
 import { cn, formatDate } from '@/shared/lib/utils'
 import { rcaApi, type RCAReport, type RCAHypothesis, type TimelineEvent } from '@/features/incidents/api/rca'
+import { SignalGrid } from '@/features/incidents/components/SignalChart'
 
 const categoryIcons: Record<string, typeof Activity> = {
     resource: Zap,
@@ -128,10 +129,18 @@ export function RCAPanel({ incidentId, aiEnabled }: { incidentId: string; aiEnab
         retry: false,
     })
 
+    const { data: timelineData } = useQuery({
+        queryKey: ['rca', 'timeline', incidentId],
+        queryFn: () => rcaApi.timeline(incidentId),
+        enabled: !!incidentId,
+        retry: false,
+    })
+
     const analyzeMutation = useMutation({
         mutationFn: () => rcaApi.analyze(incidentId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['rca', 'reports', incidentId] })
+            queryClient.invalidateQueries({ queryKey: ['rca', 'timeline', incidentId] })
         },
     })
 
@@ -195,6 +204,11 @@ export function RCAPanel({ incidentId, aiEnabled }: { incidentId: string; aiEnab
                                     <HypothesisCard key={h.rank} hypothesis={h} />
                                 ))}
                         </div>
+                    )}
+
+                    {/* Correlated Signals Grid */}
+                    {timelineData?.signals && timelineData.signals.length > 0 && (
+                        <SignalGrid signals={timelineData.signals} />
                     )}
 
                     {/* Correlated Events Timeline */}

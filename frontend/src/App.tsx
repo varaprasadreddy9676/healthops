@@ -19,6 +19,7 @@ const MySQLThreads = lazy(() => import('@/features/mysql/pages/MySQLThreads'))
 const MySQLServer = lazy(() => import('@/features/mysql/pages/MySQLServer'))
 const Analytics = lazy(() => import('@/features/analytics/pages/Analytics'))
 const AIAnalysis = lazy(() => import('@/features/ai/pages/AIAnalysis'))
+const RCAReports = lazy(() => import('@/features/incidents/pages/RCAReports'))
 const Logs = lazy(() => import('@/features/logs/pages/Logs'))
 const LogFamilyDetail = lazy(() => import('@/features/logs/pages/LogFamilyDetail'))
 const Settings = lazy(() => import('@/features/settings/pages/Settings'))
@@ -57,6 +58,7 @@ export default function App() {
             <Route path="mysql/server" element={<MySQLServer />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="ai" element={<AIAnalysis />} />
+            <Route path="rca" element={<RCAReports />} />
             <Route path="logs" element={<Logs />} />
             <Route path="logs/:id" element={<LogFamilyDetail />} />
             <Route path="settings" element={<Settings />} />
