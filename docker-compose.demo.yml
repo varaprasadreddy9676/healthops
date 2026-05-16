@@ -5,12 +5,16 @@
 #
 # This extends the base stack with demo services so you can see
 # HealthOps monitoring real infrastructure out of the box:
-#   - nginx (web server on port 8081)
-#   - MySQL (database on port 3306)
-#   - Redis (cache on port 6379)
-#   - echo-server (API endpoint on port 9000)
-#   - linux-server-1 (SSH + nginx + python + cron on port 2222)
-#   - linux-server-2 (SSH + nginx + python + cron on port 2223)
+#   - nginx (internal web server health target)
+#   - MySQL (database on localhost:13306 by default)
+#   - Redis (internal cache TCP target)
+#   - echo-server (internal simple API endpoint)
+#   - demo-api (controllable checkout API on localhost:19100 by default)
+#   - demo-ai-provider (local deterministic OpenAI-compatible AI for RCA demos)
+#   - demo-log-emitter (realistic logs posted into HealthOps)
+#   - mysql-workload (steady workload for MySQL monitoring pages)
+#   - linux-server-1 (SSH + nginx + python + cron on localhost:12222 by default)
+#   - linux-server-2 (SSH + nginx + python + cron on localhost:12223 by default)
 #
 # HealthOps will use config/demo.json instead of default.json,
 # which has checks pre-configured for all demo services.
@@ -19,7 +23,11 @@ services:
   healthops:
     environment:
       - CONFIG_PATH=/app/config/demo.json
-      - MYSQL_DSN=${MYSQL_USER:-healthops}:${MYSQL_PASSWORD:-healthops123}@tcp(mysql:3306)/healthops
+      - STORAGE_BACKEND=mongo
+      - MYSQL_DSN=${MYSQL_USER:-healthops}:${MYSQL_PASSWORD:-healthops123}@tcp(mysql:3306)/healthops?timeout=3s&readTimeout=5s&writeTimeout=5s&parseTime=true
+      - HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD=${HEALTHOPS_DEMO_ADMIN_PASSWORD:-healthops-demo-admin}
+      - HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL=demo@healthops.local
+      - HEALTHOPS_BOOTSTRAP_ADMIN_RESET=${HEALTHOPS_BOOTSTRAP_ADMIN_RESET:-true}
     volumes:
       - ./backend/config/demo.json:/app/config/demo.json:ro
     depends_on:
@@ -33,15 +41,22 @@ services:
         condition: service_started
       echo-server:
         condition: service_started
+      demo-api:
+        condition: service_healthy
+      demo-ai-provider:
+        condition: service_healthy
       linux-server-1:
         condition: service_started
       linux-server-2:
         condition: service_started
 
+  mongo:
+    ports: !reset []
+
   mysql:
     image: mysql:8.0
     ports:
-      - "127.0.0.1:3306:3306"
+      - "127.0.0.1:${MYSQL_PORT:-13306}:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpass123}
       - MYSQL_DATABASE=healthops
@@ -59,23 +74,16 @@ services:
       start_period: 30s
 
   nginx:
-    image: nginx:alpine
-    ports:
-      - "8081:80"
-    volumes:
-      - ./docker/nginx-demo/default.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./docker/nginx-demo/index.html:/usr/share/nginx/html/index.html:ro
+    build: ./docker/nginx-demo
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/"]
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:80/"]
       interval: 10s
       timeout: 3s
       retries: 3
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -86,14 +94,65 @@ services:
   echo-server:
     image: hashicorp/http-echo
     command: ["-text=healthy", "-listen=:9000"]
+    restart: unless-stopped
+
+  demo-api:
+    build: ./docker/demo-api
     ports:
-      - "9000:9000"
+      - "127.0.0.1:${DEMO_API_PORT:-19100}:9100"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9100/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  demo-ai-provider:
+    build: ./docker/demo-ai-provider
+    environment:
+      - DEMO_AI_MODEL=healthops-demo-ops-model
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9200/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  demo-log-emitter:
+    build: ./docker/demo-log-emitter
+    environment:
+      - HEALTHOPS_URL=http://healthops:8080
+      - HEALTHOPS_USERNAME=admin
+      - HEALTHOPS_PASSWORD=${HEALTHOPS_DEMO_ADMIN_PASSWORD:-healthops-demo-admin}
+      - BATCH_INTERVAL_SECONDS=15
+    depends_on:
+      healthops:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mysql-workload:
+    image: mysql:8.0
+    command: ["sh", "/demo/workload.sh"]
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${MYSQL_USER:-healthops}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-healthops123}
+      - MYSQL_DATABASE=healthops
+      - WORKLOAD_INTERVAL_SECONDS=8
+    volumes:
+      - ./docker/mysql-workload/workload.sh:/demo/workload.sh:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
     restart: unless-stopped
 
   linux-server-1:
     build: ./docker/linux-server
     ports:
-      - "127.0.0.1:2222:22"
+      - "127.0.0.1:${DEMO_LINUX_SSH_PORT_1:-12222}:22"
     environment:
       - HTTP_PORT=8000
     restart: unless-stopped
@@ -107,7 +166,7 @@ services:
   linux-server-2:
     build: ./docker/linux-server
     ports:
-      - "127.0.0.1:2223:22"
+      - "127.0.0.1:${DEMO_LINUX_SSH_PORT_2:-12223}:22"
     environment:
       - HTTP_PORT=9000
     restart: unless-stopped

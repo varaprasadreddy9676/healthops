@@ -32,8 +32,8 @@ import (
 func main() {
 	logger := log.New(os.Stdout, "healthops ", log.LstdFlags|log.Lmicroseconds)
 
-	// Load .env file if it exists
-	if err := godotenv.Load(); err != nil {
+	// Load .env file if it exists.
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
 		logger.Printf("Warning: .env file not found or error loading: %v", err)
 	}
 

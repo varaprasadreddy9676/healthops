@@ -67,6 +67,35 @@ func TestLoadConfigAppliesDefaults(t *testing.T) {
 	}
 }
 
+func TestDemoConfigLoads(t *testing.T) {
+	path := filepath.Join("..", "..", "config", "demo.json")
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("load demo config: %v", err)
+	}
+
+	if !cfg.AllowCommandChecks {
+		t.Fatal("demo config should allow trusted local command checks")
+	}
+
+	wantChecks := []string{
+		"demo-api-health",
+		"demo-api-checkout",
+		"demo-api-latency",
+		"mysql-health",
+		"ssh-linux-server-1",
+	}
+	byID := make(map[string]CheckConfig, len(cfg.Checks))
+	for _, check := range cfg.Checks {
+		byID[check.ID] = check
+	}
+	for _, id := range wantChecks {
+		if _, ok := byID[id]; !ok {
+			t.Fatalf("demo config missing check %q", id)
+		}
+	}
+}
+
 func TestLoadConfigRejectsEmptyChecks(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")

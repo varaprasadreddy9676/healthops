@@ -23,11 +23,11 @@ https://github.com/user-attachments/assets/healthops-demo.mp4
 
 ## Why HealthOps?
 
-- **Zero-config start** — Run one command, get a full monitoring dashboard at `localhost:8080`
+- **Zero-config demo** — Run one script, get a full monitoring dashboard plus real demo targets on a local port
 - **7 check types** — HTTP APIs, TCP ports, processes, commands, logs, MySQL databases, SSH remote servers
 - **AI incident analysis** — Bring your own key (OpenAI, Anthropic, Google, Ollama) to auto-analyze incidents
 - **Beautiful UI** — React + Tailwind dashboard with real-time SSE updates, charts, and dark mode
-- **Single binary** — No external dependencies required. Optional MongoDB mirror and MySQL monitoring
+- **Single binary app** — Go backend serves the React UI; Docker Compose adds MongoDB persistence and realistic demo targets
 - **62+ API endpoints** — Full REST API for automation and integration
 - **Production-ready** — JWT auth, user management, notification channels, audit logging, Prometheus metrics, retention cleanup, encrypted AI keys
 
@@ -67,12 +67,36 @@ docker compose up -d
 
 This starts HealthOps + MongoDB. Open [http://localhost:8080](http://localhost:8080).
 
-### Option 2b: Docker Compose with demo targets
+### Option 2b: Full Docker demo with real scenarios
 
-Try HealthOps with realistic monitoring targets (nginx, MySQL, Redis, echo server) — all pre-configured:
+The open-source demo is the fastest way to understand the product. It starts HealthOps, MongoDB, MySQL, Redis, nginx, SSH Linux targets, a controllable checkout API, a log emitter, and a MySQL workload generator.
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d
+cp .env.demo.example .env.demo
+scripts/demo-up.sh
+```
+
+Open the URL printed by the script and log in with `admin` / `healthops-demo-admin`. The default URL is [http://localhost:18080](http://localhost:18080), and the script automatically chooses another free port if needed.
+
+Useful scenarios:
+
+```bash
+scripts/demo-scenario.sh api-slow
+scripts/demo-scenario.sh api-down
+scripts/demo-scenario.sh api-flaky
+scripts/demo-scenario.sh log-spike
+scripts/demo-scenario.sh mysql-load
+scripts/demo-scenario.sh rca
+scripts/demo-scenario.sh recover
+```
+
+AI/RCA demo:
+
+The demo includes a local OpenAI-compatible provider so AI briefs and RCA can run immediately without an external key. Optional BYOK OpenRouter setup is still supported:
+
+```bash
+# The script sends the key once to HealthOps, where it is stored encrypted in MongoDB.
+OPENROUTER_API_KEY=sk-or-v1-... scripts/demo-configure-ai.sh
 ```
 
 ### Option 3: Docker only
@@ -110,7 +134,7 @@ Each check supports: custom intervals, retries, cooldowns, timeout, and warning 
 - **JWT token-based authentication** — Login via `/api/v1/auth/login`, receive a signed JWT
 - **User management** — Create, update, delete users with admin/viewer roles
 - **Role-based access** — Admins can mutate; viewers are read-only
-- **Default credentials** — `admin` / `admin` (change on first login)
+- **Demo credentials** — Docker demo bootstraps `admin` / `healthops-demo-admin`; production deployments must set their own bootstrap password
 
 ### Notification Channels
 

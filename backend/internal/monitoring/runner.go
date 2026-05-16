@@ -488,7 +488,9 @@ func (r *Runner) runMySQL(ctx context.Context, check CheckConfig, result *CheckR
 			log.Printf("warning: failed to persist mysql sample: %v", err)
 		} else {
 			if d, err := r.mysqlRepo.ComputeAndAppendDelta(sampleID); err != nil {
-				log.Printf("warning: failed to compute mysql delta: %v", err)
+				if !strings.Contains(err.Error(), "no previous sample") {
+					log.Printf("warning: failed to compute mysql delta: %v", err)
+				}
 			} else {
 				delta = &d
 			}

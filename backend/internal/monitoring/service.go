@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"medics-health-check/backend/internal/httpx"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -395,10 +396,15 @@ func (s *Service) Run(ctx context.Context) error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	listener, err := net.Listen("tcp", s.cfg.Server.Addr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", s.cfg.Server.Addr, err)
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
 		s.logger.Printf("HTTP listening on %s", s.cfg.Server.Addr)
-		errCh <- server.ListenAndServe()
+		errCh <- server.Serve(listener)
 	}()
 
 	s.scheduler.Start()

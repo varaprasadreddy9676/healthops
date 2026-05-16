@@ -5,10 +5,14 @@ frontend/node_modules/
 # Build output
 frontend/dist/
 backend/healthops
+__pycache__/
+*.pyc
 
 # Environment & secrets
 .env
 .env.*
+!.env.demo.example
+.demo-runtime.env
 backend/data/
 
 # IDE & OS

@@ -39,25 +39,52 @@ This starts:
 - **healthops** service on port 8080 (Go backend + React frontend)
 - **MongoDB** on port 27017
 
-### 3b. (Optional) Start with demo services
+### 3b. Start the full demo stack
 
-To try HealthOps with realistic monitoring targets (nginx, MySQL, Redis, echo server, Linux servers):
+For open-source evaluation, use the scripted demo. It starts HealthOps plus realistic monitoring targets, emits logs, creates MySQL activity, and gives you scenario commands to trigger real incidents.
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d
+cp .env.demo.example .env.demo
+scripts/demo-up.sh
 ```
 
+Open the URL printed by the script and log in with `admin` / `healthops-demo-admin`. The default URL is `http://localhost:18080`; the script will pick another free port if needed.
+
 This adds:
-- **nginx** on port 8081 (web server with health endpoint)
-- **MySQL** on port 3306 (for MySQL deep monitoring)
-- **Redis** on port 6379 (cache, TCP check)
-- **echo-server** on port 9000 (simple API endpoint)
-- **linux-server-1** on SSH port 2222 (nginx + python HTTP server + cron)
-- **linux-server-2** on SSH port 2223 (nginx + python HTTP server + cron)
+- **HealthOps** on port 18080 by default (override `HEALTHOPS_PORT`)
+- **nginx** internally (web server with health endpoint)
+- **MySQL** on port 13306 by default (for MySQL deep monitoring; override `MYSQL_PORT`)
+- **Redis** internally (cache, TCP check)
+- **echo-server** internally (simple API endpoint)
+- **demo-api** on port 19100 by default (controllable checkout API; override `DEMO_API_PORT`)
+- **demo-ai-provider** internally (local OpenAI-compatible provider for AI brief and RCA demos)
+- **demo-log-emitter** (posts realistic application, worker, gateway, and MySQL errors into HealthOps)
+- **mysql-workload** (keeps MySQL samples, queries, and thread views populated)
+- **linux-server-1** on SSH port 12222 by default (nginx + python HTTP server + cron)
+- **linux-server-2** on SSH port 12223 by default (nginx + python HTTP server + cron)
 
 The Linux servers run real processes (nginx, python3 http.server, cron) that HealthOps monitors remotely via SSH process checks.
 
 All demo services come pre-configured with health checks in `backend/config/demo.json`.
+
+Trigger scenarios:
+
+```bash
+scripts/demo-scenario.sh api-slow
+scripts/demo-scenario.sh api-down
+scripts/demo-scenario.sh api-flaky
+scripts/demo-scenario.sh log-spike
+scripts/demo-scenario.sh mysql-load
+scripts/demo-scenario.sh rca
+scripts/demo-scenario.sh recover
+```
+
+AI/RCA runs out of the box against the local demo AI provider. Optional BYOK setup with OpenRouter:
+
+```bash
+# The script sends the key once to HealthOps, where it is stored encrypted in MongoDB.
+OPENROUTER_API_KEY=sk-or-v1-... scripts/demo-configure-ai.sh
+```
 
 ### 4. View logs
 
