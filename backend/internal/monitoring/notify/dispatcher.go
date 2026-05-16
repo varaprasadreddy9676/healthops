@@ -386,21 +386,18 @@ func (d *NotificationDispatcher) sendToChannel(ch NotificationChannelConfig, pay
 	if d.outbox != nil {
 		payloadJSON, _ := json.Marshal(payload)
 		evt := monitoring.NotificationEvent{
-			IncidentID:  incidentID,
-			Channel:     fmt.Sprintf("%s:%s", ch.Type, ch.Name),
-			PayloadJSON: string(payloadJSON),
+			NotificationID: fmt.Sprintf("notif-%s-%d", incidentID, time.Now().UnixNano()),
+			IncidentID:     incidentID,
+			Channel:        fmt.Sprintf("%s:%s", ch.Type, ch.Name),
+			PayloadJSON:    string(payloadJSON),
 		}
 		if err != nil {
 			evt.LastError = err.Error()
 		}
 		if enqErr := d.outbox.Enqueue(evt); enqErr != nil {
 			d.logger.Printf("notification: failed to record in outbox: %v", enqErr)
-		}
-		if err == nil {
-			// Mark as sent immediately since we already delivered
-			if evt.NotificationID != "" {
-				_ = d.outbox.MarkSent(evt.NotificationID)
-			}
+		} else if err == nil {
+			_ = d.outbox.MarkSent(evt.NotificationID)
 		}
 	}
 
