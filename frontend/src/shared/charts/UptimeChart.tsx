@@ -13,11 +13,17 @@ function barColor(pct: number): string {
   return CHART_COLORS.critical
 }
 
+function shortLabel(label: string) {
+  return label.length > 24 ? `${label.slice(0, 21)}...` : label
+}
+
 export function UptimeChart({ data, height = 260 }: Props) {
   const sorted = [...data].sort((a, b) => a.uptimePct - b.uptimePct)
+  const rowHeight = 30
+  const chartHeight = Math.max(height, sorted.length * rowHeight + 48)
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
+    <ResponsiveContainer width="100%" height={chartHeight}>
       <BarChart data={sorted} layout="vertical" margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid, #e2e8f0)" horizontal={false} />
         <XAxis
@@ -34,7 +40,8 @@ export function UptimeChart({ data, height = 260 }: Props) {
           tick={{ fontSize: 11, fill: 'var(--chart-tick, #94a3b8)' }}
           axisLine={false}
           tickLine={false}
-          width={120}
+          width={170}
+          tickFormatter={(value: string) => shortLabel(value)}
         />
         <Tooltip
           contentStyle={{

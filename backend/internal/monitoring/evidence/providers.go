@@ -151,14 +151,14 @@ func (p *MySQLSnapshotProvider) Collect(_ context.Context, incidentID string, _ 
 		}
 
 		events = append(events, SignalEvent{
-			ID:              signalID("mysql_snap", incidentID, snap.Timestamp),
-			TenantID:        "default",
-			Type:            SignalTypeMySQL,
-			Timestamp:       snap.Timestamp,
-			Severity:        "info",
-			Source:          "mysql_collector",
-			Message:         payloadSummary,
-			IncidentID:      incidentID,
+			ID:         signalID("mysql_snap", incidentID, snap.Timestamp),
+			TenantID:   "default",
+			Type:       SignalTypeMySQL,
+			Timestamp:  snap.Timestamp,
+			Severity:   "info",
+			Source:     "mysql_collector",
+			Message:    payloadSummary,
+			IncidentID: incidentID,
 			Attributes: map[string]string{
 				"snapshotType": snap.SnapshotType,
 				"payload":      truncate(snap.PayloadJSON, 2000),
@@ -217,8 +217,8 @@ func (p *ServerMetricsProvider) Collect(_ context.Context, incidentID string, wi
 				"cpuPercent":  fmt.Sprintf("%.1f", snap.CPUUsagePercent),
 				"memPercent":  fmt.Sprintf("%.1f", snap.MemoryUsagePercent),
 				"diskPercent": fmt.Sprintf("%.1f", snap.DiskUsagePercent),
-				"loadAvg1":   fmt.Sprintf("%.2f", snap.LoadAvg1),
-				"loadAvg5":   fmt.Sprintf("%.2f", snap.LoadAvg5),
+				"loadAvg1":    fmt.Sprintf("%.2f", snap.LoadAvg1),
+				"loadAvg5":    fmt.Sprintf("%.2f", snap.LoadAvg5),
 			}
 
 			events = append(events, SignalEvent{
@@ -269,13 +269,13 @@ func (p *AuditProvider) Collect(_ context.Context, incidentID string, window Tim
 	for _, ae := range auditEvents {
 		detailsJSON, _ := json.Marshal(ae.Details)
 		events = append(events, SignalEvent{
-			ID:              signalID("audit", ae.ID, ae.Timestamp),
-			TenantID:        "default",
-			Type:            SignalTypeAudit,
-			Timestamp:       ae.Timestamp,
-			Severity:        "info",
-			Source:          "audit_log",
-			Message:         fmt.Sprintf("[%s] %s on %s/%s by %s", ae.Action, ae.Action, ae.Target, ae.TargetID, ae.Actor),
+			ID:        signalID("audit", ae.ID, ae.Timestamp),
+			TenantID:  "default",
+			Type:      SignalTypeAudit,
+			Timestamp: ae.Timestamp,
+			Severity:  "info",
+			Source:    "audit_log",
+			Message:   fmt.Sprintf("[%s] %s on %s/%s by %s", ae.Action, ae.Action, ae.Target, ae.TargetID, ae.Actor),
 			Attributes: map[string]string{
 				"action":   ae.Action,
 				"actor":    ae.Actor,

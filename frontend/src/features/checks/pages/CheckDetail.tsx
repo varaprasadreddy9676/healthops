@@ -90,6 +90,8 @@ export default function CheckDetail() {
       cooldownSeconds: c.cooldownSeconds,
       enabled: c.enabled,
       tags: c.tags || [],
+      mysql: c.mysql,
+      ssh: c.ssh,
       notificationChannelIds: c.notificationChannelIds || [],
     })
     setEditing(true)
@@ -109,6 +111,18 @@ export default function CheckDetail() {
           : [...ids, channelId],
       }
     })
+  }
+
+  const setMySQLField = (key: 'dsnEnv' | 'host' | 'username' | 'database', value: string) => {
+    setForm(prev => ({ ...prev, mysql: { ...(prev.mysql || {}), [key]: value } }))
+  }
+
+  const setSSHField = (key: 'host' | 'user', value: string) => {
+    setForm(prev => ({ ...prev, ssh: { ...(prev.ssh || { host: '', user: '' }), [key]: value } }))
+  }
+
+  const setSSHPort = (value: string) => {
+    setForm(prev => ({ ...prev, ssh: { ...(prev.ssh || { host: '', user: '' }), port: value ? Number(value) : undefined } }))
   }
 
   if (isLoading) return <LoadingState />
@@ -274,15 +288,120 @@ export default function CheckDetail() {
                 </div>
               </div>
 
+              {/* Type-specific fields */}
               <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Target / URL</label>
-                  <input
-                    value={form.target || ''}
-                    onChange={e => setForm(f => ({ ...f, target: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                  />
-                </div>
+                {(form.type === 'api' || form.type === 'process') && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                      {form.type === 'api' ? 'URL' : 'Process Name'}
+                    </label>
+                    <input
+                      value={form.target || ''}
+                      onChange={e => setForm(f => ({ ...f, target: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+                )}
+
+                {form.type === 'tcp' && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Host</label>
+                      <input
+                        value={form.host || ''}
+                        onChange={e => setForm(f => ({ ...f, host: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Port</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={65535}
+                        value={form.port ?? ''}
+                        onChange={e => setForm(f => ({ ...f, port: e.target.value ? Number(e.target.value) : undefined }))}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {form.type === 'command' && (
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Command</label>
+                    <input
+                      value={form.command || ''}
+                      onChange={e => setForm(f => ({ ...f, command: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+                )}
+
+                {form.type === 'log' && (
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Log Path</label>
+                    <input
+                      value={form.path || ''}
+                      onChange={e => setForm(f => ({ ...f, path: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+                )}
+
+                {form.type === 'mysql' && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">DSN Env</label>
+                      <input
+                        value={form.mysql?.dsnEnv || ''}
+                        onChange={e => setMySQLField('dsnEnv', e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Database</label>
+                      <input
+                        value={form.mysql?.database || ''}
+                        onChange={e => setMySQLField('database', e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {form.type === 'ssh' && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">SSH Host</label>
+                      <input
+                        value={form.ssh?.host || ''}
+                        onChange={e => setSSHField('host', e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">SSH Port</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={65535}
+                        value={form.ssh?.port ?? ''}
+                        onChange={e => setSSHPort(e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">SSH User</label>
+                      <input
+                        value={form.ssh?.user || ''}
+                        onChange={e => setSSHField('user', e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      />
+                    </div>
+                  </>
+                )}
+
                 <div>
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Server</label>
                   <input

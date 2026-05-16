@@ -127,6 +127,8 @@ export default function UserManagement() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {!editId && (
               <input
+                name="new-user-username"
+                autoComplete="off"
                 placeholder="Username"
                 value={form.username}
                 onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
@@ -134,6 +136,8 @@ export default function UserManagement() {
               />
             )}
             <input
+              name="new-user-password"
+              autoComplete="new-password"
               placeholder={editId ? 'New password (optional)' : 'Password'}
               type="password"
               value={form.password}

@@ -25,7 +25,7 @@ import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import { useLiveSummary } from "@/features/dashboard/hooks/useLiveSummary"
 import { LiveIndicator } from "@/shared/components/LiveIndicator"
 import { AddCheckModal } from "@/features/checks/components/AddCheckModal"
-import type { CheckConfig, CheckResult, RemoteServer, StatusCount, ServerSnapshot, Incident, RunSummary } from "@/shared/types"
+import type { CheckConfig, CheckResult, RemoteServer, StatusCount, ServerSnapshot, Incident, RunSummary, Summary } from "@/shared/types"
 
 const PERIOD_OPTIONS = [
   { label: 'Today', value: '24h' },
@@ -34,6 +34,10 @@ const PERIOD_OPTIONS = [
 ] as const
 
 type Period = typeof PERIOD_OPTIONS[number]['value']
+
+function summaryTime(summary: Summary | null | undefined) {
+  return summary?.lastRunAt ? new Date(summary.lastRunAt).getTime() : 0
+}
 
 export default function Dashboard() {
   const [period, setPeriod] = useState<Period>('24h')
@@ -127,8 +131,17 @@ export default function Dashboard() {
   if (error) return <ErrorState message={error.message} retry={() => refetch()} />
   if (!dashboard) return null
 
-  // Prefer live SSE summary (5s) over polled dashboard (30s)
-  const summary = live.summary ?? dashboard.summary
+  // Prefer the newest known run summary. A connected SSE stream can briefly lag
+  // behind a just-finished manual run, so the Run Now response is allowed to win
+  // until polling or SSE catches up.
+  const polledSummary = dashboard.summary
+  const liveSummary = live.summary
+  const baseSummary = liveSummary && summaryTime(liveSummary) >= summaryTime(polledSummary)
+    ? liveSummary
+    : polledSummary
+  const summary = lastRunResult && summaryTime(lastRunResult.summary) >= summaryTime(baseSummary)
+    ? lastRunResult.summary
+    : baseSummary
   const serverMetrics = metricsQueries.data ?? {}
 
   const healthPct = summary.enabledChecks > 0
@@ -149,7 +162,7 @@ export default function Dashboard() {
     inc => new Date(inc.startedAt) >= periodStart
   ) ?? []
   const resolvedInPeriod = periodIncidents.filter(i => i.status === 'resolved').length
-  const openCount = live.connected ? live.activeIncidents : (incidents?.items.length ?? 0)
+  const openCount = incidents?.items.length ?? live.activeIncidents
 
   // Build latest result map — prefer live SSE data
   const latestByCheck = live.latestByCheck.size > 0 ? live.latestByCheck : (() => {

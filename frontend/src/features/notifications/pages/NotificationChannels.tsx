@@ -6,6 +6,7 @@ import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
 import { EmptyState } from "@/shared/components/EmptyState"
 import { useToast } from "@/shared/components/Toast"
+import { useConfirm } from "@/shared/components/ConfirmDialog"
 import { checksApi } from "@/features/checks/api/checks"
 
 interface NotificationChannel {
@@ -63,9 +64,35 @@ const emptyForm: Partial<NotificationChannel> = {
   notifyOnResolve: true,
 }
 
+function validateChannelForm(data: Partial<NotificationChannel>) {
+  if (!data.name?.trim()) return 'Channel name is required'
+
+  switch (data.type) {
+    case 'webhook':
+    case 'slack':
+    case 'discord':
+      return data.webhookUrl?.trim() ? null : 'Webhook URL is required'
+    case 'email':
+      if (!data.email?.trim()) return 'Recipient email is required'
+      if (!data.fromEmail?.trim()) return 'From email is required'
+      if (!data.smtpHost?.trim()) return 'SMTP host is required'
+      if (!data.smtpPort || data.smtpPort < 1 || data.smtpPort > 65535) return 'SMTP port must be between 1 and 65535'
+      return null
+    case 'telegram':
+      if (!data.botToken?.trim()) return 'Telegram bot token is required'
+      if (!data.chatId?.trim()) return 'Telegram chat ID is required'
+      return null
+    case 'pagerduty':
+      return data.routingKey?.trim() ? null : 'PagerDuty routing key is required'
+    default:
+      return null
+  }
+}
+
 export default function NotificationChannels() {
   const { isAdmin } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -148,6 +175,15 @@ export default function NotificationChannels() {
     onError: (err: Error) => toast.error(err.message),
   })
 
+  const handleSave = () => {
+    const validationError = validateChannelForm(form)
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
+    saveMutation.mutate(form)
+  }
+
   if (isLoading) return <LoadingState message="Loading channels…" />
   if (error) return <ErrorState message="Failed to load channels" retry={() => { queryClient.invalidateQueries({ queryKey: ['notification-channels'] }) }} />
 
@@ -187,6 +223,7 @@ export default function NotificationChannels() {
                 value={form.name || ''}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="e.g. Ops Slack"
+                required
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               />
             </div>
@@ -210,11 +247,13 @@ export default function NotificationChannels() {
               <div className="sm:col-span-2">
                 <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Webhook URL</label>
                 <input
-                  value={form.webhookUrl || ''}
-                  onChange={e => setForm(f => ({ ...f, webhookUrl: e.target.value }))}
-                  placeholder="https://hooks.slack.com/services/..."
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                />
+                value={form.webhookUrl || ''}
+                onChange={e => setForm(f => ({ ...f, webhookUrl: e.target.value }))}
+                placeholder="https://hooks.slack.com/services/..."
+                type="url"
+                required
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              />
               </div>
             )}
 
@@ -226,6 +265,7 @@ export default function NotificationChannels() {
                     value={form.email || ''}
                     onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                     placeholder="ops@example.com, admin@example.com"
+                    required
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   />
                 </div>
@@ -235,6 +275,8 @@ export default function NotificationChannels() {
                     value={form.fromEmail || ''}
                     onChange={e => setForm(f => ({ ...f, fromEmail: e.target.value }))}
                     placeholder="healthops@example.com"
+                    type="email"
+                    required
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   />
                 </div>
@@ -244,6 +286,7 @@ export default function NotificationChannels() {
                     value={form.smtpHost || ''}
                     onChange={e => setForm(f => ({ ...f, smtpHost: e.target.value }))}
                     placeholder="smtp.gmail.com"
+                    required
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   />
                 </div>
@@ -253,6 +296,9 @@ export default function NotificationChannels() {
                     type="number"
                     value={form.smtpPort || 587}
                     onChange={e => setForm(f => ({ ...f, smtpPort: parseInt(e.target.value) || 587 }))}
+                    min={1}
+                    max={65535}
+                    required
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   />
                 </div>
@@ -272,9 +318,12 @@ export default function NotificationChannels() {
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Bot Token</label>
                   <input
+                    type="password"
+                    autoComplete="new-password"
                     value={form.botToken || ''}
                     onChange={e => setForm(f => ({ ...f, botToken: e.target.value }))}
                     placeholder="123456:ABC-DEF..."
+                    required
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   />
                 </div>
@@ -284,6 +333,7 @@ export default function NotificationChannels() {
                     value={form.chatId || ''}
                     onChange={e => setForm(f => ({ ...f, chatId: e.target.value }))}
                     placeholder="-1001234567890"
+                    required
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   />
                 </div>
@@ -297,6 +347,7 @@ export default function NotificationChannels() {
                   value={form.routingKey || ''}
                   onChange={e => setForm(f => ({ ...f, routingKey: e.target.value }))}
                   placeholder="PagerDuty integration routing key"
+                  required
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 />
               </div>
@@ -428,7 +479,7 @@ export default function NotificationChannels() {
 
           <div className="mt-4 flex gap-2">
             <button
-              onClick={() => saveMutation.mutate(form)}
+              onClick={handleSave}
               disabled={saveMutation.isPending}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
@@ -516,8 +567,14 @@ export default function NotificationChannels() {
                     <Pencil className="h-3 w-3" /> Edit
                   </button>
                   <button
-                    onClick={() => {
-                      if (confirm(`Delete channel "${ch.name}"?`)) deleteMutation.mutate(ch.id)
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: 'Delete Notification Channel',
+                        message: `Delete channel "${ch.name}"? Alerts routed only to this channel will stop sending.`,
+                        confirmLabel: 'Delete',
+                        variant: 'danger',
+                      })
+                      if (ok) deleteMutation.mutate(ch.id)
                     }}
                     className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50"
                   >

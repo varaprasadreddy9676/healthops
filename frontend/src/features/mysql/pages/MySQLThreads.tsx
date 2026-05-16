@@ -7,12 +7,25 @@ import { LiveIndicator } from "@/shared/components/LiveIndicator"
 import { Sparkline } from "@/shared/charts/Sparkline"
 import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
+import { useConfirm } from "@/shared/components/ConfirmDialog"
+import { useToast } from "@/shared/components/Toast"
 import { cn } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import { useMySQLLive } from "@/features/mysql/hooks/useMySQLLive"
 import type { MySQLProcess } from "@/shared/types"
 
+const KILLABLE_QUERY_SECONDS = 5
+
+function isKillableProcess(p: MySQLProcess) {
+  const info = (p.info || '').trim().toLowerCase()
+  return p.command === 'Query'
+    && p.time >= KILLABLE_QUERY_SECONDS
+    && !/^show\s+(full\s+)?processlist/.test(info)
+}
+
 export default function MySQLThreads() {
+  const confirm = useConfirm()
+  const toast = useToast()
   const { data: health, isLoading, error, refetch } = useQuery({
     queryKey: ['mysql', 'health'],
     queryFn: mysqlApi.health,
@@ -30,26 +43,41 @@ export default function MySQLThreads() {
   const processList: MySQLProcess[] = live?.processList ?? health.processList ?? []
   const activeThreads = processList.filter(p => p.command !== 'Sleep' && p.command !== 'Daemon')
   const sleepingThreads = processList.filter(p => p.command === 'Sleep')
-  const longRunning = live?.longRunning ?? processList.filter(p => p.time > 5 && p.command !== 'Daemon')
+  const longRunning = (live?.longRunning ?? processList.filter(p => p.time > KILLABLE_QUERY_SECONDS && p.command !== 'Sleep' && p.command !== 'Daemon'))
+    .filter(isKillableProcess)
   const threadsHistory = history.map(s => s.threadsRunning)
 
-  const handleKill = async (processId: number) => {
-    if (!confirm(`Kill query on process ${processId}?`)) return
-    setKillingId(processId)
+  const handleKill = async (process: MySQLProcess) => {
+    if (!isKillableProcess(process)) {
+      toast.warning('Only long-running non-monitor queries can be killed from this view')
+      return
+    }
+    const ok = await confirm({
+      title: 'Kill MySQL Query',
+      message: `Kill process ${process.id}? This cancels the running query for ${process.user}@${process.host}.`,
+      confirmLabel: 'Kill query',
+      variant: 'danger',
+    })
+    if (!ok) return
+    setKillingId(process.id)
     try {
-      await mysqlApi.killQuery(processId)
-      setKilledIds(prev => new Set(prev).add(processId))
-      setTimeout(() => setKilledIds(prev => { const n = new Set(prev); n.delete(processId); return n }), 5000)
-    } catch { /* ignore */ }
+      await mysqlApi.killQuery(process.id)
+      setKilledIds(prev => new Set(prev).add(process.id))
+      toast.success(`Kill requested for process ${process.id}`)
+      setTimeout(() => setKilledIds(prev => { const n = new Set(prev); n.delete(process.id); return n }), 5000)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to kill query')
+    }
     setKillingId(null)
   }
 
-  const KillButton = ({ processId }: { processId: number }) => {
-    if (killedIds.has(processId)) return <span className="inline-flex items-center gap-1 text-xs text-emerald-600"><CheckCircle className="h-3 w-3" /> Killed</span>
+  const KillButton = ({ process }: { process: MySQLProcess }) => {
+    if (!isKillableProcess(process)) return <span className="text-xs text-slate-400">No action</span>
+    if (killedIds.has(process.id)) return <span className="inline-flex items-center gap-1 text-xs text-emerald-600"><CheckCircle className="h-3 w-3" /> Killed</span>
     return (
-      <button onClick={() => handleKill(processId)} disabled={killingId === processId}
+      <button onClick={() => handleKill(process)} disabled={killingId === process.id}
         className="inline-flex items-center gap-1 rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-200 disabled:opacity-50 dark:bg-red-900 dark:text-red-300">
-        {killingId === processId ? <><Loader2 className="h-3 w-3 animate-spin" /> Killing</> : <><Skull className="h-3 w-3" /> Kill</>}
+        {killingId === process.id ? <><Loader2 className="h-3 w-3 animate-spin" /> Killing</> : <><Skull className="h-3 w-3" /> Kill</>}
       </button>
     )
   }
@@ -118,7 +146,7 @@ export default function MySQLThreads() {
                     <td className="px-4 py-2.5 max-w-md">
                       {p.info ? <code className="block whitespace-pre-wrap break-all rounded bg-amber-100 px-2 py-1 text-xs dark:bg-amber-900/30">{p.info}</code> : '—'}
                     </td>
-                    <td className="px-4 py-2.5 text-center"><KillButton processId={p.id} /></td>
+                    <td className="px-4 py-2.5 text-center"><KillButton process={p} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -157,7 +185,7 @@ export default function MySQLThreads() {
                     <td className={cn('px-4 py-2.5 font-mono text-xs', p.time > 5 ? 'text-amber-600 font-semibold' : 'text-slate-500')}>{p.time}s</td>
                     <td className="px-4 py-2.5 text-xs text-slate-500">{p.state || '—'}</td>
                     <td className="px-4 py-2.5 max-w-sm">{p.info ? <code className="block truncate rounded bg-slate-50 px-2 py-1 text-xs dark:bg-slate-800" title={p.info}>{p.info}</code> : '—'}</td>
-                    <td className="px-4 py-2.5 text-center"><KillButton processId={p.id} /></td>
+                    <td className="px-4 py-2.5 text-center"><KillButton process={p} /></td>
                   </tr>
                 ))}
               </tbody>

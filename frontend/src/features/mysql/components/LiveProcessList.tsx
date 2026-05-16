@@ -3,6 +3,7 @@ import { Skull, Loader2, CheckCircle } from 'lucide-react'
 import { mysqlApi } from "@/features/mysql/api/mysql"
 import type { MySQLProcess } from "@/shared/types"
 import { cn } from "@/shared/lib/utils"
+import { useConfirm } from "@/shared/components/ConfirmDialog"
 
 interface Props {
   processes: MySQLProcess[]
@@ -10,24 +11,44 @@ interface Props {
   className?: string
 }
 
+const KILLABLE_QUERY_SECONDS = 5
+
+function isKillableProcess(p: MySQLProcess, longRunningIds: Set<number>) {
+  const info = (p.info || '').trim().toLowerCase()
+  return longRunningIds.has(p.id)
+    && p.command === 'Query'
+    && p.time >= KILLABLE_QUERY_SECONDS
+    && !/^show\s+(full\s+)?processlist/.test(info)
+}
+
 /** Real-time process list with kill query action. */
 export function LiveProcessList({ processes, longRunning, className }: Props) {
+  const confirm = useConfirm()
   const [killingId, setKillingId] = useState<number | null>(null)
   const [killedIds, setKilledIds] = useState<Set<number>>(new Set())
   const [killError, setKillError] = useState<string | null>(null)
+  const longRunningIds = new Set(longRunning.map(p => p.id))
+  const killableLongRunning = longRunning.filter(p => isKillableProcess(p, longRunningIds))
 
-  const handleKill = async (processId: number) => {
-    if (!confirm(`Kill query on process ${processId}? This will cancel the running query.`)) return
+  const handleKill = async (process: MySQLProcess) => {
+    if (!isKillableProcess(process, longRunningIds)) return
+    const ok = await confirm({
+      title: 'Kill MySQL Query',
+      message: `Kill process ${process.id}? This cancels the running query for ${process.user}@${process.host}.`,
+      confirmLabel: 'Kill query',
+      variant: 'danger',
+    })
+    if (!ok) return
 
-    setKillingId(processId)
+    setKillingId(process.id)
     setKillError(null)
     try {
-      await mysqlApi.killQuery(processId)
-      setKilledIds(prev => new Set(prev).add(processId))
+      await mysqlApi.killQuery(process.id)
+      setKilledIds(prev => new Set(prev).add(process.id))
       setTimeout(() => {
         setKilledIds(prev => {
           const next = new Set(prev)
-          next.delete(processId)
+          next.delete(process.id)
           return next
         })
       }, 5000)
@@ -49,23 +70,23 @@ export function LiveProcessList({ processes, longRunning, className }: Props) {
   return (
     <div className={cn('space-y-3', className)}>
       {/* Long-running alert banner */}
-      {longRunning.length > 0 && (
+      {killableLongRunning.length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950/40">
           <div className="flex items-center gap-2 text-sm font-medium text-red-700 dark:text-red-400">
             <span className="relative flex h-2.5 w-2.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
             </span>
-            {longRunning.length} long-running {longRunning.length === 1 ? 'query' : 'queries'} detected (&gt;5s)
+            {killableLongRunning.length} long-running {killableLongRunning.length === 1 ? 'query' : 'queries'} detected (&gt;5s)
           </div>
           <div className="mt-2 space-y-1">
-            {longRunning.slice(0, 3).map(p => (
+            {killableLongRunning.slice(0, 3).map(p => (
               <div key={p.id} className="flex items-center justify-between gap-2 text-xs text-red-600 dark:text-red-300">
                 <span className="truncate font-mono">
                   [{p.id}] {p.user}@{p.host} — {p.info || p.command} ({p.time}s)
                 </span>
                 <button
-                  onClick={() => handleKill(p.id)}
+                  onClick={() => handleKill(p)}
                   disabled={killingId === p.id || killedIds.has(p.id)}
                   className="shrink-0 rounded bg-red-600 px-2 py-0.5 text-white hover:bg-red-700 disabled:opacity-50"
                 >
@@ -129,9 +150,9 @@ export function LiveProcessList({ processes, longRunning, className }: Props) {
                   {p.info || '—'}
                 </td>
                 <td className="px-3 py-2 text-center">
-                  {p.command !== 'Sleep' && p.command !== 'Daemon' ? (
+                  {isKillableProcess(p, longRunningIds) ? (
                     <button
-                      onClick={() => handleKill(p.id)}
+                      onClick={() => handleKill(p)}
                       disabled={killingId === p.id || killedIds.has(p.id)}
                       className={cn(
                         'inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors',
@@ -149,7 +170,9 @@ export function LiveProcessList({ processes, longRunning, className }: Props) {
                         <><Skull className="h-3 w-3" /> Kill</>
                       )}
                     </button>
-                  ) : null}
+                  ) : (
+                    <span className="text-xs text-slate-400">No action</span>
+                  )}
                 </td>
               </tr>
             ))}

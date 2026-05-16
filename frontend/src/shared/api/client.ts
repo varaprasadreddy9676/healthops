@@ -136,6 +136,9 @@ export const api = {
   put: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: 'PUT', body: data === undefined ? undefined : JSON.stringify(data) }),
 
+  patch: <T>(path: string, data?: unknown) =>
+    request<T>(path, { method: 'PATCH', body: data === undefined ? undefined : JSON.stringify(data) }),
+
   delete: <T>(path: string) =>
     request<T>(path, { method: 'DELETE' }),
 

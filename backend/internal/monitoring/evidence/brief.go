@@ -190,10 +190,10 @@ func (g *BriefGenerator) buildUserPrompt(incident monitoring.Incident, evidence 
 
 // parsedBrief is the JSON structure we expect from the AI.
 type parsedBrief struct {
-	LikelyCause      string             `json:"likelyCause"`
-	ImpactSummary    string             `json:"impactSummary"`
-	NextActions      []string           `json:"nextActions"`
-	EvidenceSummary  []EvidenceCitation `json:"evidenceCitations"`
+	LikelyCause     string             `json:"likelyCause"`
+	ImpactSummary   string             `json:"impactSummary"`
+	NextActions     []string           `json:"nextActions"`
+	EvidenceSummary []EvidenceCitation `json:"evidenceCitations"`
 }
 
 func parseAIBriefResponse(response string) parsedBrief {

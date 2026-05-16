@@ -7,6 +7,7 @@ import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
 import { EmptyState } from "@/shared/components/EmptyState"
 import { MetricCard } from "@/shared/components/MetricCard"
+import { useToast } from "@/shared/components/Toast"
 import { cn, relativeTime } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 
@@ -44,6 +45,7 @@ function CategoryBadge({ category }: { category: string }) {
 
 export default function Logs() {
     const queryClient = useQueryClient()
+    const toast = useToast()
     const [statusFilter, setStatusFilter] = useState<string>('')
     const [categoryFilter, setCategoryFilter] = useState<string>('')
 
@@ -61,9 +63,13 @@ export default function Logs() {
 
     const categorizeMutation = useMutation({
         mutationFn: () => logsApi.categorize(20),
-        onSuccess: () => {
+        onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: ['logs'] })
+            toast.success(result.categorized > 0
+                ? `Categorized ${result.categorized} log ${result.categorized === 1 ? 'family' : 'families'}`
+                : 'No uncategorized log families found')
         },
+        onError: (err: Error) => toast.error(err.message || 'AI categorization failed'),
     })
 
     if (isLoading) return <LoadingState />

@@ -70,7 +70,7 @@ export const logsApi = {
         api.get<LogFamilyDetail>(`/logs/families/${encodeURIComponent(id)}`),
 
     updateFamily: (id: string, data: { status?: string; category?: string; severity?: string }) =>
-        api.post<ErrorFamily>(`/logs/families/${encodeURIComponent(id)}`, data),
+        api.patch<ErrorFamily>(`/logs/families/${encodeURIComponent(id)}`, data),
 
     stats: () =>
         api.get<LogFamilyStats>('/logs/stats'),

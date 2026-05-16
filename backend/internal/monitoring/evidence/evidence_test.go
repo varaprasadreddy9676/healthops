@@ -3,11 +3,25 @@ package evidence
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
 	"medics-health-check/backend/internal/monitoring"
 )
+
+func TestAPIHandlerRegisterRoutesDoesNotConflictWithIncidentRoutes(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/incidents/", func(w http.ResponseWriter, r *http.Request) {})
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("RegisterRoutes panicked when incident routes already existed: %v", r)
+		}
+	}()
+
+	NewAPIHandler(nil, nil, nil, nil).RegisterRoutes(mux)
+}
 
 // --- Mocks ---
 
@@ -15,7 +29,7 @@ type mockStore struct {
 	state monitoring.State
 }
 
-func (m *mockStore) Snapshot() monitoring.State          { return m.state }
+func (m *mockStore) Snapshot() monitoring.State { return m.state }
 func (m *mockStore) DashboardSnapshot() monitoring.DashboardSnapshot {
 	return monitoring.DashboardSnapshot{State: m.state}
 }

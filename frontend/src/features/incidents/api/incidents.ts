@@ -12,7 +12,9 @@ export const incidentsApi = {
     return api.get<PaginatedData<Incident>>(`/incidents${q ? `?${q}` : ''}`)
   },
   get: (id: string) => api.get<Incident>(`/incidents/${encodeURIComponent(id)}`),
-  acknowledge: (id: string) => api.post(`/incidents/${encodeURIComponent(id)}/acknowledge`),
-  resolve: (id: string) => api.post(`/incidents/${encodeURIComponent(id)}/resolve`),
+  acknowledge: (id: string, acknowledgedBy?: string) =>
+    api.post<Incident>(`/incidents/${encodeURIComponent(id)}/acknowledge`, { acknowledgedBy }),
+  resolve: (id: string, resolvedBy?: string) =>
+    api.post<Incident>(`/incidents/${encodeURIComponent(id)}/resolve`, { resolvedBy }),
   snapshots: (id: string) => api.get<IncidentSnapshot[]>(`/incidents/${encodeURIComponent(id)}/snapshots`),
 }

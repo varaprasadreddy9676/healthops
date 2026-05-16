@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { Brain, Zap, TestTube } from 'lucide-react'
 import { aiApi } from "@/features/ai/api/ai"
 import { MetricCard } from "@/shared/components/MetricCard"
@@ -61,7 +62,16 @@ export default function AIAnalysis() {
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Configured Providers</h2>
         </div>
         {providers.length === 0 ? (
-          <p className="text-sm text-slate-500">No providers configured. Add one in Settings.</p>
+          <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-5 dark:border-slate-700 dark:bg-slate-800/40">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">No AI providers configured</p>
+            <p className="mt-1 text-sm text-slate-500">Incident analysis, log categorization, and MySQL assistant features need a provider before they can run.</p>
+            <Link
+              to="/settings?tab=ai"
+              className="mt-3 inline-flex items-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            >
+              Configure AI providers
+            </Link>
+          </div>
         ) : (
           <div className="space-y-3">
             {providers.map((provider: AIProviderConfig) => (

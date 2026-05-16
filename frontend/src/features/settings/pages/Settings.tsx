@@ -404,7 +404,11 @@ function UserModal({ user, onClose, onSaved }: { user: User | null; onClose: () 
         <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Username</label>
-            <input value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
+            <input
+              name="new-user-username"
+              autoComplete="off"
+              value={form.username}
+              onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
               disabled={isEdit} required placeholder="johndoe" className={cn(inputCls, isEdit && 'opacity-50 cursor-not-allowed')} />
           </div>
 
@@ -434,7 +438,12 @@ function UserModal({ user, onClose, onSaved }: { user: User | null; onClose: () 
             <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">
               {isEdit ? 'New Password (leave blank to keep current)' : 'Password'}
             </label>
-            <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+            <input
+              name="new-user-password"
+              autoComplete="new-password"
+              type="password"
+              value={form.password}
+              onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
               required={!isEdit} minLength={8} placeholder={isEdit ? 'Leave blank to keep current' : 'Min 8 characters'}
               className={inputCls} />
           </div>
