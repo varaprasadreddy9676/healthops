@@ -1,0 +1,1324 @@
+{
+  "server": {
+    "addr": ":8080",
+    "readTimeoutSeconds": 10,
+    "writeTimeoutSeconds": 10,
+    "idleTimeoutSeconds": 60
+  },
+  "retentionDays": 14,
+  "checkIntervalSeconds": 60,
+  "workers": 12,
+  "allowCommandChecks": true,
+  "checks": [
+    {
+      "id": "medics-prod-prod-medicsprime-com",
+      "name": "medics Prod",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://prod.medicsprime.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-ivf-medicsivf-com",
+      "name": "medics IVF",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://medicsivf.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "nova-production-nova-medicsivf-com",
+      "name": "Nova production",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://nova.medicsivf.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "nova-master-production-nova-masters-medicsivf-com",
+      "name": "Nova Master production",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://nova.masters.medicsivf.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "garbhagudi-production-garbhagudi-medicsivf-com",
+      "name": "Garbhagudi Production",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://garbhagudi.medicsivf.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "sankara-production-sankara-medicsprime-com",
+      "name": "Sankara production",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://sankara.medicsprime.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "banker-production-banker-medicsivf-com",
+      "name": "Banker production",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://banker.medicsivf.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-v3-medicsprime-in",
+      "name": "medics v3",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "http://medicsprime.in/v3/Login?",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-analytics-medicsanalytics-in",
+      "name": "medics analytics",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://medicsanalytics.in/",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-demo-msh-demo-medicsprime-com",
+      "name": "medics Demo MSH",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://demo.medicsprime.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-demo-ivf-demo-medicsivf-com",
+      "name": "medics Demo IVF",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://demo.medicsivf.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-api-api-medicsprime-com",
+      "name": "medics API",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://api.medicsprime.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-impl-impl-medicsprime-com",
+      "name": "medics IMPL",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://impl.medicsprime.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-cloud-rt-medicsprime-in",
+      "name": "medics Cloud RT",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://medicsprime.in/medicsCloudRT/",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-unity-unity-medicsprime-com",
+      "name": "medics Unity",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://unity.medicsprime.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-v9-nova-v9-nova-medicsivf-com",
+      "name": "medics V9 NOVA",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://v9.nova.medicsivf.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-v9-sarji-sarji-medicsprime-com",
+      "name": "medics V9 Sarji",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://sarji.medicsprime.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-yana-yana-medicsivf-com",
+      "name": "medics YANA",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://yana.medicsivf.com/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-jitsi-jitsi-medicsprime-com",
+      "name": "medics Jitsi",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://jitsi.medicsprime.com/",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-onyx-onyx-medicsprime-com",
+      "name": "medics Onyx",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://onyx.medicsprime.com/",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "cloud-production-jenkins-olap-server-tomcat7-172-31-7-77-8082",
+      "name": "Cloud Production Jenkins/OLAP Server Tomcat7",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "http://172.31.7.77:8082/",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "mdx-medicsprime-in",
+      "name": "mdx",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://medicsprime.in/mdx-client-server/customer",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-notification-medicsprime-in",
+      "name": "medics notification",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://medicsprime.in/medics-notification/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-communication-server-medicsprime-in",
+      "name": "medics communication server",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://medicsprime.in/medics-communication-service/api/configurations",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-easy-landing-www-medicseasy-com",
+      "name": "medics easy landing",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://www.medicseasy.com/",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-easy-me2-medicseasy-in",
+      "name": "medics easy(me2)",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://medicseasy.in/me2/Login",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "fmp-tech-upgrade-production-medics-vietnammedicalpractice-com",
+      "name": "FMP Tech Upgrade Production",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://medics.vietnammedicalpractice.com/medics/Login",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "fmp-emr-production-production-vietnammedicalpractice-com",
+      "name": "FMP EMR Production",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://production.vietnammedicalpractice.com/",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-subscription-client-medicseasy-in",
+      "name": "medics subscription client",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://medicseasy.in/subscription-client/#/pricing",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-subscription-server-medicseasy-in",
+      "name": "medics subscription server",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://medicseasy.in/medics-subscription-server/verify/featureGroupCode?planCode=",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-attachment-server-medicsprime-in",
+      "name": "medics attachment server",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://medicsprime.in/medics-attachment-server/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-digivisit-server-medicsprime-in",
+      "name": "medics digivisit server",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://medicsprime.in/digivisit-server/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-token-management-server-medicsprime-in",
+      "name": "medics Token Management Server",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://medicsprime.in/medics-token-management-server/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "mdx-mirth-server-mirth-ind-medicsprime-in",
+      "name": "mdx-mirth Server",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://mirth-ind.medicsprime.in/webadmin/Index.action",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "medics-table-data-exporter-medicsprime-in",
+      "name": "medics-table-data-exporter",
+      "type": "api",
+      "server": "medics",
+      "application": "medics",
+      "target": "https://medicsprime.in/medics-table-exporter/hc",
+      "expectedStatus": 200,
+      "timeoutSeconds": 15,
+      "warningThresholdMs": 5000,
+      "intervalSeconds": 60,
+      "retryCount": 1,
+      "retryDelaySeconds": 5,
+      "cooldownSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "api",
+        "medics"
+      ]
+    },
+    {
+      "id": "ehr-sync-engine-syncdata",
+      "name": "EHR Sync Engine",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "SyncData",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "ehr-push-data-1-pushdata-1",
+      "name": "EHR Push Data 1",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "PushData_1",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "ehr-push-data-2-pushdata-2",
+      "name": "EHR Push Data 2",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "PushData_2",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "ferty9-dataset-uploader-pulldataengine",
+      "name": "Ferty9 dataset Uploader",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "pullDataEngine",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "ferty9-dataset-uploader-pushdataengine",
+      "name": "Ferty9 dataset Uploader",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "pushDataEngine",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-event-manager-bugfix-medics-event-publisher",
+      "name": "medics-event-manager-bugfix",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "medics-event-publisher",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-grid-medics-grid",
+      "name": "medics-grid",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "medics-grid",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-grid-postlaborder-postlaborder",
+      "name": "medics-grid(PostLabOrder)",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "PostLabOrder",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-grid-labresultreceiver-labresultreceiver",
+      "name": "medics-grid(LabResultReceiver)",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "LabResultReceiver",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-notification-server-medics-notification-server",
+      "name": "medics-notification-server",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "medics-notification-server",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-notification-server-consumer-consumer",
+      "name": "medics-notification-server(consumer)",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "consumer",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medicsnow-flutter-server-medicsnow-flutter-server",
+      "name": "medicsnow-flutter-server",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "medicsnow-flutter-server",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-subscription-server-medics-subscription-server",
+      "name": "medics-subscription-server",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "medics-subscription-server",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-data-exchange-crm-medics-data-exchange-crm",
+      "name": "medics-data-exchange-crm",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "medics-data-exchange-crm",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-now-medics-now",
+      "name": "medics-now",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "medics-now",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-communication-server-medics-communication-server",
+      "name": "medics-communication-server",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "medics-communication-server",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-api-medics-api",
+      "name": "medics-api",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "medics-api",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-attachment-server-medics-attachment-server",
+      "name": "medics-attachment-server",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "medics-attachment-server",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "mdx-client-server-mdx-client-server",
+      "name": "mdx-client-server",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "mdx-client-server",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-reports-notifier-engine-medics-reports-notifier-engine",
+      "name": "medics-reports-notifier-engine",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "medics-reports-notifier-engine",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-error-notifier-medics-error-notify-engine",
+      "name": "medics-error-notifier",
+      "type": "process",
+      "server": "medics",
+      "application": "medics",
+      "target": "medics-error-notify-engine",
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "process",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "mongod",
+      "name": "mongod",
+      "type": "command",
+      "server": "medics",
+      "application": "system",
+      "command": "systemctl is-active mongod",
+      "expectedContains": "active",
+      "timeoutSeconds": 15,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "service",
+        "command",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "apache2-port-80",
+      "name": "apache2",
+      "type": "command",
+      "server": "medics",
+      "application": "system",
+      "command": "/usr/sbin/service apache2 status",
+      "expectedContains": "active",
+      "timeoutSeconds": 15,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "service",
+        "command",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "zoho-server-cassandra-db",
+      "name": "Zoho Server Cassandra DB",
+      "type": "command",
+      "server": "medics",
+      "application": "system",
+      "command": "/bin/nc -zv 172.31.24.54 9042 >/dev/null 2>&1 && echo active || echo inactive",
+      "expectedContains": "active",
+      "timeoutSeconds": 15,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "service",
+        "command",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-api-port-3087",
+      "name": "medics API",
+      "type": "tcp",
+      "server": "medics",
+      "application": "medics",
+      "host": "127.0.0.1",
+      "port": 3087,
+      "timeoutSeconds": 10,
+      "intervalSeconds": 60,
+      "enabled": false,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "tcp",
+        "medics",
+        "needs-server"
+      ]
+    },
+    {
+      "id": "medics-ep-db-cloud",
+      "name": "Medics EP DB Cloud",
+      "type": "mysql",
+      "server": "medics-db",
+      "application": "medics",
+      "timeoutSeconds": 15,
+      "intervalSeconds": 60,
+      "enabled": true,
+      "notificationChannelIds": [
+        "ops-email"
+      ],
+      "tags": [
+        "mysql",
+        "medics",
+        "database"
+      ],
+      "mysql": {
+        "dsnEnv": "MYSQL_DSN_MEDICS_EP_DB_CLOUD",
+        "connectTimeoutSeconds": 5,
+        "queryTimeoutSeconds": 10,
+        "processlistLimit": 50,
+        "statementLimit": 20,
+        "hostUserLimit": 20
+      }
+    }
+  ]
+}
