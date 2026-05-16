@@ -5,6 +5,7 @@ import { useAuth } from "@/shared/hooks/useAuth"
 import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
 import { EmptyState } from "@/shared/components/EmptyState"
+import { useConfirm } from "@/shared/components/ConfirmDialog"
 import { useToast } from "@/shared/components/Toast"
 
 interface User {
@@ -31,6 +32,7 @@ async function fetchUsers(): Promise<User[]> {
 export default function UserManagement() {
   const { isAdmin } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -244,10 +246,14 @@ export default function UserManagement() {
                           <Pencil className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => {
-                            if (confirm(`Delete user "${user.username}"?`)) {
-                              deleteMutation.mutate(user.id)
-                            }
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: 'Delete User',
+                              message: `Delete user "${user.username}"?`,
+                              variant: 'danger',
+                              confirmLabel: 'Delete',
+                            })
+                            if (ok) deleteMutation.mutate(user.id)
                           }}
                           className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50"
                           title="Delete"

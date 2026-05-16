@@ -20,31 +20,31 @@ type RouteRegistrar interface {
 }
 
 type Service struct {
-	cfg               *Config
-	store             Store
-	runner            *Runner
-	scheduler         *CheckScheduler
-	incidentManager   *IncidentManager
-	alertEngine       *AlertRuleEngine
-	metrics           *MetricsCollector
-	logger            *log.Logger
-	auditLogger       *AuditLogger
-	mysqlRoutes       RouteRegistrar
-	aiRoutes          RouteRegistrar
-	notifyRoutes          RouteRegistrar
-	logRoutes             RouteRegistrar
-	rcaRoutes             RouteRegistrar
-	evidenceRoutes        RouteRegistrar
-	assistantRoutes       RouteRegistrar
-	recommendationRoutes  RouteRegistrar
-	automationRoutes      RouteRegistrar
-	snapshotRepo      IncidentSnapshotRepository
-	userStore         UserStoreBackend
-	userAPI           *UserAPIHandler
-	serverMetricsRepo *ServerMetricsRepository
-	serverRepo        ServerRepository
-	degradedMode      *DegradedMode
-	mongoHealthCheck  func(ctx context.Context) error // Phase 0: if set, /healthz pings MongoDB
+	cfg                  *Config
+	store                Store
+	runner               *Runner
+	scheduler            *CheckScheduler
+	incidentManager      *IncidentManager
+	alertEngine          *AlertRuleEngine
+	metrics              *MetricsCollector
+	logger               *log.Logger
+	auditLogger          *AuditLogger
+	mysqlRoutes          RouteRegistrar
+	aiRoutes             RouteRegistrar
+	notifyRoutes         RouteRegistrar
+	logRoutes            RouteRegistrar
+	rcaRoutes            RouteRegistrar
+	evidenceRoutes       RouteRegistrar
+	assistantRoutes      RouteRegistrar
+	recommendationRoutes RouteRegistrar
+	automationRoutes     RouteRegistrar
+	snapshotRepo         IncidentSnapshotRepository
+	userStore            UserStoreBackend
+	userAPI              *UserAPIHandler
+	serverMetricsRepo    *ServerMetricsRepository
+	serverRepo           ServerRepository
+	degradedMode         *DegradedMode
+	mongoHealthCheck     func(ctx context.Context) error // Phase 0: if set, /healthz pings MongoDB
 	// alertRuleRepo     repositories.AlertRuleRepository // TODO: uncomment when needed
 }
 
@@ -376,8 +376,8 @@ func (s *Service) Run(ctx context.Context) error {
 		handler = s.degradedMode.Middleware(handler)
 	}
 
-	handler = maxBodyMiddleware(1<<20, handler)          // 1 MB request body limit
-	handler = httpx.RateLimit(100, time.Minute, handler) // 100 req/min per IP
+	handler = maxBodyMiddleware(1<<20, handler)           // 1 MB request body limit
+	handler = httpx.RateLimit(3000, time.Minute, handler) // 3000 API req/min per IP
 	handler = metricsMiddleware(s.metrics, handler)
 	handler = loggingMiddleware(s.logger, handler)
 	if s.userStore != nil {
@@ -921,6 +921,10 @@ type responseWriter struct {
 func (w *responseWriter) WriteHeader(statusCode int) {
 	w.status = statusCode
 	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *responseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
 }
 
 // Flush implements http.Flusher so SSE streaming works through middleware.

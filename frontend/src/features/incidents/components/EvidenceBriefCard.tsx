@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Sparkles, ChevronDown, Target, Clock, AlertTriangle, CheckCircle2, Info, Loader2 } from 'lucide-react'
-import { cn, relativeTime, formatDate } from '@/shared/lib/utils'
+import { cn, relativeTime } from '@/shared/lib/utils'
 import { evidenceApi, type IncidentBrief } from '@/features/incidents/api/evidence'
 
 function ConfidenceBadge({ confidence }: { confidence: IncidentBrief['confidence'] }) {

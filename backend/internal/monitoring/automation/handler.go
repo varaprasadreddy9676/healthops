@@ -162,7 +162,7 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data": map[string]any{
-			"enabled":   available,
+			"enabled":     available,
 			"aiAvailable": available,
 		},
 	})

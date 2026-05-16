@@ -2,9 +2,12 @@ package evidence
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 // --- Response envelope (matches monitoring.APIResponse) ---
@@ -132,7 +135,11 @@ func (h *APIHandler) handleGetBrief(w http.ResponseWriter, r *http.Request, inci
 
 	brief, err := h.briefRepo.GetLatest(r.Context(), incidentID)
 	if err != nil {
-		writeErr(w, http.StatusNotFound, fmt.Sprintf("no brief found for incident %s", incidentID))
+		if errors.Is(err, mongo.ErrNoDocuments) || strings.Contains(strings.ToLower(err.Error()), "no documents") {
+			writeOK(w, http.StatusOK, nil)
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, fmt.Sprintf("fetch brief: %v", err))
 		return
 	}
 

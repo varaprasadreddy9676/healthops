@@ -186,11 +186,10 @@ export default function Recommendations() {
                         <button
                             key={tab.value}
                             onClick={() => setFilter(tab.value)}
-                            className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                                filter === tab.value
+                            className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${filter === tab.value
                                     ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
                                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
-                            }`}
+                                }`}
                         >
                             {tab.label}
                         </button>

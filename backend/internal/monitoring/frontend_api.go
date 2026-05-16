@@ -50,6 +50,16 @@ type SSEPayload struct {
 	ActiveIncidents int       `json:"activeIncidents"`
 }
 
+// PrepareSSEStream applies headers and clears the per-request write deadline
+// so long-lived event streams are not forcibly closed by the server timeout.
+func PrepareSSEStream(w http.ResponseWriter) {
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+}
+
 // AuthInfo returns the caller's identity.
 type AuthInfo struct {
 	Username    string `json:"username"`
@@ -424,9 +434,7 @@ func (s *Service) handleSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
+	PrepareSSEStream(w)
 
 	// Use configured CORS origin, default to same-origin (no header)
 	corsOrigin := os.Getenv("CORS_ORIGIN")

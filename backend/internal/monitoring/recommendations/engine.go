@@ -121,8 +121,8 @@ func (e *Engine) thresholdSuggestions(state monitoring.State) []Recommendation {
 				Server:  check.Server,
 				Current: map[string]any{
 					"warningThresholdMs": threshold,
-					"p95Ms":             p95,
-					"p50Ms":             p50,
+					"p95Ms":              p95,
+					"p50Ms":              p50,
 				},
 				Suggested: map[string]any{
 					"warningThresholdMs": suggested,
@@ -149,7 +149,7 @@ func (e *Engine) thresholdSuggestions(state monitoring.State) []Recommendation {
 				Current: map[string]any{
 					"warningThresholdMs": threshold,
 					"failureRate":        fmt.Sprintf("%.1f%%", failureRate*100),
-					"p95Ms":             p95,
+					"p95Ms":              p95,
 				},
 				Suggested: map[string]any{
 					"warningThresholdMs": suggested,

@@ -18,14 +18,14 @@ type AIProvider func(ctx context.Context, systemMsg, userMsg string) (string, er
 
 // Handler serves the recommendations API.
 type Handler struct {
-	engine       *Engine
-	aiCall       AIProvider
-	logger       *log.Logger
-	mu           sync.RWMutex
-	cached       []Recommendation
-	cachedAt     time.Time
-	cacheMaxAge  time.Duration
-	dismissed    map[string]time.Time // id → dismissed at
+	engine      *Engine
+	aiCall      AIProvider
+	logger      *log.Logger
+	mu          sync.RWMutex
+	cached      []Recommendation
+	cachedAt    time.Time
+	cacheMaxAge time.Duration
+	dismissed   map[string]time.Time // id → dismissed at
 }
 
 // NewHandler creates a new recommendations handler.

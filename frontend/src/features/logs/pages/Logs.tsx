@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import {
     FileText, Filter, Brain, AlertTriangle, Bug, Database, Wifi, Clock,
     Layers, Search, ChevronDown, ChevronUp, ArrowUpDown, HardDrive,
-    Shield, Settings, Key, BarChart3, TrendingUp, X
+    Settings, Key, BarChart3, TrendingUp, X
 } from 'lucide-react'
 import { logsApi, type ErrorFamily } from "@/features/logs/api/logs"
 import { LoadingState } from "@/shared/components/LoadingState"

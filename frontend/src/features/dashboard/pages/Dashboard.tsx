@@ -163,6 +163,15 @@ export default function Dashboard() {
   ) ?? []
   const resolvedInPeriod = periodIncidents.filter(i => i.status === 'resolved').length
   const openCount = incidents?.items.length ?? live.activeIncidents
+  const resolvedIncidentCount = incidentStats?.resolved ?? 0
+  const mttrValue = resolvedIncidentCount > 0 && incidentStats?.mttrMinutes != null
+    ? formatMinutesMetric(incidentStats.mttrMinutes)
+    : '--'
+  const mttrSubValue = resolvedIncidentCount > 0
+    ? incidentStats?.mttaMinutes != null && incidentStats.mttaMinutes > 0
+      ? `${resolvedIncidentCount} resolved · MTTA: ${formatMinutesMetric(incidentStats.mttaMinutes)}`
+      : `${resolvedIncidentCount} resolved`
+    : 'No resolved incidents'
 
   // Build latest result map — prefer live SSE data
   const latestByCheck = live.latestByCheck.size > 0 ? live.latestByCheck : (() => {
@@ -371,8 +380,8 @@ export default function Dashboard() {
         />
         <MetricCard
           label="MTTR"
-          value={incidentStats?.mttrMinutes != null && incidentStats.mttrMinutes > 0 ? `${Math.round(incidentStats.mttrMinutes)}m` : '--'}
-          subValue={incidentStats?.mttaMinutes != null && incidentStats.mttaMinutes > 0 ? `MTTA: ${Math.round(incidentStats.mttaMinutes)}m` : 'No resolved incidents'}
+          value={mttrValue}
+          subValue={mttrSubValue}
           icon={<Clock className="h-5 w-5" />}
         />
       </div>
@@ -724,6 +733,11 @@ export default function Dashboard() {
       )}
     </div>
   )
+}
+
+function formatMinutesMetric(minutes: number): string {
+  if (minutes <= 0) return '0s'
+  return formatDuration(minutes * 60_000)
 }
 
 /* ---- Helper components ---- */

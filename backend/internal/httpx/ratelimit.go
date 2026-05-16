@@ -3,6 +3,7 @@ package httpx
 import (
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -70,8 +71,7 @@ func RateLimit(rate int, window time.Duration, next http.Handler) http.Handler {
 	limiter := newRateLimiter(rate, window)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Don't rate limit health checks
-		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+		if isRateLimitExempt(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -87,6 +87,22 @@ func RateLimit(rate int, window time.Duration, next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isRateLimitExempt(path string) bool {
+	if path == "/healthz" || path == "/readyz" || path == "/" || path == "/favicon.ico" {
+		return true
+	}
+	if strings.HasPrefix(path, "/assets/") {
+		return true
+	}
+	if path == "/api/v1/events" || path == "/api/v1/mysql/live" {
+		return true
+	}
+	if strings.HasPrefix(path, "/api/v1/servers/") && strings.HasSuffix(path, "/live") {
+		return true
+	}
+	return !strings.HasPrefix(path, "/api/")
 }
 
 // extractIP gets the client IP from X-Forwarded-For, X-Real-IP, or RemoteAddr.

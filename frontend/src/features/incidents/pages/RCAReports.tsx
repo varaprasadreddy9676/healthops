@@ -141,7 +141,7 @@ export default function RCAReports() {
             {filtered.length === 0 ? (
                 <EmptyState
                     title="No RCA reports"
-                    message="Root cause analysis reports will appear here after running RCA on an incident."
+                    description="Root cause analysis reports will appear here after running RCA on an incident."
                 />
             ) : (
                 <div className="space-y-3">

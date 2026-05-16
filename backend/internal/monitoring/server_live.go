@@ -56,9 +56,7 @@ func (s *Service) handleServerLive(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
+	PrepareSSEStream(w)
 
 	corsOrigin := os.Getenv("CORS_ORIGIN")
 	if corsOrigin != "" {

@@ -15,10 +15,17 @@ type AIConfigStoreInterface interface {
 	Update(mutator func(*ai.AIServiceConfig) error) error
 }
 
+type aiProviderRepository interface {
+	List(ctx context.Context) ([]*AIProvider, error)
+	Create(ctx context.Context, provider *AIProvider) error
+	Update(ctx context.Context, provider *AIProvider) error
+	Delete(ctx context.Context, id string) error
+}
+
 // MongoAIConfigStoreAdapter adapts MongoAIConfigRepository to AIConfigStoreInterface.
 // This allows the MongoDB repository to work with the existing AI service layer.
 type MongoAIConfigStoreAdapter struct {
-	repo *MongoAIConfigRepository
+	repo aiProviderRepository
 	mu   sync.RWMutex
 	// Cache the service config for prompt templates
 	serviceConfig ai.AIServiceConfig
@@ -44,9 +51,13 @@ func (a *MongoAIConfigStoreAdapter) Get() ai.AIServiceConfig {
 	providers, err := a.repo.List(ctx)
 	if err != nil {
 		// On error, return cached config with empty providers
-		return a.serviceConfig
+		return copyServiceConfig(a.serviceConfig)
 	}
 
+	return a.configFromProvidersLocked(providers)
+}
+
+func (a *MongoAIConfigStoreAdapter) configFromProvidersLocked(providers []*AIProvider) ai.AIServiceConfig {
 	// Convert MongoDB providers to AI provider configs
 	aiProviders := make([]ai.AIProviderConfig, len(providers))
 	for i, p := range providers {
@@ -54,7 +65,7 @@ func (a *MongoAIConfigStoreAdapter) Get() ai.AIServiceConfig {
 	}
 
 	// Build the service config
-	cfg := a.serviceConfig
+	cfg := copyServiceConfig(a.serviceConfig)
 	cfg.Providers = aiProviders
 
 	return cfg
@@ -66,8 +77,16 @@ func (a *MongoAIConfigStoreAdapter) Update(mutator func(*ai.AIServiceConfig) err
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	// Get current state
-	cfg := a.Get()
+	ctx := context.Background()
+
+	// Get current state without recursively taking a.mu. sync.RWMutex is not
+	// reentrant, so calling Get while holding the write lock deadlocks.
+	existingProviders, err := a.repo.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	cfg := a.configFromProvidersLocked(existingProviders)
 
 	// Apply mutator
 	if err := mutator(&cfg); err != nil {
@@ -75,14 +94,6 @@ func (a *MongoAIConfigStoreAdapter) Update(mutator func(*ai.AIServiceConfig) err
 	}
 
 	// Update providers in MongoDB
-	ctx := context.Background()
-
-	// Get existing providers to determine which to add/update/delete
-	existingProviders, err := a.repo.List(ctx)
-	if err != nil {
-		return err
-	}
-
 	existingMap := make(map[string]*AIProvider)
 	for _, p := range existingProviders {
 		existingMap[p.ID] = p
@@ -122,9 +133,21 @@ func (a *MongoAIConfigStoreAdapter) Update(mutator func(*ai.AIServiceConfig) err
 	}
 
 	// Cache the prompts in memory
-	a.serviceConfig = cfg
+	a.serviceConfig = copyServiceConfig(cfg)
 
 	return nil
+}
+
+func copyServiceConfig(cfg ai.AIServiceConfig) ai.AIServiceConfig {
+	providers := make([]ai.AIProviderConfig, len(cfg.Providers))
+	copy(providers, cfg.Providers)
+	cfg.Providers = providers
+
+	prompts := make([]ai.AIPromptTemplate, len(cfg.Prompts))
+	copy(prompts, cfg.Prompts)
+	cfg.Prompts = prompts
+
+	return cfg
 }
 
 // --- Conversion Functions ---

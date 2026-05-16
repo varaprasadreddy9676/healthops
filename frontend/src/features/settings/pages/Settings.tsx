@@ -25,18 +25,19 @@ import type {
 type Tab = 'general' | 'users' | 'servers' | 'checks' | 'alerts' | 'ai' | 'export'
 
 export default function Settings() {
-  const [searchParams] = useSearchParams()
-  const initialTab = (searchParams.get('tab') as Tab) || 'general'
+  const [searchParams, setSearchParams] = useSearchParams()
+  const rawTab = searchParams.get('tab') as Tab | null
+  const initialTab = rawTab && SETTINGS_TABS.some(t => t.id === rawTab) ? rawTab : 'general'
   const [tab, setTab] = useState<Tab>(initialTab)
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'general', label: 'General', icon: <SettingsIcon className="h-4 w-4" /> },
-    { id: 'users', label: 'Users', icon: <Users className="h-4 w-4" /> },
-    { id: 'servers', label: 'Servers', icon: <Server className="h-4 w-4" /> },
-    { id: 'checks', label: 'Health Checks', icon: <Activity className="h-4 w-4" /> },
-    { id: 'alerts', label: 'Alert Rules', icon: <Bell className="h-4 w-4" /> },
-    { id: 'ai', label: 'AI Providers', icon: <Key className="h-4 w-4" /> },
-    { id: 'export', label: 'Export', icon: <Download className="h-4 w-4" /> },
-  ]
+
+  useEffect(() => {
+    setTab(initialTab)
+  }, [initialTab])
+
+  const selectTab = (nextTab: Tab) => {
+    setTab(nextTab)
+    setSearchParams(nextTab === 'general' ? {} : { tab: nextTab }, { replace: true })
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -46,10 +47,10 @@ export default function Settings() {
       </div>
 
       <div className="flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800">
-        {tabs.map(t => (
+        {SETTINGS_TABS.map(t => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => selectTab(t.id)}
             className={cn(
               'inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors',
               tab === t.id
@@ -73,6 +74,16 @@ export default function Settings() {
     </div>
   )
 }
+
+const SETTINGS_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  { id: 'general', label: 'General', icon: <SettingsIcon className="h-4 w-4" /> },
+  { id: 'users', label: 'Users', icon: <Users className="h-4 w-4" /> },
+  { id: 'servers', label: 'Servers', icon: <Server className="h-4 w-4" /> },
+  { id: 'checks', label: 'Health Checks', icon: <Activity className="h-4 w-4" /> },
+  { id: 'alerts', label: 'Alert Rules', icon: <Bell className="h-4 w-4" /> },
+  { id: 'ai', label: 'AI Providers', icon: <Key className="h-4 w-4" /> },
+  { id: 'export', label: 'Export', icon: <Download className="h-4 w-4" /> },
+]
 
 /* ───────────────────────── MODAL SHELL ───────────────────────── */
 
@@ -1812,7 +1823,7 @@ function AISettings() {
                       )}
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      {p.provider} · {p.model} · Key: {p.apiKeyMasked || '••••'}
+                      {p.provider} · {p.model} · Key: {p.apiKeyMasked || p.apiKey || '••••'}
                       {p.baseURL && ` · ${p.baseURL}`}
                     </p>
                   </div>
@@ -1927,7 +1938,7 @@ function ProviderForm({ initial, isEdit, saving, onSave, onCancel }: {
             <input type={showKey ? 'text' : 'password'} value={form.apiKey ?? ''}
               onChange={e => setForm(f => ({ ...f, apiKey: e.target.value }))}
               placeholder={isEdit ? '••••••••••••' : 'sk-...'}
-              className={cn(inputCls, 'pr-10')} required={!isEdit} autoComplete="off" />
+              className={cn(inputCls, 'pr-10')} required={!isEdit} autoComplete="new-password" />
             <button type="button" onClick={() => setShowKey(!showKey)}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
               {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
