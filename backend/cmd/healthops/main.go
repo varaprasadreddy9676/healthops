@@ -14,6 +14,7 @@ import (
 	"medics-health-check/backend/internal/monitoring"
 	"medics-health-check/backend/internal/monitoring/ai"
 	airepositories "medics-health-check/backend/internal/monitoring/ai/repositories"
+	"medics-health-check/backend/internal/monitoring/evidence"
 	"medics-health-check/backend/internal/monitoring/logs"
 	"medics-health-check/backend/internal/monitoring/mysql"
 	"medics-health-check/backend/internal/monitoring/notify"
@@ -556,6 +557,62 @@ func main() {
 			service.SetRCARoutes(rcaAPIHandler)
 			logger.Printf("Root-cause analysis initialized (data dir: %s)", dataDir)
 		}
+	}
+
+	// --- Evidence Backbone & AI Incident Brief (Phase 1) ---
+	{
+		registry := evidence.NewRegistry()
+		registry.Register(evidence.NewCheckProvider(store))
+		if snapshotRepo != nil {
+			registry.Register(evidence.NewMySQLSnapshotProvider(snapshotRepo))
+		}
+		if mysqlRepo != nil {
+			registry.Register(evidence.NewMySQLProvider(mysqlRepo))
+		}
+		registry.Register(evidence.NewServerMetricsProvider(serverMetricsRepo, store))
+		registry.Register(evidence.NewIncidentHistoryProvider(incidentRepo))
+
+		// Audit provider — create an audit repository for read-only evidence collection
+		auditRepo, auditErr := monitoring.NewFileAuditRepository(filepath.Join(dataDir, "audit.jsonl"))
+		if auditErr != nil {
+			logger.Printf("Warning: Failed to init audit repository for evidence: %v", auditErr)
+		} else {
+			registry.Register(evidence.NewAuditProvider(auditRepo))
+		}
+
+		contextBuilder := evidence.NewContextBuilder(registry, logger)
+		briefGenerator := evidence.NewBriefGenerator(contextBuilder, incidentRepo, logger)
+
+		// Wire AI provider if available
+		if aiService != nil {
+			briefGenerator.SetAICall(func(ctx context.Context, systemMsg, userMsg string) (string, error) {
+				return aiService.CallProvider(ctx, systemMsg, userMsg)
+			})
+		}
+
+		// MongoDB repositories for evidence persistence
+		var briefRepo *evidence.BriefRepository
+		var signalEventRepo *evidence.SignalEventRepository
+		var incidentEventRepo *evidence.IncidentEventRepository
+		if mongoClient != nil {
+			var err error
+			briefRepo, err = evidence.NewBriefRepository(mongoClient, mongoDB, mongoPrefix)
+			if err != nil {
+				logger.Printf("Warning: Failed to init evidence brief repository: %v", err)
+			}
+			signalEventRepo, err = evidence.NewSignalEventRepository(mongoClient, mongoDB, mongoPrefix)
+			if err != nil {
+				logger.Printf("Warning: Failed to init signal event repository: %v", err)
+			}
+			incidentEventRepo, err = evidence.NewIncidentEventRepository(mongoClient, mongoDB, mongoPrefix)
+			if err != nil {
+				logger.Printf("Warning: Failed to init incident event repository: %v", err)
+			}
+		}
+
+		evidenceAPIHandler := evidence.NewAPIHandler(briefGenerator, briefRepo, incidentEventRepo, signalEventRepo)
+		service.SetEvidenceRoutes(evidenceAPIHandler)
+		logger.Printf("Evidence backbone initialized (%d providers registered)", len(registry.Categories()))
 	}
 
 	stopRetention := make(chan struct{})
