@@ -171,7 +171,7 @@ export default function CheckDetail() {
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<Partial<CheckConfig>>({})
-  const [resultView, setResultView] = useState<'table' | 'chart'>('table')
+  const [resultView, setResultView] = useState<'table' | 'chart'>('chart')
 
   const { data: detail, isLoading, error, refetch } = useQuery({
     queryKey: ['checks', id],
