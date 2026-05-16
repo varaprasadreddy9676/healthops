@@ -65,6 +65,30 @@ func (rl *rateLimiter) cleanup() {
 	}
 }
 
+// LoginRateLimit applies a strict per-IP rate limit only to the login endpoint.
+// This prevents credential stuffing independently of the global rate limit.
+func LoginRateLimit(rate int, window time.Duration, next http.Handler) http.Handler {
+	limiter := newRateLimiter(rate, window)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/auth/login" || r.Method != "POST" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		ip := extractIP(r)
+		if !limiter.allow(ip) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Retry-After", "60")
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte(`{"success":false,"error":{"code":429,"message":"too many login attempts, try again later"}}`))
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 // RateLimit enforces per-IP rate limiting.
 // rate is the max requests per window. Returns 429 when exceeded.
 func RateLimit(rate int, window time.Duration, next http.Handler) http.Handler {

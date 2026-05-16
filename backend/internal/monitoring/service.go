@@ -377,8 +377,10 @@ func (s *Service) Run(ctx context.Context) error {
 		handler = s.degradedMode.Middleware(handler)
 	}
 
-	handler = maxBodyMiddleware(1<<20, handler)           // 1 MB request body limit
-	handler = httpx.RateLimit(3000, time.Minute, handler) // 3000 API req/min per IP
+	handler = maxBodyMiddleware(1<<20, handler)                           // 1 MB request body limit
+	handler = httpx.RateLimit(3000, time.Minute, handler)                // 3000 API req/min per IP
+	handler = httpx.LoginRateLimit(10, time.Minute, handler)             // 10 login attempts/min per IP
+	handler = httpx.SecurityHeaders(handler)                             // X-Content-Type-Options, X-Frame-Options, CSP
 	handler = metricsMiddleware(s.metrics, handler)
 	handler = loggingMiddleware(s.logger, handler)
 	if s.userStore != nil {

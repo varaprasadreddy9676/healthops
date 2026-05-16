@@ -16,6 +16,9 @@ services:
       HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD: ${HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD:-}
       HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL: ${HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL:-admin@healthops.local}
       HEALTHOPS_BOOTSTRAP_ADMIN_RESET: ${HEALTHOPS_BOOTSTRAP_ADMIN_RESET:-false}
+      # Set this to your public-facing URL so email notification links work correctly.
+      # Example: https://healthops.yourcompany.com
+      HEALTHOPS_PUBLIC_URL: ${HEALTHOPS_PUBLIC_URL:-}
     volumes:
       - healthops_data:/app/data
     depends_on:

@@ -197,12 +197,12 @@ func (h *NotificationAPIHandler) handleNotificationLogs(w http.ResponseWriter, r
 		return
 	}
 
-	limit := 100
-	if v := r.URL.Query().Get("limit"); v != "" {
-		if n, err := fmt.Sscanf(v, "%d", &limit); n != 1 || err != nil || limit <= 0 {
-			limit = 100
-		}
+	if !monitoring.IsRequestAuthorized(h.cfg.Auth, r) {
+		monitoring.RequestAuth(w)
+		return
 	}
+
+	limit := monitoring.QueryIntRange(r, "limit", 1, 1000, 100)
 	status := r.URL.Query().Get("status")
 	channel := r.URL.Query().Get("channel")
 

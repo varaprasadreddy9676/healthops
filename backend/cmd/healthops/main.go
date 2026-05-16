@@ -292,6 +292,7 @@ func main() {
 			if dashURL == "" || dashURL == ":8080" {
 				dashURL = "http://localhost:8080"
 			}
+			logger.Printf("WARNING: HEALTHOPS_PUBLIC_URL is not set — email notification links will point to %s (unreachable from outside)", dashURL)
 		}
 		notificationDispatcher.SetDashboardURL(dashURL)
 		notificationAPIHandler := notify.NewNotificationAPIHandler(channelStore, notificationDispatcher, cfg)
