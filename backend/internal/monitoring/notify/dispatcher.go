@@ -772,8 +772,9 @@ func mapPDSeverity(severity string) string {
 
 // TestChannel sends a test notification to verify channel configuration.
 func (d *NotificationDispatcher) TestChannel(ch NotificationChannelConfig) error {
+	incidentID := "test-" + fmt.Sprintf("%d", time.Now().Unix())
 	payload := NotificationPayload{
-		IncidentID: "test-" + fmt.Sprintf("%d", time.Now().Unix()),
+		IncidentID: incidentID,
 		CheckID:    "test-check",
 		CheckName:  "Test Check",
 		CheckType:  "api",
@@ -785,21 +786,60 @@ func (d *NotificationDispatcher) TestChannel(ch NotificationChannelConfig) error
 	}
 
 	var err error
+	var httpStatus int
+	var httpRespBody string
+	var reqURL string
+
 	switch ch.Type {
 	case ChannelSlack:
-		err = d.sendSlack(ch, payload)
+		_, _, err = d.postJSON(ch.WebhookURL, payload, ch.Headers)
+		reqURL = ch.WebhookURL
 	case ChannelDiscord:
-		err = d.sendDiscord(ch, payload)
+		_, _, err = d.postJSON(ch.WebhookURL, payload, ch.Headers)
+		reqURL = ch.WebhookURL
 	case ChannelWebhook:
-		_, _, err = d.sendWebhook(ch, payload)
+		reqURL = ch.WebhookURL
+		httpStatus, httpRespBody, err = d.sendWebhook(ch, payload)
 	case ChannelEmail:
 		err = d.sendEmail(ch, payload)
 	case ChannelTelegram:
-		err = d.sendTelegram(ch, payload)
+		_, _, err = d.postJSON(ch.WebhookURL, payload, ch.Headers)
+		reqURL = ch.WebhookURL
 	case ChannelPagerDuty:
-		err = d.sendPagerDuty(ch, payload)
+		_, _, err = d.postJSON(ch.WebhookURL, payload, ch.Headers)
+		reqURL = ch.WebhookURL
 	default:
 		err = fmt.Errorf("unsupported channel type: %s", ch.Type)
+	}
+
+	if d.outbox != nil && reqURL != "" {
+		payloadJSON, _ := json.Marshal(payload)
+		status := "sent"
+		lastErr := ""
+		if err != nil {
+			status = "failed"
+			lastErr = err.Error()
+		}
+		now := time.Now()
+		evt := monitoring.NotificationEvent{
+			NotificationID: fmt.Sprintf("notif-%s-%d", incidentID, time.Now().UnixNano()),
+			IncidentID:     incidentID,
+			Channel:        fmt.Sprintf("%s:%s", ch.Type, ch.Name),
+			PayloadJSON:    string(payloadJSON),
+			RequestURL:     reqURL,
+			ResponseStatus: httpStatus,
+			ResponseBody:   httpRespBody,
+			Status:         status,
+			LastError:      lastErr,
+			CreatedAt:      now,
+			SentAt:         &now,
+		}
+		_ = d.outbox.Enqueue(evt)
+		if status == "sent" {
+			_ = d.outbox.MarkSent(evt.NotificationID)
+		} else {
+			_ = d.outbox.MarkFailed(evt.NotificationID, lastErr)
+		}
 	}
 
 	return err
