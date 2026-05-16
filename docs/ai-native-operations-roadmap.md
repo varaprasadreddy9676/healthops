@@ -586,6 +586,14 @@ Aligned with principle 3 (“normalized before AI sees it”) and the safety req
 - MySQL: existing query digest from `performance_schema` reused.
 - Stack traces: top 3 frames + exception type, language-aware where possible (Go, Node, Python, JVM).
 
+**Implementation requirements (Phase 2b):**
+
+- Baseline window: 24h rolling window for "normal" fingerprint frequency.
+- Spike threshold: fingerprint count > `baseline_mean + 3 * baseline_stddev` within a 5-minute tumbling window, OR absolute count ≥ `10×` baseline mean (whichever fires first).
+- Aggregation schema: `{ fingerprint, service, environment, window_start, window_end, count, sample_message, first_seen, last_seen, linked_incidents[] }` in `log_fingerprints` collection.
+- Cap behavior: when a service exceeds 5,000 distinct fingerprints, the lowest-frequency 10% are merged into `fp_other_<service>`. The merge is logged as a `telemetry_quality_findings` event. Capped fingerprints are un-merged if their original template reappears above threshold in a subsequent window.
+- Test fixtures: at least 20 fixture log streams (covering Go panics, Node uncaught exceptions, Python tracebacks, MySQL errors, syslog) with expected fingerprint outputs. These gate merge in CI.
+
 ### Correlation Algorithm (Phase 4)
 
 Deterministic-first, similarity-second. Online during ingest.
@@ -697,6 +705,75 @@ Applies to every AI call HealthOps makes (Incident Brief, postmortem draft, log 
 - Telemetry cost report.
 - Alert quality report.
 
+## Phase 0/1 Implementation Contract
+
+This section makes the first two phases implementation-ready by specifying mechanics that the phase descriptions leave abstract.
+
+### MongoDB Consistency Note
+
+The "Storage Decision" section above states that MongoDB is the primary-only persistence layer for all AI-native operations data, with no file fallback. This is the **target state** after Phase 0 completes. Until Phase 0 is finished:
+
+- The backend README, deployment guide, and `main.go` still describe optional/best-effort MongoDB with JSONL fallback — that is the **current runtime behavior**.
+- Phase 0 explicitly migrates away from JSONL and removes the hybrid mode for the listed collections.
+- After Phase 0 ships, the backend README and deployment guide must be updated to reflect "MongoDB required" for AI features. This is tracked as a Phase 0 exit task.
+
+### Phase 0 Migration Mechanics
+
+The Phase 0 description lists *what* to migrate but not the operational details. Implementation must follow this contract:
+
+| Aspect | Requirement |
+|--------|-------------|
+| **Source-to-target mapping** | `FileMySQLRepository` JSONL → `mysql_samples` + `mysql_deltas` collections; in-memory `IncidentRepository` → `incidents` collection; `FileNotificationOutbox` JSONL → `notifications` collection; `FileAIQueue` JSONL → `ai_queue` collection. |
+| **Idempotency** | Migration script uses `insertMany` with `ordered: false` and ignores duplicate-key errors. Re-running the script on a partially-migrated dataset must not create duplicates. Each document includes a deterministic `_id` derived from its source (e.g. SHA-256 of `checkId + timestamp` for samples). |
+| **Rollback** | Before migration, the script creates a MongoDB backup via `mongodump --archive`. On failure, operator can restore with `mongorestore --archive`. File-based repos remain untouched (read-only after migration) for 30 days as a fallback source. |
+| **Backup** | The migration script refuses to run unless a fresh backup exists (checks `mongodump` output timestamp < 1 hour old or `--force` flag is passed). |
+| **Cutover sequence** | 1. Deploy new code with dual-write enabled (writes to both file + Mongo). 2. Run migration script for historical data. 3. Flip feature flag `PERSISTENCE_MODE=mongo` to read from Mongo only. 4. Validate via verification queries. 5. Remove file-write code path after 30-day bake period. |
+| **Verification queries** | `db.incidents.countDocuments()` matches file repo count ±0.1%. `db.mysql_samples.find().sort({timestamp:-1}).limit(1)` timestamp matches latest JSONL entry. Audit log replay: every `incident.created` / `incident.resolved` audit event has a corresponding MongoDB document with matching `status` and timestamps. |
+| **Audit log prerequisite** | The exit metric "replaying the audit log" assumes the audit log fully captures incident lifecycle transitions (`created`, `acknowledged`, `resolved`). If audit events are missing for any transition today, Phase 0 must first backfill or fix the audit emission before relying on it for verification. |
+
+### Phase 1 Incident Brief v1 — Evidence Sources
+
+The roadmap says the Brief "pulls check results, logs, metrics, deployments, audit events, server data, MySQL data, and similar incidents." Several of those arrive in later phases. Brief v1 must be explicit about what it uses:
+
+**Brief v1 evidence sources (available at Phase 1 delivery):**
+
+- Check results (existing)
+- MySQL samples and deltas (existing)
+- Server metrics from SSH/process checks (existing)
+- Audit events (existing)
+- Incident history (existing)
+- Alert rule context (existing)
+
+**NOT available until later phases:**
+
+- Logs / log fingerprints → Phase 2
+- Deployment markers → Phase 3
+- Similar incidents via vector/fingerprint search → Phase 4
+- SLO burn data → Phase 5
+
+**Degraded behavior contract:** When a later evidence type is unavailable, the Brief must:
+1. Omit that evidence category silently (no "N/A" placeholder noise).
+2. Reduce confidence score proportionally (each missing category reduces the max achievable confidence by its weight from the confidence formula).
+3. Note in the Brief metadata which evidence categories were available vs total possible.
+
+As each phase lands, the Brief automatically picks up new evidence types without requiring a Brief-specific code change (evidence categories are registry-driven, not hardcoded).
+
+### RBAC and Context Retrieval Security (Phase 1 requirement)
+
+Safety requirements mention user boundaries and evidence scoping but no phase owns them. **Phase 1 must include:**
+
+1. **Context retrieval authorization**: Before the AI context builder assembles evidence for an incident, it must verify the requesting user/session has read access to that incident and all referenced checks/services. No cross-boundary data leakage through AI Briefs.
+2. **Evidence scoping tests**: Integration tests that create two users with different service access, trigger a Brief for a shared incident, and verify each user's Brief only contains evidence from their authorized services.
+3. **Prompt injection defense**: Evidence text (log messages, check output, audit messages) inserted into AI prompts must be enclosed in delimiters and the system prompt must instruct the model to treat evidence as data, not instructions. Test fixtures with adversarial evidence text must be part of the eval harness.
+
+### Redaction Test Gates (Phase 2a enhancement)
+
+The Phase 2a exit metric says "Zero raw secrets in `log_events` sample audit (100-event manual review)." This is insufficient as a primary gate. Add:
+
+1. **Automated redaction fixture suite**: A test corpus of 500+ synthetic log lines with injected secrets (AWS keys, JWTs, DSNs, bearer tokens, emails, credit card numbers, private key headers, GitHub tokens). The redaction pipeline must detect and replace 100% of these in CI. Failures block merge.
+2. **Canary injection test**: On every deploy, a synthetic log event with a known test secret is ingested. A background job queries `log_events` for the raw secret within 60s. If found, the pipeline is broken and alerting fires.
+3. **The 100-event manual review** remains as a human-in-the-loop validation on first deploy and after major parser changes, but is not the primary safety gate.
+
 ## Recommended Implementation Sequence
 
 Dependencies: Phase 0 → Phase 1 → (Phase 2a → Phase 2b) → Phase 3 → Phase 4 → Phase 5 → Phase 6. Phase 3 (deployments + heartbeats) can run in parallel with Phase 2 once Phase 1 lands.
@@ -807,7 +884,7 @@ Build:
 Exit metrics:
 
 - Deployment markers ingested via at least one CI integration (GitHub Actions example shipped).
-- 100% of incidents starting within 15min of a deployment have a deployment correlation flag.
+- 100% of incidents starting within 15min of a deployment have a **temporal correlation** flag (explicitly labeled "temporal proximity, not confirmed cause"). The flag carries a confidence band based on evidence strength: `low` (time-only), `medium` (time + metric shift), `high` (time + metric shift + matching service/fingerprint). Only `medium`+ correlations appear in AI Briefs as contributing factors.
 - Heartbeat misses raise an incident within `expectedInterval + grace` 100% of the time in tests.
 
 ### Phase 4: Correlation Engine
@@ -841,6 +918,13 @@ Build:
 4. Weekly AI reliability report.
 5. Confidence-score calibration job using `ai_feedback`.
 
+**Implementation requirements:**
+
+- SLI formulas: availability = `1 - (bad_events / total_events)` where bad = status ≥ 500 or timeout. Latency = `count(duration < threshold) / total_events`. Both computed per rolling window.
+- Burn-rate math: fast-burn alert when `error_rate > (1 - SLO_target) * 14.4` over 1h AND 5m windows. Slow-burn alert when `error_rate > (1 - SLO_target) * 6` over 6h AND 30m windows. (Google SRE multi-window multi-burn-rate pattern.)
+- Low-traffic behavior: services with < 100 events/window are excluded from percentage-based SLI (insufficient sample). They get availability measured by check success/failure only.
+- Service inventory rules: a service is "active" if it has ≥ 1 check result or ≥ 1 signal event in the last 7 days. Inactive services are hidden from SLO dashboards but retained in definitions.
+
 Exit metrics:
 
 - At least one SLO defined for every service ingesting telemetry.
@@ -858,6 +942,14 @@ Build:
 3. Approval workflow (human-in-the-loop, two-person for destructive actions).
 4. Audit trail for AI-suggested and human-approved actions.
 5. Rollback/runbook integration.
+
+**Implementation requirements:**
+
+- Approval state machine: `proposed` → `dry_run_requested` → `dry_run_complete` → `approval_requested` → `approved` (by different user than proposer for destructive) → `executing` → `completed` | `failed` → `rolled_back` (optional). Any state can transition to `cancelled`.
+- Two-person enforcement: actions tagged `destructive: true` require approval from a user different than the one who triggered or proposed the action. The system rejects self-approval for destructive actions.
+- Dry-run semantics: dry-run executes the action in a sandboxed mode (read-only DB transaction, `--dry-run` CLI flag, or API simulation endpoint depending on action type). Dry-run output is stored in the action record and shown to the approver.
+- MTTR baseline cohort: measure MTTR for incidents that had a remediation action available vs incidents that did not, over a 30-day rolling window. Report the delta in the weekly reliability report.
+- Rollback: every approved action must have a `rollback_command` or `rollback_runbook_url` before execution. The system blocks execution if rollback is empty unless `--no-rollback-override` is explicitly passed with a reason.
 
 Exit metrics:
 
