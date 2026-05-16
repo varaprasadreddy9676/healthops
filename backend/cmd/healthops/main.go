@@ -53,10 +53,56 @@ func main() {
 
 	var store monitoring.Store
 	var hybridStore *monitoring.HybridStore
+	var mongoStore *monitoring.MongoStore
 	statePath := resolvePath("STATE_PATH", filepath.Join("backend", "data", "state.json"), filepath.Join("data", "state.json"))
 
+	// Initialize MongoDB client early when Mongo is configured.
+	// This single client is shared between the state store and all repositories.
+	var mongoClient *mongo.Client
 	if mongoURI != "" {
-		// Use HybridStore with MongoDB as primary, local file as fallback
+		clientOpts := options.Client().
+			ApplyURI(mongoURI).
+			SetServerSelectionTimeout(10 * time.Second).
+			SetConnectTimeout(10 * time.Second).
+			SetMaxPoolSize(100)
+
+		var connErr error
+		mongoClient, connErr = mongo.Connect(clientOpts)
+		if connErr != nil {
+			if useMongoPhase0 {
+				logger.Fatalf("STORAGE_BACKEND=mongo but failed to connect to MongoDB: %v", connErr)
+			}
+			logger.Printf("Warning: Failed to connect to MongoDB: %v", connErr)
+			mongoClient = nil
+		} else {
+			pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if pingErr := mongoClient.Ping(pingCtx, nil); pingErr != nil {
+				pingCancel()
+				if useMongoPhase0 {
+					_ = mongoClient.Disconnect(context.Background())
+					logger.Fatalf("STORAGE_BACKEND=mongo but MongoDB ping failed: %v", pingErr)
+				}
+				logger.Printf("Warning: MongoDB ping failed: %v", pingErr)
+				_ = mongoClient.Disconnect(context.Background())
+				mongoClient = nil
+			} else {
+				pingCancel()
+				logger.Printf("MongoDB connection established")
+			}
+		}
+	}
+
+	if useMongoPhase0 && mongoClient != nil {
+		// Phase 0: MongoDB is the sole persistence layer for state.
+		ms, err := monitoring.NewMongoStore(mongoClient, mongoDB, mongoPrefix, cfg.RetentionDays, cfg.Checks, logger)
+		if err != nil {
+			logger.Fatalf("init mongo store: %v", err)
+		}
+		mongoStore = ms
+		store = ms
+		logger.Printf("running with MongoDB as sole persistence (Phase 0 — no file fallback)")
+	} else if mongoClient != nil {
+		// Legacy: HybridStore with MongoDB as primary, local file as fallback
 		hs, err := monitoring.NewHybridStore(statePath, cfg.Checks, mongoURI, mongoDB, mongoPrefix, cfg.RetentionDays, logger)
 		if err != nil {
 			logger.Fatalf("init hybrid store: %v", err)
@@ -65,7 +111,7 @@ func main() {
 		store = hs
 		logger.Printf("running with MongoDB as primary storage (local file fallback)")
 	} else {
-		// Use only local file store
+		// File-only mode
 		store, err = monitoring.NewFileStore(statePath, cfg.Checks)
 		if err != nil {
 			logger.Fatalf("init file store: %v", err)
@@ -75,47 +121,16 @@ func main() {
 
 	service := monitoring.NewService(cfg, store, logger)
 
+	// Phase 0: /healthz must fail when MongoDB is unreachable
+	if mongoStore != nil {
+		service.SetMongoHealthCheck(func(ctx context.Context) error {
+			return mongoClient.Ping(ctx, nil)
+		})
+	}
+
 	// Warn about insecure auth configuration
 	if !cfg.Auth.Enabled {
 		logger.Printf("SECURITY WARNING: Authentication is disabled — set auth.enabled=true in config for production use")
-	}
-
-	// Initialize MongoDB client for repositories (separate from HybridStore's MongoMirror)
-	var mongoClient *mongo.Client
-	if mongoURI != "" {
-		clientOpts := options.Client().
-			ApplyURI(mongoURI).
-			SetServerSelectionTimeout(10 * time.Second).
-			SetConnectTimeout(10 * time.Second).
-			SetMaxPoolSize(100)
-
-		var err error
-		mongoClient, err = mongo.Connect(clientOpts)
-		if err != nil {
-			if useMongoPhase0 {
-				logger.Fatalf("STORAGE_BACKEND=mongo but failed to connect to MongoDB: %v", err)
-			}
-			logger.Printf("Warning: Failed to connect to MongoDB for repositories: %v", err)
-			logger.Printf("Repositories will use file-based fallback")
-			mongoClient = nil
-		} else {
-			// Ping to verify connection
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			if err := mongoClient.Ping(ctx, nil); err != nil {
-				if useMongoPhase0 {
-					cancel()
-					_ = mongoClient.Disconnect(context.Background())
-					logger.Fatalf("STORAGE_BACKEND=mongo but MongoDB ping failed: %v", err)
-				}
-				logger.Printf("Warning: MongoDB ping for repositories failed: %v", err)
-				logger.Printf("Repositories will use file-based fallback")
-				_ = mongoClient.Disconnect(context.Background())
-				mongoClient = nil
-			} else {
-				logger.Printf("MongoDB connection for repositories established")
-				cancel()
-			}
-		}
 	}
 
 	// Initialize user store with MongoDB if available, otherwise file-based
@@ -227,7 +242,8 @@ func main() {
 
 	// Initialize notification channel store and dispatcher
 	var channelStore notify.ChannelStore
-	if hybridStore != nil && hybridStore.HasMongo() && !hybridStore.IsMongoDown() && mongoURI != "" {
+	mongoAvailableForChannels := (mongoStore != nil) || (hybridStore != nil && hybridStore.HasMongo() && !hybridStore.IsMongoDown())
+	if mongoAvailableForChannels && mongoURI != "" {
 		mongoChannelRepo, err := repositories.NewMongoChannelRepository(mongoURI, mongoDB, mongoPrefix, 5)
 		if err != nil {
 			logger.Printf("Warning: Failed to init MongoDB channel repository: %v", err)
@@ -341,7 +357,8 @@ func main() {
 
 		// Initialize MySQL rule engine with MongoDB if available
 		var ruleEngine *monitoring.MySQLRuleEngine
-		if hybridStore != nil && hybridStore.HasMongo() && !hybridStore.IsMongoDown() && mongoURI != "" {
+		mongoAvailableForRules := (mongoStore != nil) || (hybridStore != nil && hybridStore.HasMongo() && !hybridStore.IsMongoDown())
+		if mongoAvailableForRules && mongoURI != "" {
 			alertRuleRepo, err := repositories.NewMongoAlertRuleRepository(mongoURI, mongoDB, mongoPrefix)
 			if err != nil {
 				logger.Printf("Warning: Failed to init MongoDB alert rule repository: %v", err)
@@ -431,7 +448,8 @@ func main() {
 
 	// Initialize BYOK AI service with MongoDB if available, otherwise file-based
 	var aiConfigStore ai.AIConfigStoreInterface
-	if hybridStore != nil && hybridStore.HasMongo() && !hybridStore.IsMongoDown() && mongoURI != "" {
+	mongoAvailableForAI := (mongoStore != nil) || (hybridStore != nil && hybridStore.HasMongo() && !hybridStore.IsMongoDown())
+	if mongoAvailableForAI && mongoURI != "" {
 		mongoAIConfigRepo, err := airepositories.NewMongoAIConfigRepository(airepositories.MongoAIConfigRepositoryConfig{
 			MongoURI:       mongoURI,
 			DatabaseName:   mongoDB,

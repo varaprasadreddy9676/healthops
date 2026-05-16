@@ -40,6 +40,7 @@ type Service struct {
 	serverMetricsRepo *ServerMetricsRepository
 	serverRepo        ServerRepository
 	degradedMode      *DegradedMode
+	mongoHealthCheck  func(ctx context.Context) error // Phase 0: if set, /healthz pings MongoDB
 	// alertRuleRepo     repositories.AlertRuleRepository // TODO: uncomment when needed
 }
 
@@ -209,6 +210,13 @@ func (s *Service) SetServerRepo(repo ServerRepository) {
 	s.serverRepo = repo
 }
 
+// SetMongoHealthCheck sets a function that /healthz will call to verify
+// MongoDB connectivity. Used by Phase 0 (STORAGE_BACKEND=mongo) where
+// the service cannot operate without MongoDB.
+func (s *Service) SetMongoHealthCheck(fn func(ctx context.Context) error) {
+	s.mongoHealthCheck = fn
+}
+
 // SetAlertRuleRepo sets the alert rule repository.
 // TODO: Uncomment when needed
 // func (s *Service) SetAlertRuleRepo(repo repositories.AlertRuleRepository) {
@@ -373,6 +381,19 @@ func (s *Service) Run(ctx context.Context) error {
 }
 
 func (s *Service) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	if s.mongoHealthCheck != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+		if err := s.mongoHealthCheck(ctx); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"status": "unhealthy",
+				"error":  "MongoDB unreachable: " + err.Error(),
+			})
+			return
+		}
+	}
 	WriteAPIResponse(w, http.StatusOK, NewAPIResponse(map[string]string{"status": "ok"}))
 }
 
