@@ -98,19 +98,19 @@ func AllCategories() []string {
 // --- Fingerprinting ---
 
 var (
-	reIP       = regexp.MustCompile(`\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?`)
-	reUUID     = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
-	reLongNum  = regexp.MustCompile(`\d{10,}`)
-	reHex      = regexp.MustCompile(`0x[0-9a-fA-F]+`)
-	reDurMS    = regexp.MustCompile(`\d+(\.\d+)?ms`)
-	reDurS     = regexp.MustCompile(`\d+(\.\d+)?s`)
-	rePort     = regexp.MustCompile(`port \d+`)
-	rePID      = regexp.MustCompile(`pid[= ]\d+`)
-	reThread   = regexp.MustCompile(`thread[- ]\d+`)
-	reBracket  = regexp.MustCompile(`\[\d+\]`)
-	reLine     = regexp.MustCompile(`line \d+`)
-	reFileCol  = regexp.MustCompile(`:\d+:`)
-	reSpaces   = regexp.MustCompile(`\s+`)
+	reIP      = regexp.MustCompile(`\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?`)
+	reUUID    = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+	reLongNum = regexp.MustCompile(`\d{10,}`)
+	reHex     = regexp.MustCompile(`0x[0-9a-fA-F]+`)
+	reDurMS   = regexp.MustCompile(`\d+(\.\d+)?ms`)
+	reDurS    = regexp.MustCompile(`\d+(\.\d+)?s`)
+	rePort    = regexp.MustCompile(`port \d+`)
+	rePID     = regexp.MustCompile(`pid[= ]\d+`)
+	reThread  = regexp.MustCompile(`thread[- ]\d+`)
+	reBracket = regexp.MustCompile(`\[\d+\]`)
+	reLine    = regexp.MustCompile(`line \d+`)
+	reFileCol = regexp.MustCompile(`:\d+:`)
+	reSpaces  = regexp.MustCompile(`\s+`)
 )
 
 // normPatterns are applied in order to normalize variable parts.

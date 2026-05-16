@@ -8,45 +8,45 @@ import (
 
 func TestComputeFingerprint(t *testing.T) {
 	tests := []struct {
-		name       string
-		msg1       string
-		msg2       string
-		source     string
+		name        string
+		msg1        string
+		msg2        string
+		source      string
 		shouldMatch bool
 	}{
 		{
-			name:       "same message different IPs should match",
-			msg1:       "connection refused to 192.168.1.100:3306",
-			msg2:       "connection refused to 10.0.0.5:3306",
-			source:     "mysql",
+			name:        "same message different IPs should match",
+			msg1:        "connection refused to 192.168.1.100:3306",
+			msg2:        "connection refused to 10.0.0.5:3306",
+			source:      "mysql",
 			shouldMatch: true,
 		},
 		{
-			name:       "same message different UUIDs should match",
-			msg1:       "failed to process request 550e8400-e29b-41d4-a716-446655440000",
-			msg2:       "failed to process request a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-			source:     "api",
+			name:        "same message different UUIDs should match",
+			msg1:        "failed to process request 550e8400-e29b-41d4-a716-446655440000",
+			msg2:        "failed to process request a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+			source:      "api",
 			shouldMatch: true,
 		},
 		{
-			name:       "same message different timestamps should match",
-			msg1:       "timeout after 1500ms waiting for response",
-			msg2:       "timeout after 3200ms waiting for response",
-			source:     "http",
+			name:        "same message different timestamps should match",
+			msg1:        "timeout after 1500ms waiting for response",
+			msg2:        "timeout after 3200ms waiting for response",
+			source:      "http",
 			shouldMatch: true,
 		},
 		{
-			name:       "completely different messages should not match",
-			msg1:       "authentication failed for user admin",
-			msg2:       "disk space critical on /dev/sda1",
-			source:     "system",
+			name:        "completely different messages should not match",
+			msg1:        "authentication failed for user admin",
+			msg2:        "disk space critical on /dev/sda1",
+			source:      "system",
 			shouldMatch: false,
 		},
 		{
-			name:       "same error different port numbers should match",
-			msg1:       "connection refused on port 5432",
-			msg2:       "connection refused on port 3306",
-			source:     "db",
+			name:        "same error different port numbers should match",
+			msg1:        "connection refused on port 5432",
+			msg2:        "connection refused on port 3306",
+			source:      "db",
 			shouldMatch: true,
 		},
 	}

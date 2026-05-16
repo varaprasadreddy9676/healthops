@@ -33,6 +33,7 @@ type Service struct {
 	aiRoutes          RouteRegistrar
 	notifyRoutes      RouteRegistrar
 	logRoutes         RouteRegistrar
+	rcaRoutes         RouteRegistrar
 	snapshotRepo      IncidentSnapshotRepository
 	userStore         UserStoreBackend
 	userAPI           *UserAPIHandler
@@ -187,6 +188,11 @@ func (s *Service) SetLogRoutes(r RouteRegistrar) {
 	s.logRoutes = r
 }
 
+// SetRCARoutes sets the root-cause analysis route registrar for the service.
+func (s *Service) SetRCARoutes(r RouteRegistrar) {
+	s.rcaRoutes = r
+}
+
 // SetSnapshotRepo sets the incident snapshot repository for the service.
 func (s *Service) SetSnapshotRepo(repo IncidentSnapshotRepository) {
 	s.snapshotRepo = repo
@@ -290,6 +296,11 @@ func (s *Service) Run(ctx context.Context) error {
 	// Register log intelligence routes if handler is configured
 	if s.logRoutes != nil {
 		s.logRoutes.RegisterRoutes(mux)
+	}
+
+	// Register RCA routes if handler is configured
+	if s.rcaRoutes != nil {
+		s.rcaRoutes.RegisterRoutes(mux)
 	}
 
 	// Add Prometheus metrics endpoint

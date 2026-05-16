@@ -729,3 +729,13 @@ Guidelines:
 func (s *AIService) ReloadProviders() {
 	s.rebuildProviders()
 }
+
+// CallProvider sends a raw prompt to the default AI provider.
+// This is used by external modules (RCA, log intelligence) that need direct AI access.
+func (s *AIService) CallProvider(ctx context.Context, systemMsg, userMsg string) (string, error) {
+	provider, _, err := s.getDefaultProvider()
+	if err != nil {
+		return "", err
+	}
+	return provider.Analyze(ctx, systemMsg, userMsg)
+}

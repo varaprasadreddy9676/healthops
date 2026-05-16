@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle, Eye, Brain, ChevronDown, ShieldAlert, Activity 
 import { useState } from 'react'
 import { incidentsApi } from "@/features/incidents/api/incidents"
 import { aiApi } from "@/features/ai/api/ai"
+import { RCAPanel } from "@/features/incidents/components/RCAPanel"
 import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
 import { cn, relativeTime, formatDate, incidentStatusLabel, severityColor } from "@/shared/lib/utils"
@@ -151,6 +152,9 @@ export default function IncidentDetail() {
 
       {/* AI Analysis */}
       {aiResult && <AIAnalysisCard aiResult={aiResult} />}
+
+      {/* Root Cause Analysis */}
+      <RCAPanel incidentId={id!} aiEnabled={!!aiEnabled} />
 
       {/* Evidence snapshots */}
       {snapshots && snapshots.length > 0 && (

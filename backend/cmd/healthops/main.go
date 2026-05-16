@@ -17,6 +17,7 @@ import (
 	"medics-health-check/backend/internal/monitoring/logs"
 	"medics-health-check/backend/internal/monitoring/mysql"
 	"medics-health-check/backend/internal/monitoring/notify"
+	"medics-health-check/backend/internal/monitoring/rca"
 	"medics-health-check/backend/internal/monitoring/repositories"
 
 	"github.com/joho/godotenv"
@@ -455,8 +456,9 @@ func main() {
 			logger.Printf("Warning: Failed to init AI config store: %v", err)
 		}
 	}
+	var aiService *ai.AIService
 	if aiConfigStore != nil && aiQueue != nil {
-		aiService := ai.NewAIService(aiConfigStore, aiQueue, incidentRepo, snapshotRepo, store, logger)
+		aiService = ai.NewAIService(aiConfigStore, aiQueue, incidentRepo, snapshotRepo, store, logger)
 		aiService.StartWorker()
 		defer aiService.StopWorker()
 
@@ -511,6 +513,31 @@ func main() {
 		logAPIHandler := logs.NewAPIHandler(logRepo, logCategorizer, logger)
 		service.SetLogRoutes(logAPIHandler)
 		logger.Printf("Log intelligence initialized (data dir: %s/logs)", dataDir)
+	}
+
+	// --- Root-Cause Analysis ---
+	{
+		signalSource := rca.NewStoreSignalSource(store)
+		collector := rca.NewCollector(signalSource)
+
+		var rcaProvider rca.AIProvider
+		if aiService != nil {
+			rcaProvider = rca.NewAIServiceBridge(aiService.CallProvider)
+		}
+
+		rcaAnalyzer, err := rca.NewAnalyzer(collector, rcaProvider, dataDir, logger)
+		if err != nil {
+			logger.Printf("Warning: Failed to init RCA analyzer: %v", err)
+		} else {
+			rcaAPIHandler := rca.NewAPIHandler(
+				rcaAnalyzer,
+				rca.IncidentLookup(incidentRepo),
+				nil, // log families lookup — can be wired later
+				logger,
+			)
+			service.SetRCARoutes(rcaAPIHandler)
+			logger.Printf("Root-cause analysis initialized (data dir: %s)", dataDir)
+		}
 	}
 
 	stopRetention := make(chan struct{})
