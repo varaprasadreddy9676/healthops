@@ -19,6 +19,8 @@ services:
       # Set this to your public-facing URL so email notification links work correctly.
       # Example: https://healthops.yourcompany.com
       HEALTHOPS_PUBLIC_URL: ${HEALTHOPS_PUBLIC_URL:-}
+      HEALTHOPS_SMTP_PASS: ${HEALTHOPS_SMTP_PASS:-}
+      MYSQL_DSN_MEDICS_EP_DB_CLOUD: ${MYSQL_DSN_MEDICS_EP_DB_CLOUD:-}
     volumes:
       - healthops_data:/app/data
     depends_on:

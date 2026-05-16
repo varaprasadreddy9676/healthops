@@ -17,6 +17,7 @@ backend/data/
 .vscode/
 .idea/
 .claude/
+.agents/
 .DS_Store
 *.swp
 *.swo

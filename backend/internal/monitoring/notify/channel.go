@@ -31,16 +31,17 @@ type NotificationChannelConfig struct {
 	Enabled bool        `json:"enabled"`
 
 	// Connection settings (type-specific)
-	WebhookURL string `json:"webhookUrl,omitempty"` // slack, webhook, discord
-	Email      string `json:"email,omitempty"`      // email (comma-separated for multiple)
-	SMTPHost   string `json:"smtpHost,omitempty"`
-	SMTPPort   int    `json:"smtpPort,omitempty"`
-	SMTPUser   string `json:"smtpUser,omitempty"`
-	SMTPPass   string `json:"smtpPass,omitempty"`
-	FromEmail  string `json:"fromEmail,omitempty"`
-	BotToken   string `json:"botToken,omitempty"`   // telegram
-	ChatID     string `json:"chatId,omitempty"`     // telegram
-	RoutingKey string `json:"routingKey,omitempty"` // pagerduty
+	WebhookURL  string `json:"webhookUrl,omitempty"` // slack, webhook, discord
+	Email       string `json:"email,omitempty"`      // email (comma-separated for multiple)
+	SMTPHost    string `json:"smtpHost,omitempty"`
+	SMTPPort    int    `json:"smtpPort,omitempty"`
+	SMTPUser    string `json:"smtpUser,omitempty"`
+	SMTPPass    string `json:"smtpPass,omitempty"`
+	SMTPPassEnv string `json:"smtpPassEnv,omitempty"`
+	FromEmail   string `json:"fromEmail,omitempty"`
+	BotToken    string `json:"botToken,omitempty"`   // telegram
+	ChatID      string `json:"chatId,omitempty"`     // telegram
+	RoutingKey  string `json:"routingKey,omitempty"` // pagerduty
 
 	// Smart filters — all optional, empty = match all
 	Severities             []string `json:"severities,omitempty"`             // ["critical"], ["warning","critical"]
@@ -137,6 +138,18 @@ func (c *NotificationChannelConfig) SafeView() NotificationChannelConfig {
 		safe.RoutingKey = maskString(safe.RoutingKey)
 	}
 	return safe
+}
+
+// SMTPPassword returns the configured SMTP password, resolving an env-backed
+// secret when smtpPass is intentionally omitted from the channel file.
+func (c NotificationChannelConfig) SMTPPassword() string {
+	if c.SMTPPass != "" {
+		return c.SMTPPass
+	}
+	if c.SMTPPassEnv != "" {
+		return os.Getenv(c.SMTPPassEnv)
+	}
+	return ""
 }
 
 func maskString(s string) string {

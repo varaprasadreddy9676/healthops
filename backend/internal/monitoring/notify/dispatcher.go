@@ -800,7 +800,7 @@ func (d *NotificationDispatcher) sendEmail(ch NotificationChannelConfig, p Notif
 	addr := fmt.Sprintf("%s:%d", ch.SMTPHost, ch.SMTPPort)
 	var auth smtp.Auth
 	if ch.SMTPUser != "" {
-		auth = smtp.PlainAuth("", ch.SMTPUser, ch.SMTPPass, ch.SMTPHost)
+		auth = smtp.PlainAuth("", ch.SMTPUser, ch.SMTPPassword(), ch.SMTPHost)
 	}
 
 	trace := deliveryTrace{
@@ -1374,7 +1374,7 @@ func (d *NotificationDispatcher) sendEmailDigest(ch NotificationChannelConfig, p
 	addr := fmt.Sprintf("%s:%d", ch.SMTPHost, ch.SMTPPort)
 	var auth smtp.Auth
 	if ch.SMTPUser != "" {
-		auth = smtp.PlainAuth("", ch.SMTPUser, ch.SMTPPass, ch.SMTPHost)
+		auth = smtp.PlainAuth("", ch.SMTPUser, ch.SMTPPassword(), ch.SMTPHost)
 	}
 
 	trace := deliveryTrace{

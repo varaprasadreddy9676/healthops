@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -192,6 +193,19 @@ func TestNotificationChannelConfig_SafeView(t *testing.T) {
 		safe := cfg.SafeView()
 		if safe.WebhookURL != "https://hooks.slack.com/services/REDACTED" {
 			t.Errorf("WebhookURL = %q, want redacted", safe.WebhookURL)
+		}
+	})
+
+	t.Run("SMTPPassword resolves from env", func(t *testing.T) {
+		const envKey = "TEST_HEALTHOPS_SMTP_PASS"
+		if err := os.Setenv(envKey, "env-secret"); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Unsetenv(envKey)
+
+		cfg := NotificationChannelConfig{SMTPPassEnv: envKey}
+		if got := cfg.SMTPPassword(); got != "env-secret" {
+			t.Errorf("SMTPPassword() = %q, want %q", got, "env-secret")
 		}
 	})
 }
