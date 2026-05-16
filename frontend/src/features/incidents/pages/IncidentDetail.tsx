@@ -5,13 +5,22 @@ import { useState } from 'react'
 import { incidentsApi } from "@/features/incidents/api/incidents"
 import { aiApi } from "@/features/ai/api/ai"
 import { RCAPanel } from "@/features/incidents/components/RCAPanel"
+import { EvidenceBriefCard } from "@/features/incidents/components/EvidenceBriefCard"
+import { EvidenceTimeline } from "@/features/incidents/components/EvidenceTimeline"
 import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
+import { useConfirm } from "@/shared/components/ConfirmDialog"
+import { useToast } from "@/shared/components/Toast"
+import { useAuth } from "@/shared/hooks/useAuth"
 import { cn, relativeTime, formatDate, incidentStatusLabel, severityColor } from "@/shared/lib/utils"
 
 export default function IncidentDetail() {
   const { id } = useParams<{ id: string }>()
   const queryClient = useQueryClient()
+  const confirm = useConfirm()
+  const toast = useToast()
+  const { user } = useAuth()
+  const actor = user?.displayName || user?.username || 'operator'
 
   const { data: incident, isLoading, error, refetch } = useQuery({
     queryKey: ['incidents', id],
@@ -42,24 +51,51 @@ export default function IncidentDetail() {
   const aiEnabled = aiConfig?.enabled && (aiConfig?.providers?.length ?? 0) > 0
 
   const ackMutation = useMutation({
-    mutationFn: () => incidentsApi.acknowledge(id!),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['incidents'] }) },
+    mutationFn: () => incidentsApi.acknowledge(id!, actor),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['incidents'] })
+      toast.success('Incident acknowledged')
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to acknowledge incident'),
   })
 
   const resolveMutation = useMutation({
-    mutationFn: () => incidentsApi.resolve(id!),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['incidents'] }) },
+    mutationFn: () => incidentsApi.resolve(id!, actor),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['incidents'] })
+      toast.success('Incident resolved')
+    },
+    onError: (err: Error) => toast.error(err.message || 'Failed to resolve incident'),
   })
 
   const analyzeMutation = useMutation({
     mutationFn: () => aiApi.analyze(id!),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['ai', 'results', id] }) },
+    onError: (err: Error) => toast.error(err.message || 'AI analysis failed'),
   })
 
   if (isLoading) return <LoadingState />
   if (error) return <ErrorState message={error.message} retry={() => refetch()} />
   if (!incident) return null
   const aiResult = aiResults?.[0]
+
+  const handleAcknowledge = async () => {
+    const ok = await confirm({
+      title: 'Acknowledge Incident',
+      message: `Acknowledge "${incident.checkName}" as ${actor}? This keeps the incident open but records operator ownership.`,
+      confirmLabel: 'Acknowledge',
+    })
+    if (ok) ackMutation.mutate()
+  }
+
+  const handleResolve = async () => {
+    const ok = await confirm({
+      title: 'Resolve Incident',
+      message: `Resolve "${incident.checkName}" as ${actor}? Use this only after the service has recovered or the alert is confirmed closed.`,
+      confirmLabel: 'Resolve',
+    })
+    if (ok) resolveMutation.mutate()
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -92,7 +128,7 @@ export default function IncidentDetail() {
         <div className="flex gap-2">
           {incident.status === 'open' && (
             <button
-              onClick={() => ackMutation.mutate()}
+              onClick={handleAcknowledge}
               disabled={ackMutation.isPending}
               className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400"
             >
@@ -101,7 +137,7 @@ export default function IncidentDetail() {
             </button>
           )}
           <button
-            onClick={() => resolveMutation.mutate()}
+            onClick={handleResolve}
             disabled={resolveMutation.isPending}
             className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400"
           >
@@ -149,6 +185,12 @@ export default function IncidentDetail() {
           )}
         </div>
       </div>
+
+      {/* AI Incident Brief (Evidence-backed) */}
+      <EvidenceBriefCard incidentId={id!} />
+
+      {/* Evidence Timeline */}
+      <EvidenceTimeline incidentId={id!} />
 
       {/* AI Analysis */}
       {aiResult && <AIAnalysisCard aiResult={aiResult} />}

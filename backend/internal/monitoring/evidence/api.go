@@ -7,12 +7,25 @@ import (
 	"strings"
 )
 
+// --- Response envelope (matches monitoring.APIResponse) ---
+
+type envelope struct {
+	Success bool        `json:"success"`
+	Data    interface{} `json:"data,omitempty"`
+	Error   *apiErr     `json:"error,omitempty"`
+}
+
+type apiErr struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
 // APIHandler serves the evidence backbone and AI Incident Brief HTTP endpoints.
 type APIHandler struct {
-	briefGen     *BriefGenerator
-	briefRepo    *BriefRepository
-	eventRepo    *IncidentEventRepository
-	signalRepo   *SignalEventRepository
+	briefGen   *BriefGenerator
+	briefRepo  *BriefRepository
+	eventRepo  *IncidentEventRepository
+	signalRepo *SignalEventRepository
 }
 
 // NewAPIHandler creates the evidence API handler.
@@ -32,17 +45,17 @@ func NewAPIHandler(
 
 // RegisterRoutes registers all evidence/brief API routes on the mux.
 func (h *APIHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/v1/incidents/", h.handleIncidentEvidence)
+	mux.HandleFunc("/api/v1/evidence/incidents/", h.handleIncidentEvidence)
 	mux.HandleFunc("/api/v1/evidence/brief/", h.handleBrief)
 }
 
 func (h *APIHandler) handleIncidentEvidence(w http.ResponseWriter, r *http.Request) {
 	// Routes:
-	// GET /api/v1/incidents/{id}/timeline  — incident timeline events
-	// GET /api/v1/incidents/{id}/brief     — latest AI brief
-	// POST /api/v1/incidents/{id}/brief    — generate new AI brief
+	// GET /api/v1/evidence/incidents/{id}/timeline  — incident timeline events
+	// GET /api/v1/evidence/incidents/{id}/brief     — latest AI brief
+	// POST /api/v1/evidence/incidents/{id}/brief    — generate new AI brief
 
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/incidents/")
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/evidence/incidents/")
 	parts := strings.SplitN(path, "/", 2)
 	if len(parts) < 2 {
 		return // Let the default handler deal with non-evidence routes
@@ -54,7 +67,7 @@ func (h *APIHandler) handleIncidentEvidence(w http.ResponseWriter, r *http.Reque
 	switch action {
 	case "timeline":
 		if r.Method != http.MethodGet {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		h.handleTimeline(w, r, incidentID)
@@ -66,7 +79,7 @@ func (h *APIHandler) handleIncidentEvidence(w http.ResponseWriter, r *http.Reque
 		case http.MethodPost:
 			h.handleGenerateBrief(w, r, incidentID)
 		default:
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 
 	default:
@@ -78,7 +91,7 @@ func (h *APIHandler) handleBrief(w http.ResponseWriter, r *http.Request) {
 	// POST /api/v1/evidence/brief/{incidentId} — generate brief
 	incidentID := strings.TrimPrefix(r.URL.Path, "/api/v1/evidence/brief/")
 	if incidentID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "incident ID required"})
+		writeErr(w, http.StatusBadRequest, "incident ID required")
 		return
 	}
 
@@ -88,27 +101,23 @@ func (h *APIHandler) handleBrief(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		h.handleGetBrief(w, r, incidentID)
 	default:
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
 func (h *APIHandler) handleTimeline(w http.ResponseWriter, r *http.Request, incidentID string) {
 	if h.eventRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-			"error": "incident event repository not available (requires MongoDB)",
-		})
+		writeErr(w, http.StatusServiceUnavailable, "incident event repository not available (requires MongoDB)")
 		return
 	}
 
 	events, err := h.eventRepo.FindByIncident(r.Context(), incidentID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": fmt.Sprintf("fetch timeline: %v", err),
-		})
+		writeErr(w, http.StatusInternalServerError, fmt.Sprintf("fetch timeline: %v", err))
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeOK(w, http.StatusOK, map[string]interface{}{
 		"incidentId": incidentID,
 		"events":     events,
 		"count":      len(events),
@@ -117,36 +126,28 @@ func (h *APIHandler) handleTimeline(w http.ResponseWriter, r *http.Request, inci
 
 func (h *APIHandler) handleGetBrief(w http.ResponseWriter, r *http.Request, incidentID string) {
 	if h.briefRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-			"error": "brief repository not available (requires MongoDB)",
-		})
+		writeErr(w, http.StatusServiceUnavailable, "brief repository not available (requires MongoDB)")
 		return
 	}
 
 	brief, err := h.briefRepo.GetLatest(r.Context(), incidentID)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{
-			"error": fmt.Sprintf("no brief found for incident %s", incidentID),
-		})
+		writeErr(w, http.StatusNotFound, fmt.Sprintf("no brief found for incident %s", incidentID))
 		return
 	}
 
-	writeJSON(w, http.StatusOK, brief)
+	writeOK(w, http.StatusOK, brief)
 }
 
 func (h *APIHandler) handleGenerateBrief(w http.ResponseWriter, r *http.Request, incidentID string) {
 	if h.briefGen == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-			"error": "brief generator not available",
-		})
+		writeErr(w, http.StatusServiceUnavailable, "brief generator not available")
 		return
 	}
 
 	brief, err := h.briefGen.GenerateBrief(r.Context(), incidentID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": fmt.Sprintf("generate brief: %v", err),
-		})
+		writeErr(w, http.StatusInternalServerError, fmt.Sprintf("generate brief: %v", err))
 		return
 	}
 
@@ -159,11 +160,21 @@ func (h *APIHandler) handleGenerateBrief(w http.ResponseWriter, r *http.Request,
 		}
 	}
 
-	writeJSON(w, http.StatusOK, brief)
+	writeOK(w, http.StatusOK, brief)
 }
 
-func writeJSON(w http.ResponseWriter, status int, data interface{}) {
+func writeOK(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(data)
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(envelope{Success: true, Data: data})
+}
+
+func writeErr(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(envelope{Success: false, Error: &apiErr{Code: status, Message: msg}})
 }
