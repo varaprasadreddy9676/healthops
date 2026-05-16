@@ -148,6 +148,47 @@ func (r *MongoNotificationOutbox) ListPending(limit int) ([]monitoring.Notificat
 	return out, nil
 }
 
+// ListAll returns up to `limit` notifications, newest first, optionally filtered by status.
+func (r *MongoNotificationOutbox) ListAll(limit int, status string) ([]monitoring.NotificationEvent, error) {
+	if r == nil || r.collection == nil {
+		return nil, ErrNotificationRepoNotConfigured
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), mongoNotificationOpTimeout)
+	defer cancel()
+
+	filter := bson.M{}
+	if status != "" {
+		filter["status"] = status
+	}
+
+	cur, err := r.collection.Find(
+		ctx,
+		filter,
+		options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}).SetLimit(int64(limit)),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list notifications: %w", err)
+	}
+	defer cur.Close(ctx)
+
+	out := make([]monitoring.NotificationEvent, 0)
+	for cur.Next(ctx) {
+		var doc mongoNotificationDoc
+		if err := cur.Decode(&doc); err != nil {
+			return nil, fmt.Errorf("decode notification: %w", err)
+		}
+		out = append(out, doc.Event)
+	}
+	if err := cur.Err(); err != nil {
+		return nil, fmt.Errorf("iterate notifications: %w", err)
+	}
+	return out, nil
+}
+
 // MarkSent transitions a notification to "sent" status and records sentAt.
 func (r *MongoNotificationOutbox) MarkSent(id string) error {
 	if r == nil || r.collection == nil {

@@ -34,6 +34,7 @@ func (h *NotificationAPIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/notification-channels", h.handleChannels)
 	mux.HandleFunc("/api/v1/notification-channels/", h.handleChannelByID)
 	mux.HandleFunc("/api/v1/notification-channels/test", h.handleTestChannel)
+	mux.HandleFunc("/api/v1/notification-logs", h.handleNotificationLogs)
 }
 
 // GET  /api/v1/notification-channels — list all channels
@@ -187,6 +188,29 @@ func (h *NotificationAPIHandler) handleToggle(w http.ResponseWriter, r *http.Req
 		return
 	}
 	monitoring.WriteAPIResponse(w, http.StatusOK, monitoring.NewAPIResponse(ch))
+}
+
+// GET /api/v1/notification-logs — list notification delivery events
+func (h *NotificationAPIHandler) handleNotificationLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		monitoring.WriteAPIError(w, http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"))
+		return
+	}
+
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := fmt.Sscanf(v, "%d", &limit); n != 1 || err != nil || limit <= 0 {
+			limit = 100
+		}
+	}
+	status := r.URL.Query().Get("status")
+
+	logs, err := h.dispatcher.outbox.ListAll(limit, status)
+	if err != nil {
+		monitoring.WriteAPIError(w, http.StatusInternalServerError, err)
+		return
+	}
+	monitoring.WriteAPIResponse(w, http.StatusOK, monitoring.NewAPIResponse(logs))
 }
 
 // POST /api/v1/notification-channels/test — test a channel config without saving

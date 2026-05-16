@@ -16,6 +16,7 @@ import (
 type NotificationOutboxRepository interface {
 	Enqueue(evt monitoring.NotificationEvent) error
 	ListPending(limit int) ([]monitoring.NotificationEvent, error)
+	ListAll(limit int, status string) ([]monitoring.NotificationEvent, error)
 	MarkSent(id string) error
 	MarkFailed(id string, reason string) error
 	PruneBefore(cutoff time.Time) error
@@ -76,6 +77,27 @@ func (o *FileNotificationOutbox) ListPending(limit int) ([]monitoring.Notificati
 			if len(result) >= limit {
 				break
 			}
+		}
+	}
+	return result, nil
+}
+
+func (o *FileNotificationOutbox) ListAll(limit int, status string) ([]monitoring.NotificationEvent, error) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 100
+	}
+
+	var result []monitoring.NotificationEvent
+	for i := len(o.data) - 1; i >= 0; i-- {
+		if status != "" && o.data[i].Status != status {
+			continue
+		}
+		result = append(result, o.data[i])
+		if len(result) >= limit {
+			break
 		}
 	}
 	return result, nil
