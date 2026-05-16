@@ -6,7 +6,7 @@ import "time"
 type NotificationOutboxRepository interface {
 	Enqueue(evt NotificationEvent) error
 	ListPending(limit int) ([]NotificationEvent, error)
-	ListAll(limit int, status string) ([]NotificationEvent, error)
+	ListAll(limit int, status string, channel string) ([]NotificationEvent, error)
 	MarkSent(id string) error
 	MarkFailed(id string, reason string) error
 	PruneBefore(cutoff time.Time) error

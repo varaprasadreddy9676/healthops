@@ -558,13 +558,42 @@ func (d *NotificationDispatcher) sendWebhook(ch NotificationChannelConfig, p Not
 	return d.postJSON(ch.WebhookURL, p, ch.Headers)
 }
 
+// TemplateData extends NotificationPayload with extra context for body templates.
+type TemplateData struct {
+	NotificationPayload
+	DashboardURL         string
+	DashboardIncidentURL string
+	Year                 int
+}
+
 func (d *NotificationDispatcher) sendWebhookWithTemplate(ch NotificationChannelConfig, p NotificationPayload) (int, string, error) {
-	tmpl, err := template.New("body").Parse(ch.BodyTemplate)
+	incidentURL := ""
+	if d.dashboardURL != "" {
+		incidentURL = strings.TrimRight(d.dashboardURL, "/") + "/incidents/" + p.IncidentID
+	}
+	data := TemplateData{
+		NotificationPayload:  p,
+		DashboardURL:         d.dashboardURL,
+		DashboardIncidentURL: incidentURL,
+		Year:                 time.Now().Year(),
+	}
+
+	// htmlEmail renders the full HTML email and returns a JSON-encoded string
+	// (with surrounding quotes) safe for embedding in a JSON template field.
+	funcMap := template.FuncMap{
+		"htmlEmail": func(td TemplateData) (string, error) {
+			html := buildHTMLEmail(td.NotificationPayload, td.DashboardURL)
+			b, err := json.Marshal(html)
+			return string(b), err
+		},
+	}
+
+	tmpl, err := template.New("body").Funcs(funcMap).Parse(ch.BodyTemplate)
 	if err != nil {
 		return 0, "", fmt.Errorf("parse body template: %w", err)
 	}
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, p); err != nil {
+	if err := tmpl.Execute(&buf, data); err != nil {
 		return 0, "", fmt.Errorf("render body template: %w", err)
 	}
 	return d.postRaw(ch.WebhookURL, buf.Bytes(), ch.Headers)

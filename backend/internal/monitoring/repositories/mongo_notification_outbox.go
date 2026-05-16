@@ -148,8 +148,8 @@ func (r *MongoNotificationOutbox) ListPending(limit int) ([]monitoring.Notificat
 	return out, nil
 }
 
-// ListAll returns up to `limit` notifications, newest first, optionally filtered by status.
-func (r *MongoNotificationOutbox) ListAll(limit int, status string) ([]monitoring.NotificationEvent, error) {
+// ListAll returns up to `limit` notifications, newest first, optionally filtered by status and/or channel.
+func (r *MongoNotificationOutbox) ListAll(limit int, status string, channel string) ([]monitoring.NotificationEvent, error) {
 	if r == nil || r.collection == nil {
 		return nil, ErrNotificationRepoNotConfigured
 	}
@@ -163,6 +163,9 @@ func (r *MongoNotificationOutbox) ListAll(limit int, status string) ([]monitorin
 	filter := bson.M{}
 	if status != "" {
 		filter["status"] = status
+	}
+	if channel != "" {
+		filter["channel"] = bson.M{"$regex": channel, "$options": "i"}
 	}
 
 	cur, err := r.collection.Find(

@@ -72,9 +72,10 @@ async function fetchChannels(): Promise<NotificationChannel[]> {
   return body.data || []
 }
 
-async function fetchNotificationLogs(status: string): Promise<NotificationLog[]> {
+async function fetchNotificationLogs(status: string, channel: string): Promise<NotificationLog[]> {
   const params = new URLSearchParams({ limit: '200' })
   if (status) params.set('status', status)
+  if (channel) params.set('channel', channel)
   const res = await fetch(`/api/v1/notification-logs?${params}`, { headers: authHeaders() })
   if (!res.ok) throw new Error('Failed to load notification logs')
   const body = await res.json()
@@ -230,13 +231,14 @@ function LogRow({ log }: { log: NotificationLog }) {
   )
 }
 
-function DeliveryLogs() {
+function DeliveryLogs({ channels }: { channels: NotificationChannel[] }) {
   const [statusFilter, setStatusFilter] = useState('')
+  const [channelFilter, setChannelFilter] = useState('')
   const queryClient = useQueryClient()
 
   const { data: logs, isLoading, error } = useQuery({
-    queryKey: ['notification-logs', statusFilter],
-    queryFn: () => fetchNotificationLogs(statusFilter),
+    queryKey: ['notification-logs', statusFilter, channelFilter],
+    queryFn: () => fetchNotificationLogs(statusFilter, channelFilter),
     refetchInterval: 15_000,
   })
 
@@ -245,21 +247,56 @@ function DeliveryLogs() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <span className="text-xs font-medium text-slate-500">Filter:</span>
-        {(['', 'sent', 'failed', 'pending'] as const).map(s => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              statusFilter === s
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
-            }`}
-          >
-            {s === '' ? 'All' : s}
-          </button>
-        ))}
+      {/* Filter row */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        {/* Status filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Status:</span>
+          {(['', 'sent', 'failed', 'pending'] as const).map(s => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                statusFilter === s
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+              }`}
+            >
+              {s === '' ? 'All' : s}
+            </button>
+          ))}
+        </div>
+
+        {/* Channel filter */}
+        {channels.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Channel:</span>
+            <button
+              onClick={() => setChannelFilter('')}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                channelFilter === ''
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+              }`}
+            >
+              All
+            </button>
+            {channels.map(ch => (
+              <button
+                key={ch.id}
+                onClick={() => setChannelFilter(channelFilter === ch.name ? '' : ch.name)}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  channelFilter === ch.name
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                }`}
+              >
+                {ch.name}
+              </button>
+            ))}
+          </div>
+        )}
+
         <span className="ml-auto text-xs text-slate-400">{logs?.length ?? 0} entries · click row to expand</span>
       </div>
 
@@ -441,7 +478,7 @@ export default function NotificationChannels() {
         </button>
       </div>
 
-      {activeTab === 'logs' && <DeliveryLogs />}
+      {activeTab === 'logs' && <DeliveryLogs channels={channels ?? []} />}
 
       {activeTab === 'channels' && (
         <>

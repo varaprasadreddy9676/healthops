@@ -204,8 +204,9 @@ func (h *NotificationAPIHandler) handleNotificationLogs(w http.ResponseWriter, r
 		}
 	}
 	status := r.URL.Query().Get("status")
+	channel := r.URL.Query().Get("channel")
 
-	logs, err := h.dispatcher.outbox.ListAll(limit, status)
+	logs, err := h.dispatcher.outbox.ListAll(limit, status, channel)
 	if err != nil {
 		monitoring.WriteAPIError(w, http.StatusInternalServerError, err)
 		return

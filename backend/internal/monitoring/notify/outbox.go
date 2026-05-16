@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 type NotificationOutboxRepository interface {
 	Enqueue(evt monitoring.NotificationEvent) error
 	ListPending(limit int) ([]monitoring.NotificationEvent, error)
-	ListAll(limit int, status string) ([]monitoring.NotificationEvent, error)
+	ListAll(limit int, status string, channel string) ([]monitoring.NotificationEvent, error)
 	MarkSent(id string) error
 	MarkFailed(id string, reason string) error
 	PruneBefore(cutoff time.Time) error
@@ -82,7 +83,7 @@ func (o *FileNotificationOutbox) ListPending(limit int) ([]monitoring.Notificati
 	return result, nil
 }
 
-func (o *FileNotificationOutbox) ListAll(limit int, status string) ([]monitoring.NotificationEvent, error) {
+func (o *FileNotificationOutbox) ListAll(limit int, status string, channel string) ([]monitoring.NotificationEvent, error) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 
@@ -93,6 +94,9 @@ func (o *FileNotificationOutbox) ListAll(limit int, status string) ([]monitoring
 	var result []monitoring.NotificationEvent
 	for i := len(o.data) - 1; i >= 0; i-- {
 		if status != "" && o.data[i].Status != status {
+			continue
+		}
+		if channel != "" && !strings.Contains(o.data[i].Channel, channel) {
 			continue
 		}
 		result = append(result, o.data[i])
