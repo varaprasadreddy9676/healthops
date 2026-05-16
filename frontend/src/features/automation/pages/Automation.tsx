@@ -16,6 +16,10 @@ import {
     ChevronUp,
 } from 'lucide-react'
 import { automationApi, type AutomationAction, type AuditEntry } from '../api/automation'
+import { useConfirm } from '@/shared/components/ConfirmDialog'
+import { useToast } from '@/shared/components/Toast'
+import { useAuth } from '@/shared/hooks/useAuth'
+import { APIError } from '@/shared/api/client'
 
 const RISK_STYLES: Record<string, { bg: string; text: string; label: string }> = {
     low: { bg: 'bg-green-50 dark:bg-green-950/30', text: 'text-green-700 dark:text-green-400', label: 'Low Risk' },
@@ -42,10 +46,12 @@ function ActionCard({
     action,
     onApprove,
     onReject,
+    isMutating,
 }: {
     action: AutomationAction
-    onApprove: (id: string) => void
-    onReject: (id: string) => void
+    onApprove: (action: AutomationAction) => void
+    onReject: (action: AutomationAction) => void
+    isMutating: boolean
 }) {
     const [expanded, setExpanded] = useState(false)
     const risk = RISK_STYLES[action.risk] ?? RISK_STYLES.low
@@ -105,15 +111,17 @@ function ActionCard({
             {action.status === 'pending' && (
                 <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-700">
                     <button
-                        onClick={() => onApprove(action.id)}
-                        className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700"
+                        onClick={() => onApprove(action)}
+                        disabled={isMutating}
+                        className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <Play className="h-3 w-3" />
-                        Approve
+                        Approve only
                     </button>
                     <button
-                        onClick={() => onReject(action.id)}
-                        className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
+                        onClick={() => onReject(action)}
+                        disabled={isMutating}
+                        className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
                     >
                         <XCircle className="h-3 w-3" />
                         Reject
@@ -166,6 +174,9 @@ export default function Automation() {
     const [statusFilter, setStatusFilter] = useState('')
     const [suggestContext, setSuggestContext] = useState('')
     const queryClient = useQueryClient()
+    const confirm = useConfirm()
+    const toast = useToast()
+    const { user } = useAuth()
 
     const { data: status } = useQuery({
         queryKey: ['automation', 'status'],
@@ -188,21 +199,70 @@ export default function Automation() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['automation'] })
             setSuggestContext('')
+            toast.success('Automation suggestions generated')
         },
+        onError: (err: Error) => toast.error(err.message || 'Failed to generate automation suggestions'),
     })
 
     const approveMutation = useMutation({
-        mutationFn: (id: string) => automationApi.approve(id, 'admin'),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['automation'] }),
+        mutationFn: (id: string) => automationApi.approve(id, user?.username || 'unknown'),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['automation'] })
+            toast.success('Suggestion approved in audit log')
+        },
+        onError: (err: Error) => {
+            queryClient.invalidateQueries({ queryKey: ['automation'] })
+            if (isStaleActionError(err)) {
+                toast.warning('This suggestion is no longer available. The action list has been refreshed.')
+                return
+            }
+            toast.error(err.message || 'Failed to approve action')
+        },
     })
 
     const rejectMutation = useMutation({
-        mutationFn: (id: string) => automationApi.reject(id, 'admin'),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['automation'] }),
+        mutationFn: (id: string) => automationApi.reject(id, user?.username || 'unknown'),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['automation'] })
+            toast.success('Action rejected')
+        },
+        onError: (err: Error) => {
+            queryClient.invalidateQueries({ queryKey: ['automation'] })
+            if (isStaleActionError(err)) {
+                toast.warning('This suggestion is no longer available. The action list has been refreshed.')
+                return
+            }
+            toast.error(err.message || 'Failed to reject action')
+        },
     })
 
     const actions = actionsData?.actions ?? []
     const isAvailable = status?.enabled ?? false
+    const isActionMutating = approveMutation.isPending || rejectMutation.isPending
+
+    const handleSuggest = () => {
+        if (suggestMutation.isPending) return
+        suggestMutation.mutate()
+    }
+
+    const handleApprove = async (action: AutomationAction) => {
+        const ok = await confirm({
+            title: 'Approve automation suggestion?',
+            message: `Approve "${action.title}" as a reviewed recommendation only. HealthOps will not execute the command automatically.`,
+            confirmLabel: 'Approve only',
+        })
+        if (ok) approveMutation.mutate(action.id)
+    }
+
+    const handleReject = async (action: AutomationAction) => {
+        const ok = await confirm({
+            title: 'Reject automation suggestion?',
+            message: `Reject "${action.title}" and keep the decision in the audit log.`,
+            confirmLabel: 'Reject',
+            variant: 'danger',
+        })
+        if (ok) rejectMutation.mutate(action.id)
+    }
 
     return (
         <div className="flex h-full flex-col">
@@ -215,7 +275,7 @@ export default function Automation() {
                         </div>
                         <div>
                             <h1 className="text-lg font-bold text-slate-800 dark:text-white">Assisted Automation</h1>
-                            <p className="text-xs text-slate-500">AI-suggested actions with human approval</p>
+                            <p className="text-xs text-slate-500">AI-suggested actions with human approval. Approval records intent; commands are not executed automatically.</p>
                         </div>
                     </div>
                     {!isAvailable && (
@@ -265,15 +325,18 @@ export default function Automation() {
                                     className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
                                 />
                                 <button
-                                    onClick={() => suggestMutation.mutate()}
+                                    onClick={handleSuggest}
                                     disabled={suggestMutation.isPending}
-                                    className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
+                                    className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                    <Sparkles className={`h-3.5 w-3.5 ${suggestMutation.isPending ? 'animate-pulse' : ''}`} />
-                                    Suggest
+                                    {suggestMutation.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                                    {suggestMutation.isPending ? 'Generating...' : 'Suggest'}
                                 </button>
                             </div>
                         )}
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+                            Approval is an audit decision only. Review commands manually before running anything on infrastructure.
+                        </div>
 
                         {/* Filter */}
                         <div className="flex gap-1">
@@ -301,6 +364,12 @@ export default function Automation() {
                             <div className="flex justify-center py-12">
                                 <RefreshCw className="h-5 w-5 animate-spin text-slate-400" />
                             </div>
+                        ) : suggestMutation.isPending ? (
+                            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-violet-200 bg-violet-50/40 py-16 text-center dark:border-violet-900/60 dark:bg-violet-950/20">
+                                <RefreshCw className="h-6 w-6 animate-spin text-violet-600 dark:text-violet-400" />
+                                <p className="mt-3 text-sm font-medium text-slate-700 dark:text-slate-300">Generating remediation suggestions...</p>
+                                <p className="mt-1 max-w-md text-xs text-slate-500">The AI is reading current telemetry and incident context. Suggested commands will still require manual review.</p>
+                            </div>
                         ) : actions.length === 0 ? (
                             <div className="flex flex-col items-center py-16 text-center">
                                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 dark:bg-slate-800">
@@ -315,8 +384,9 @@ export default function Automation() {
                                     <ActionCard
                                         key={action.id}
                                         action={action}
-                                        onApprove={(id) => approveMutation.mutate(id)}
-                                        onReject={(id) => rejectMutation.mutate(id)}
+                                        onApprove={handleApprove}
+                                        onReject={handleReject}
+                                        isMutating={isActionMutating}
                                     />
                                 ))}
                             </div>
@@ -330,4 +400,8 @@ export default function Automation() {
             </div>
         </div>
     )
+}
+
+function isStaleActionError(err: Error) {
+    return (err instanceof APIError && err.code === 404) || /action .* not found/i.test(err.message)
 }

@@ -140,8 +140,7 @@ func (e *Engine) Approve(id string, actor string) error {
 			e.actions[i].Status = StatusApproved
 			e.actions[i].ApprovedBy = actor
 			e.actions[i].ApprovedAt = &now
-			e.actions[i].ExecutedAt = &now
-			e.actions[i].Result = "approved for execution"
+			e.actions[i].Result = "approved in audit log; command not executed"
 
 			e.audit = append(e.audit, AuditEntry{
 				ID:        auditID(),
