@@ -502,7 +502,9 @@ export default function CheckDetail() {
             {/* Actions */}
             <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
               {updateMutation.isError && (
-                <span className="mr-auto text-sm text-red-600">Failed to save changes</span>
+                <span className="mr-auto text-sm text-red-600">
+                  {updateMutation.error instanceof Error ? updateMutation.error.message : 'Failed to save changes'}
+                </span>
               )}
               <button
                 onClick={() => setEditing(false)}

@@ -158,8 +158,8 @@ func (c *CheckConfig) validate(cfg *Config) error {
 	}
 
 	// Validate per-check scheduling configuration
-	if c.IntervalSeconds > 0 && c.IntervalSeconds < 10 {
-		return fmt.Errorf("intervalSeconds must be >= 10 (got %d)", c.IntervalSeconds)
+	if c.IntervalSeconds > 0 && c.IntervalSeconds < 1 {
+		return fmt.Errorf("intervalSeconds must be >= 1 (got %d)", c.IntervalSeconds)
 	}
 	if c.RetryCount < 0 {
 		return fmt.Errorf("retryCount must be >= 0 (got %d)", c.RetryCount)
