@@ -289,6 +289,106 @@ func TestNewAIProviderFactory(t *testing.T) {
 	}
 }
 
+func TestOpenAICompatibleProviderRedactsSecretsFromErrors(t *testing.T) {
+	secret := "sk-live-secret-1234567890"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"message":"rate limited for ` + r.Header.Get("Authorization") + `","type":"rate_limit"}}`))
+	}))
+	defer server.Close()
+
+	provider, err := NewAIProvider(AIProviderConfig{
+		Provider: AIProviderCustom,
+		Name:     "OpenRouter-compatible",
+		APIKey:   secret,
+		BaseURL:  server.URL,
+		Model:    "test-model",
+		Enabled:  true,
+	}, time.Second)
+	if err != nil {
+		t.Fatalf("NewAIProvider: %v", err)
+	}
+
+	_, err = provider.Analyze(context.Background(), "system", "user")
+	if err == nil {
+		t.Fatal("expected provider error")
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Fatalf("provider error leaked API key: %s", err)
+	}
+	if !strings.Contains(err.Error(), "[REDACTED]") {
+		t.Fatalf("provider error should contain redaction marker, got: %s", err)
+	}
+}
+
+func TestGoogleProviderRedactsURLAPIKeyFromErrors(t *testing.T) {
+	secret := "AIza-live-secret-1234567890"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`upstream failed with query ` + r.URL.RawQuery))
+	}))
+	defer server.Close()
+
+	provider, err := NewAIProvider(AIProviderConfig{
+		Provider: AIProviderGoogle,
+		Name:     "Gemini",
+		APIKey:   secret,
+		BaseURL:  server.URL,
+		Model:    "gemini-test",
+		Enabled:  true,
+	}, time.Second)
+	if err != nil {
+		t.Fatalf("NewAIProvider: %v", err)
+	}
+
+	_, err = provider.Analyze(context.Background(), "system", "user")
+	if err == nil {
+		t.Fatal("expected provider error")
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Fatalf("provider error leaked API key: %s", err)
+	}
+	if !strings.Contains(err.Error(), "[REDACTED]") {
+		t.Fatalf("provider error should contain redaction marker, got: %s", err)
+	}
+}
+
+func TestOpenAICompatibleProviderParsesOpenRouterStyleResponse(t *testing.T) {
+	var sawAuth bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		sawAuth = r.Header.Get("Authorization") == "Bearer sk-test-openrouter"
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"summary\":\"API down\",\"severity\":\"critical\",\"suggestions\":[\"restart service\"]}"}}]}`))
+	}))
+	defer server.Close()
+
+	provider, err := NewAIProvider(AIProviderConfig{
+		Provider: AIProviderCustom,
+		Name:     "OpenRouter-compatible",
+		APIKey:   "sk-test-openrouter",
+		BaseURL:  server.URL,
+		Model:    "openai/gpt-4o-mini",
+		Enabled:  true,
+	}, time.Second)
+	if err != nil {
+		t.Fatalf("NewAIProvider: %v", err)
+	}
+
+	got, err := provider.Analyze(context.Background(), "system", "user")
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if !sawAuth {
+		t.Fatal("expected bearer auth header")
+	}
+	if !strings.Contains(got, "API down") {
+		t.Fatalf("unexpected response: %s", got)
+	}
+}
+
 // --- AI Service Tests ---
 
 func TestAIServiceEnqueueAnalysis(t *testing.T) {

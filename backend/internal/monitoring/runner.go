@@ -153,12 +153,10 @@ func (r *Runner) RunCheck(ctx context.Context, check CheckConfig) (CheckResult, 
 }
 
 func (r *Runner) persistResults(results []CheckResult, finishedAt time.Time) error {
-	return r.store.Update(func(state *State) error {
-		state.Results = append(state.Results, results...)
-		state.LastRunAt = finishedAt
-		pruneResults(&state.Results, r.cfg.RetentionDays)
-		return nil
-	})
+	if err := r.store.AppendResults(results, r.cfg.RetentionDays); err != nil {
+		return err
+	}
+	return r.store.SetLastRun(finishedAt)
 }
 
 func (r *Runner) executeCheck(ctx context.Context, check CheckConfig) CheckResult {

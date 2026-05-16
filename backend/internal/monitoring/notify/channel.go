@@ -124,6 +124,9 @@ func (c *NotificationChannelConfig) Validate() error {
 // SafeView returns a copy with sensitive fields masked.
 func (c *NotificationChannelConfig) SafeView() NotificationChannelConfig {
 	safe := *c
+	if safe.WebhookURL != "" {
+		safe.WebhookURL = sanitizeRequestURL(safe.WebhookURL)
+	}
 	if safe.SMTPPass != "" {
 		safe.SMTPPass = "••••••••"
 	}
@@ -293,6 +296,9 @@ func (s *NotificationChannelStore) Update(id string, ch NotificationChannelConfi
 			// Preserve sensitive fields if masked values sent back
 			if ch.SMTPPass == "••••••••" {
 				ch.SMTPPass = existing.SMTPPass
+			}
+			if ch.WebhookURL != "" && ch.WebhookURL == sanitizeRequestURL(existing.WebhookURL) {
+				ch.WebhookURL = existing.WebhookURL
 			}
 			if ch.BotToken != "" && len(ch.BotToken) > 4 && ch.BotToken[4:8] == "••••" {
 				ch.BotToken = existing.BotToken

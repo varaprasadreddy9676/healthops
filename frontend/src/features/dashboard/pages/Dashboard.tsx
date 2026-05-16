@@ -648,14 +648,14 @@ export default function Dashboard() {
       </div>
 
       {/* Bottom: Active Incidents + Recent Results */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         {/* Active Incidents */}
         <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5 dark:border-slate-800">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              Active Incidents
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+              <span>Active Incidents</span>
               {openCount > 0 && (
-                <span className="ml-2 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-100 px-1.5 text-[10px] font-bold text-red-700 dark:bg-red-950/50 dark:text-red-400">
+                <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-100 px-1.5 text-[10px] font-bold text-red-700 dark:bg-red-950/50 dark:text-red-400">
                   {openCount}
                 </span>
               )}

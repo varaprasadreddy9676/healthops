@@ -4,6 +4,7 @@ import { Send, Bot, User, Loader2, AlertCircle, ExternalLink, Sparkles } from 'l
 import { cn, relativeTime } from '@/shared/lib/utils'
 import { assistantApi, type AssistantMessage, type AssistantReference, type AskResponse } from '@/features/assistant/api/assistant'
 import { Link } from 'react-router-dom'
+import { MarkdownContent } from '@/shared/components/MarkdownContent'
 
 interface ChatMessage {
     role: 'user' | 'assistant'
@@ -68,7 +69,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
                     {isUser ? (
                         <p>{message.content}</p>
                     ) : (
-                        <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-li:my-0.5" dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }} />
+                        <MarkdownContent text={message.content} className="text-sm" />
                     )}
                 </div>
                 {message.references && message.references.length > 0 && (
@@ -80,34 +81,13 @@ function MessageBubble({ message }: { message: ChatMessage }) {
                 )}
                 <div className="flex items-center gap-2 text-[10px] text-slate-400">
                     <span>{relativeTime(message.timestamp)}</span>
-                    {message.durationMs != null && (
+                    {message.durationMs != null && message.durationMs > 0 && (
                         <span>· {message.durationMs}ms</span>
                     )}
                 </div>
             </div>
         </div>
     )
-}
-
-function renderMarkdown(text: string): string {
-    // Simple markdown rendering for common patterns
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`(.*?)`/g, '<code class="rounded bg-slate-100 px-1 py-0.5 text-xs dark:bg-slate-700">$1</code>')
-        .replace(/^### (.*$)/gm, '<h3 class="text-sm font-semibold mt-2">$1</h3>')
-        .replace(/^## (.*$)/gm, '<h2 class="text-base font-semibold mt-2">$1</h2>')
-        .replace(/^- (.*$)/gm, '<li>$1</li>')
-        .replace(/(<li>.*<\/li>\n?)+/g, '<ul class="list-disc pl-4">$&</ul>')
-        .replace(/\n\n/g, '</p><p>')
-        .replace(/\n/g, '<br>')
-        .replace(/^(.+)$/gm, (match) => {
-            if (match.startsWith('<')) return match
-            return match
-        })
 }
 
 export default function Assistant() {

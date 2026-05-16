@@ -94,14 +94,14 @@ func (p *openAIProvider) Analyze(ctx context.Context, systemMsg, userMsg string)
 	url := p.cfg.BaseURL + "/chat/completions"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", fmt.Errorf("create request: %s", redactProviderSecrets(err.Error(), p.cfg.APIKey))
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("send request: %w", err)
+		return "", fmt.Errorf("send request: %s", redactProviderSecrets(err.Error(), p.cfg.APIKey))
 	}
 	defer resp.Body.Close()
 
@@ -111,7 +111,8 @@ func (p *openAIProvider) Analyze(ctx context.Context, systemMsg, userMsg string)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, truncate(string(respBody), 500))
+		bodyText := redactProviderSecrets(string(respBody), p.cfg.APIKey)
+		return "", fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, truncate(bodyText, 500))
 	}
 
 	var chatResp openAIChatResponse
@@ -120,7 +121,8 @@ func (p *openAIProvider) Analyze(ctx context.Context, systemMsg, userMsg string)
 	}
 
 	if chatResp.Error != nil {
-		return "", fmt.Errorf("API error: %s (%s)", chatResp.Error.Message, chatResp.Error.Type)
+		msg := redactProviderSecrets(chatResp.Error.Message, p.cfg.APIKey)
+		return "", fmt.Errorf("API error: %s (%s)", msg, chatResp.Error.Type)
 	}
 
 	if len(chatResp.Choices) == 0 {
@@ -222,7 +224,7 @@ func (p *anthropicProvider) Analyze(ctx context.Context, systemMsg, userMsg stri
 	url := p.cfg.BaseURL + "/messages"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", fmt.Errorf("create request: %s", redactProviderSecrets(err.Error(), p.cfg.APIKey))
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", p.cfg.APIKey)
@@ -230,7 +232,7 @@ func (p *anthropicProvider) Analyze(ctx context.Context, systemMsg, userMsg stri
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("send request: %w", err)
+		return "", fmt.Errorf("send request: %s", redactProviderSecrets(err.Error(), p.cfg.APIKey))
 	}
 	defer resp.Body.Close()
 
@@ -240,7 +242,8 @@ func (p *anthropicProvider) Analyze(ctx context.Context, systemMsg, userMsg stri
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, truncate(string(respBody), 500))
+		bodyText := redactProviderSecrets(string(respBody), p.cfg.APIKey)
+		return "", fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, truncate(bodyText, 500))
 	}
 
 	var anthropicResp anthropicResponse
@@ -249,7 +252,8 @@ func (p *anthropicProvider) Analyze(ctx context.Context, systemMsg, userMsg stri
 	}
 
 	if anthropicResp.Error != nil {
-		return "", fmt.Errorf("API error: %s (%s)", anthropicResp.Error.Message, anthropicResp.Error.Type)
+		msg := redactProviderSecrets(anthropicResp.Error.Message, p.cfg.APIKey)
+		return "", fmt.Errorf("API error: %s (%s)", msg, anthropicResp.Error.Type)
 	}
 
 	var parts []string
@@ -372,13 +376,13 @@ func (p *googleProvider) Analyze(ctx context.Context, systemMsg, userMsg string)
 	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", p.cfg.BaseURL, p.cfg.Model, p.cfg.APIKey)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", fmt.Errorf("create request: %s", redactProviderSecrets(err.Error(), p.cfg.APIKey))
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("send request: %w", err)
+		return "", fmt.Errorf("send request: %s", redactProviderSecrets(err.Error(), p.cfg.APIKey))
 	}
 	defer resp.Body.Close()
 
@@ -388,7 +392,8 @@ func (p *googleProvider) Analyze(ctx context.Context, systemMsg, userMsg string)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, truncate(string(respBody), 500))
+		bodyText := redactProviderSecrets(string(respBody), p.cfg.APIKey)
+		return "", fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, truncate(bodyText, 500))
 	}
 
 	var googleResp googleResponse
@@ -397,7 +402,8 @@ func (p *googleProvider) Analyze(ctx context.Context, systemMsg, userMsg string)
 	}
 
 	if googleResp.Error != nil {
-		return "", fmt.Errorf("API error: %s (code %d)", googleResp.Error.Message, googleResp.Error.Code)
+		msg := redactProviderSecrets(googleResp.Error.Message, p.cfg.APIKey)
+		return "", fmt.Errorf("API error: %s (code %d)", msg, googleResp.Error.Code)
 	}
 
 	if len(googleResp.Candidates) == 0 {
@@ -497,13 +503,13 @@ func (p *ollamaProvider) Analyze(ctx context.Context, systemMsg, userMsg string)
 	url := p.cfg.BaseURL + "/api/generate"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", fmt.Errorf("create request: %s", redactProviderSecrets(err.Error(), p.cfg.APIKey))
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("send request: %w", err)
+		return "", fmt.Errorf("send request: %s", redactProviderSecrets(err.Error(), p.cfg.APIKey))
 	}
 	defer resp.Body.Close()
 
@@ -513,7 +519,8 @@ func (p *ollamaProvider) Analyze(ctx context.Context, systemMsg, userMsg string)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, truncate(string(respBody), 500))
+		bodyText := redactProviderSecrets(string(respBody), p.cfg.APIKey)
+		return "", fmt.Errorf("API error (HTTP %d): %s", resp.StatusCode, truncate(bodyText, 500))
 	}
 
 	var ollamaResp ollamaResponse
@@ -522,7 +529,7 @@ func (p *ollamaProvider) Analyze(ctx context.Context, systemMsg, userMsg string)
 	}
 
 	if ollamaResp.Error != "" {
-		return "", fmt.Errorf("Ollama error: %s", ollamaResp.Error)
+		return "", fmt.Errorf("Ollama error: %s", redactProviderSecrets(ollamaResp.Error, p.cfg.APIKey))
 	}
 
 	return ollamaResp.Response, nil
@@ -574,4 +581,15 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+func redactProviderSecrets(text string, secrets ...string) string {
+	redacted := text
+	for _, secret := range secrets {
+		if secret == "" {
+			continue
+		}
+		redacted = strings.ReplaceAll(redacted, secret, "[REDACTED]")
+	}
+	return redacted
 }

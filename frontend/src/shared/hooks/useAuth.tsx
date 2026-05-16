@@ -18,6 +18,7 @@ const AuthContext = createContext<AuthContextType | null>(null)
 
 const TOKEN_KEY = 'healthops_token'
 const USER_KEY = 'healthops_user'
+const AUTH_VERIFY_TIMEOUT_MS = 5_000
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(() => {
@@ -40,12 +41,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Verify token on mount
   useEffect(() => {
     if (!state.token) return
-    
+
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), AUTH_VERIFY_TIMEOUT_MS)
+
     fetch('/api/v1/auth/me', {
+      signal: controller.signal,
       headers: { Authorization: `Bearer ${state.token}` },
     })
       .then(res => {
-        if (!res.ok) throw new Error('invalid token')
+        if (res.status === 401) {
+          const err = new Error('invalid token')
+          err.name = 'UnauthorizedError'
+          throw err
+        }
+        if (!res.ok) throw new Error('auth verification unavailable')
         return res.json()
       })
       .then(body => {
@@ -59,13 +69,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isLoading: false,
           }))
           localStorage.setItem(USER_KEY, JSON.stringify(user))
+        } else {
+          setState(s => ({ ...s, isLoading: false }))
         }
       })
-      .catch(() => {
-        localStorage.removeItem(TOKEN_KEY)
-        localStorage.removeItem(USER_KEY)
-        setState({ user: null, token: null, isAuthenticated: false, isAdmin: false, isLoading: false })
+      .catch((err: Error) => {
+        if (err.name === 'UnauthorizedError') {
+          localStorage.removeItem(TOKEN_KEY)
+          localStorage.removeItem(USER_KEY)
+          setState({ user: null, token: null, isAuthenticated: false, isAdmin: false, isLoading: false })
+          return
+        }
+
+        // If the database is down, keep the cached identity so the shell can
+        // render degraded/read-only status instead of getting stuck on startup.
+        setState(s => ({ ...s, isLoading: false }))
       })
+      .finally(() => window.clearTimeout(timeoutId))
+
+    return () => {
+      window.clearTimeout(timeoutId)
+      controller.abort()
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const login = useCallback(async (username: string, password: string) => {

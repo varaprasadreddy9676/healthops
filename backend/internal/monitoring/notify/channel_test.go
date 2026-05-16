@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -183,6 +184,14 @@ func TestNotificationChannelConfig_SafeView(t *testing.T) {
 		}
 		if safe.Email != "ops@example.com" {
 			t.Errorf("Email = %q, want preserved", safe.Email)
+		}
+	})
+
+	t.Run("webhook URLs are redacted in safe view", func(t *testing.T) {
+		cfg := NotificationChannelConfig{WebhookURL: "https://hooks.slack.com/services/T00/B00/secret"}
+		safe := cfg.SafeView()
+		if safe.WebhookURL != "https://hooks.slack.com/services/REDACTED" {
+			t.Errorf("WebhookURL = %q, want redacted", safe.WebhookURL)
 		}
 	})
 }
@@ -379,6 +388,39 @@ func TestNotificationChannelStore(t *testing.T) {
 		}
 		if raw[0].SMTPPass != "realsecret" {
 			t.Errorf("SMTPPass = %q, want original 'realsecret' preserved", raw[0].SMTPPass)
+		}
+	})
+
+	t.Run("update preserves masked webhook URL", func(t *testing.T) {
+		store, err := NewNotificationChannelStore(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		ch := NotificationChannelConfig{
+			ID:         "mask-webhook-1",
+			Name:       "slack-ch",
+			Type:       ChannelSlack,
+			WebhookURL: "https://hooks.slack.com/services/T00/B00/secret",
+		}
+		if err := store.Create(ch); err != nil {
+			t.Fatal(err)
+		}
+
+		upd := NotificationChannelConfig{
+			Name:       "slack-ch",
+			Type:       ChannelSlack,
+			WebhookURL: "https://hooks.slack.com/services/REDACTED",
+		}
+		if err := store.Update("mask-webhook-1", upd); err != nil {
+			t.Fatal(err)
+		}
+
+		raw := store.ListRaw()
+		if len(raw) != 1 {
+			t.Fatalf("expected 1 channel, got %d", len(raw))
+		}
+		if raw[0].WebhookURL != "https://hooks.slack.com/services/T00/B00/secret" {
+			t.Errorf("WebhookURL = %q, want original preserved", raw[0].WebhookURL)
 		}
 	})
 
@@ -1010,6 +1052,172 @@ func TestNotificationAPIHandler(t *testing.T) {
 			t.Fatalf("status = %d, want 404", resp.StatusCode)
 		}
 	})
+}
+
+type staticChannelStore struct {
+	channels []NotificationChannelConfig
+}
+
+func (s staticChannelStore) List() []NotificationChannelConfig    { return s.channels }
+func (s staticChannelStore) ListRaw() []NotificationChannelConfig { return s.channels }
+func (s staticChannelStore) Get(id string) (NotificationChannelConfig, bool) {
+	return NotificationChannelConfig{}, false
+}
+func (s staticChannelStore) Create(ch NotificationChannelConfig) error { return nil }
+func (s staticChannelStore) Update(id string, ch NotificationChannelConfig) error {
+	return nil
+}
+func (s staticChannelStore) Delete(id string) error                      { return nil }
+func (s staticChannelStore) ToggleEnabled(id string, enabled bool) error { return nil }
+
+func TestNotificationDispatcher_RecordsOutboundDeliveryTrace(t *testing.T) {
+	var receivedBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		receivedBody = string(body)
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte("accepted"))
+	}))
+	defer server.Close()
+
+	outbox, err := NewFileNotificationOutbox(filepath.Join(t.TempDir(), "outbox.jsonl"))
+	if err != nil {
+		t.Fatalf("NewFileNotificationOutbox: %v", err)
+	}
+
+	channel := NotificationChannelConfig{
+		ID:         "slack-live",
+		Name:       "Slack Live",
+		Type:       ChannelSlack,
+		Enabled:    true,
+		WebhookURL: server.URL + "/services/T000/B000/secret",
+	}
+	dispatcher := NewNotificationDispatcher(staticChannelStore{channels: []NotificationChannelConfig{channel}}, outbox, log.New(io.Discard, "", 0))
+	dispatcher.sendToChannel(channel, NotificationPayload{
+		IncidentID: "inc-1",
+		CheckID:    "check-1",
+		CheckName:  "API health",
+		CheckType:  "api",
+		Severity:   "critical",
+		Status:     "open",
+		Message:    "Primary endpoint is down",
+		StartedAt:  time.Now().UTC().Format(time.RFC3339),
+	}, "inc-1")
+
+	events := outbox.AllNotifications()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+
+	evt := events[0]
+	if evt.Status != "sent" {
+		t.Fatalf("status = %q, want sent", evt.Status)
+	}
+	if evt.RequestURL != sanitizeRequestURL(channel.WebhookURL) {
+		t.Fatalf("requestUrl = %q, want %q", evt.RequestURL, sanitizeRequestURL(channel.WebhookURL))
+	}
+	if evt.ResponseStatus != http.StatusAccepted {
+		t.Fatalf("responseStatus = %d, want %d", evt.ResponseStatus, http.StatusAccepted)
+	}
+	if evt.ResponseBody != "accepted" {
+		t.Fatalf("responseBody = %q, want accepted", evt.ResponseBody)
+	}
+	if !strings.Contains(evt.PayloadJSON, `"blocks"`) {
+		t.Fatalf("payloadJson should contain rendered slack payload, got %s", evt.PayloadJSON)
+	}
+	if receivedBody != evt.PayloadJSON {
+		t.Fatalf("recorded request body does not match actual body\nrecorded: %s\nactual:   %s", evt.PayloadJSON, receivedBody)
+	}
+}
+
+func TestNotificationDispatcher_MarkFailedOnDeliveryError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("upstream failed"))
+	}))
+	defer server.Close()
+
+	outbox, err := NewFileNotificationOutbox(filepath.Join(t.TempDir(), "outbox.jsonl"))
+	if err != nil {
+		t.Fatalf("NewFileNotificationOutbox: %v", err)
+	}
+
+	channel := NotificationChannelConfig{
+		ID:         "webhook-live",
+		Name:       "Webhook Live",
+		Type:       ChannelWebhook,
+		Enabled:    true,
+		WebhookURL: server.URL + "/hooks/internal?token=secret",
+	}
+	dispatcher := NewNotificationDispatcher(staticChannelStore{channels: []NotificationChannelConfig{channel}}, outbox, log.New(io.Discard, "", 0))
+	dispatcher.sendToChannel(channel, NotificationPayload{
+		IncidentID: "inc-2",
+		CheckID:    "check-2",
+		CheckName:  "Webhook check",
+		CheckType:  "api",
+		Severity:   "warning",
+		Status:     "open",
+		Message:    "Webhook returned 500",
+		StartedAt:  time.Now().UTC().Format(time.RFC3339),
+	}, "inc-2")
+
+	events := outbox.AllNotifications()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+
+	evt := events[0]
+	if evt.Status != "failed" {
+		t.Fatalf("status = %q, want failed", evt.Status)
+	}
+	if evt.ResponseStatus != http.StatusInternalServerError {
+		t.Fatalf("responseStatus = %d, want %d", evt.ResponseStatus, http.StatusInternalServerError)
+	}
+	if evt.ResponseBody != "upstream failed" {
+		t.Fatalf("responseBody = %q, want upstream failed", evt.ResponseBody)
+	}
+	if evt.LastError == "" || !strings.Contains(evt.LastError, "unexpected status 500") {
+		t.Fatalf("lastError = %q, want unexpected status 500", evt.LastError)
+	}
+	if evt.RequestURL != sanitizeRequestURL(channel.WebhookURL) {
+		t.Fatalf("requestUrl = %q, want %q", evt.RequestURL, sanitizeRequestURL(channel.WebhookURL))
+	}
+}
+
+func TestSanitizeRequestURL(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{
+			name: "slack webhook path is redacted",
+			raw:  "https://hooks.slack.com/services/T000/B000/secret",
+			want: "https://hooks.slack.com/services/REDACTED",
+		},
+		{
+			name: "telegram bot token is redacted but method remains visible",
+			raw:  "https://api.telegram.org/bot123456:abcdef/sendMessage",
+			want: "https://api.telegram.org/botREDACTED/sendMessage",
+		},
+		{
+			name: "query params are removed",
+			raw:  "https://example.com/hooks/abc?token=secret&team=ops",
+			want: "https://example.com/hooks/REDACTED",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sanitizeRequestURL(tt.raw)
+			if got != tt.want {
+				t.Fatalf("sanitizeRequestURL(%q) = %q, want %q", tt.raw, got, tt.want)
+			}
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------

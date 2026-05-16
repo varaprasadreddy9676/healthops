@@ -76,12 +76,6 @@ func NewMongoServerRepository(uri, dbName, prefix string) (*MongoServerRepositor
 	if uri == "" {
 		return nil, &ServerRepositoryError{Op: "new", Err: ErrServerRepositoryNotConfigured}
 	}
-	if dbName == "" {
-		dbName = "healthops"
-	}
-	if prefix == "" {
-		prefix = "healthops"
-	}
 
 	uri = strings.ReplaceAll(uri, "localhost", "127.0.0.1")
 	clientOpts := options.Client().
@@ -100,6 +94,20 @@ func NewMongoServerRepository(uri, dbName, prefix string) (*MongoServerRepositor
 	if err := client.Ping(pingCtx, nil); err != nil {
 		_ = client.Disconnect(context.Background())
 		return nil, &ServerRepositoryError{Op: "new", Cause: err}
+	}
+
+	return NewMongoServerRepositoryFromClient(client, dbName, prefix)
+}
+
+func NewMongoServerRepositoryFromClient(client *mongo.Client, dbName, prefix string) (*MongoServerRepository, error) {
+	if client == nil {
+		return nil, &ServerRepositoryError{Op: "new", Err: ErrServerRepositoryNotConfigured}
+	}
+	if dbName == "" {
+		dbName = "healthops"
+	}
+	if prefix == "" {
+		prefix = "healthops"
 	}
 
 	collection := client.Database(dbName).Collection(prefix + "_servers")

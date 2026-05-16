@@ -2,6 +2,7 @@ package monitoring
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,9 +14,15 @@ import (
 )
 
 type fakeStore struct {
-	snapshot     State
-	updateCalled atomic.Int32
-	updateFunc   func(*State) error
+	snapshot               State
+	updateCalled           atomic.Int32
+	appendResultsCalled    atomic.Int32
+	setLastRunCalled       atomic.Int32
+	appendResultsRetention int
+	lastRunAt              time.Time
+	updateFunc             func(*State) error
+	appendResultsErr       error
+	setLastRunErr          error
 }
 
 func (f *fakeStore) Snapshot() State {
@@ -34,11 +41,81 @@ func (f *fakeStore) Update(fn func(*State) error) error {
 	return fn(&f.snapshot)
 }
 
-func (f *fakeStore) ReplaceChecks([]CheckConfig) error      { return nil }
-func (f *fakeStore) UpsertCheck(CheckConfig) error          { return nil }
-func (f *fakeStore) DeleteCheck(string) error               { return nil }
-func (f *fakeStore) AppendResults([]CheckResult, int) error { return nil }
-func (f *fakeStore) SetLastRun(time.Time) error             { return nil }
+func (f *fakeStore) ReplaceChecks([]CheckConfig) error { return nil }
+func (f *fakeStore) UpsertCheck(CheckConfig) error     { return nil }
+func (f *fakeStore) DeleteCheck(string) error          { return nil }
+func (f *fakeStore) AppendResults(results []CheckResult, retentionDays int) error {
+	f.appendResultsCalled.Add(1)
+	f.appendResultsRetention = retentionDays
+	if f.appendResultsErr != nil {
+		return f.appendResultsErr
+	}
+	f.snapshot.Results = append(f.snapshot.Results, results...)
+	pruneResults(&f.snapshot.Results, retentionDays)
+	return nil
+}
+func (f *fakeStore) SetLastRun(t time.Time) error {
+	f.setLastRunCalled.Add(1)
+	if f.setLastRunErr != nil {
+		return f.setLastRunErr
+	}
+	f.lastRunAt = t.UTC()
+	f.snapshot.LastRunAt = t.UTC()
+	return nil
+}
+
+func TestRunnerPersistResultsUsesResultStoreAPI(t *testing.T) {
+	store := &fakeStore{}
+	cfg := &Config{RetentionDays: 7}
+	runner := NewRunner(cfg, store)
+	finishedAt := time.Now().UTC()
+	results := []CheckResult{{
+		ID:         "result-1",
+		CheckID:    "api-1",
+		Name:       "API 1",
+		Type:       "api",
+		Status:     "healthy",
+		Healthy:    true,
+		FinishedAt: finishedAt,
+	}}
+
+	if err := runner.persistResults(results, finishedAt); err != nil {
+		t.Fatalf("persistResults returned error: %v", err)
+	}
+
+	if got := store.updateCalled.Load(); got != 0 {
+		t.Fatalf("persistResults called Update %d times; want 0", got)
+	}
+	if got := store.appendResultsCalled.Load(); got != 1 {
+		t.Fatalf("AppendResults calls = %d; want 1", got)
+	}
+	if got := store.setLastRunCalled.Load(); got != 1 {
+		t.Fatalf("SetLastRun calls = %d; want 1", got)
+	}
+	if store.appendResultsRetention != cfg.RetentionDays {
+		t.Fatalf("retentionDays = %d; want %d", store.appendResultsRetention, cfg.RetentionDays)
+	}
+	if len(store.snapshot.Results) != 1 || store.snapshot.Results[0].ID != "result-1" {
+		t.Fatalf("results not appended to store snapshot: %+v", store.snapshot.Results)
+	}
+	if !store.lastRunAt.Equal(finishedAt) {
+		t.Fatalf("lastRunAt = %s; want %s", store.lastRunAt, finishedAt)
+	}
+}
+
+func TestRunnerPersistResultsStopsBeforeLastRunWhenAppendFails(t *testing.T) {
+	appendErr := errors.New("append failed")
+	store := &fakeStore{appendResultsErr: appendErr}
+	runner := NewRunner(&Config{RetentionDays: 7}, store)
+
+	err := runner.persistResults([]CheckResult{{ID: "result-1"}}, time.Now().UTC())
+	if !errors.Is(err, appendErr) {
+		t.Fatalf("persistResults error = %v; want %v", err, appendErr)
+	}
+	if got := store.setLastRunCalled.Load(); got != 0 {
+		t.Fatalf("SetLastRun calls = %d; want 0", got)
+	}
+}
 
 func TestRunnerRunOnceWithNoEnabledChecks(t *testing.T) {
 	store := &fakeStore{

@@ -22,11 +22,17 @@ type aiProviderRepository interface {
 	Delete(ctx context.Context, id string) error
 }
 
+type aiServiceSettingsRepository interface {
+	GetServiceConfig(ctx context.Context) (ai.AIServiceConfig, error)
+	UpdateServiceConfig(ctx context.Context, cfg ai.AIServiceConfig) error
+}
+
 // MongoAIConfigStoreAdapter adapts MongoAIConfigRepository to AIConfigStoreInterface.
 // This allows the MongoDB repository to work with the existing AI service layer.
 type MongoAIConfigStoreAdapter struct {
-	repo aiProviderRepository
-	mu   sync.RWMutex
+	repo         aiProviderRepository
+	settingsRepo aiServiceSettingsRepository
+	mu           sync.RWMutex
 	// Cache the service config for prompt templates
 	serviceConfig ai.AIServiceConfig
 }
@@ -34,7 +40,8 @@ type MongoAIConfigStoreAdapter struct {
 // NewMongoAIConfigStoreAdapter creates a new adapter for the MongoDB AI config repository.
 func NewMongoAIConfigStoreAdapter(repo *MongoAIConfigRepository) *MongoAIConfigStoreAdapter {
 	adapter := &MongoAIConfigStoreAdapter{
-		repo: repo,
+		repo:         repo,
+		settingsRepo: repo,
 	}
 	// Initialize with default prompts
 	adapter.serviceConfig = ai.DefaultAIServiceConfig()
@@ -54,10 +61,10 @@ func (a *MongoAIConfigStoreAdapter) Get() ai.AIServiceConfig {
 		return copyServiceConfig(a.serviceConfig)
 	}
 
-	return a.configFromProvidersLocked(providers)
+	return a.configFromProvidersLocked(ctx, providers)
 }
 
-func (a *MongoAIConfigStoreAdapter) configFromProvidersLocked(providers []*AIProvider) ai.AIServiceConfig {
+func (a *MongoAIConfigStoreAdapter) configFromProvidersLocked(ctx context.Context, providers []*AIProvider) ai.AIServiceConfig {
 	// Convert MongoDB providers to AI provider configs
 	aiProviders := make([]ai.AIProviderConfig, len(providers))
 	for i, p := range providers {
@@ -66,7 +73,13 @@ func (a *MongoAIConfigStoreAdapter) configFromProvidersLocked(providers []*AIPro
 
 	// Build the service config
 	cfg := copyServiceConfig(a.serviceConfig)
+	if a.settingsRepo != nil {
+		if persistedCfg, err := a.settingsRepo.GetServiceConfig(ctx); err == nil {
+			cfg = copyServiceConfig(persistedCfg)
+		}
+	}
 	cfg.Providers = aiProviders
+	a.serviceConfig = copyServiceConfig(cfg)
 
 	return cfg
 }
@@ -86,7 +99,7 @@ func (a *MongoAIConfigStoreAdapter) Update(mutator func(*ai.AIServiceConfig) err
 		return err
 	}
 
-	cfg := a.configFromProvidersLocked(existingProviders)
+	cfg := a.configFromProvidersLocked(ctx, existingProviders)
 
 	// Apply mutator
 	if err := mutator(&cfg); err != nil {
@@ -134,6 +147,13 @@ func (a *MongoAIConfigStoreAdapter) Update(mutator func(*ai.AIServiceConfig) err
 
 	// Cache the prompts in memory
 	a.serviceConfig = copyServiceConfig(cfg)
+	if a.settingsRepo != nil {
+		settingsCfg := copyServiceConfig(cfg)
+		settingsCfg.Providers = nil
+		if err := a.settingsRepo.UpdateServiceConfig(ctx, settingsCfg); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

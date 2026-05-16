@@ -31,6 +31,7 @@ type DegradedMode struct {
 // incidentManager defines the interface for creating degradation incidents
 type incidentManager interface {
 	ProcessAlert(checkID, checkName, checkType, severity, message string, metadata map[string]string) error
+	AutoResolveOnRecovery(checkID string) error
 }
 
 // NewDegradedMode creates a new degraded mode instance
@@ -149,12 +150,13 @@ func (dm *DegradedMode) runHealthCheck(ctx context.Context) {
 			if dm.logger != nil {
 				dm.logger.Printf("DEGRADED MODE: Database restored after %v", duration.Round(time.Second))
 			}
+		}
 
-			// Auto-resolve incident if manager is available
-			if dm.incidentMgr != nil {
-				// Note: IncidentManager doesn't have a public resolve method
-				// The incident will be auto-resolved on next health check cycle
-				// via AutoResolveOnRecovery in the scheduler
+		// Also clear stale database incidents after restarts. AutoResolveOnRecovery is a no-op
+		// when there is no open database incident.
+		if dm.incidentMgr != nil {
+			if err := dm.incidentMgr.AutoResolveOnRecovery("database"); err != nil && dm.logger != nil {
+				dm.logger.Printf("WARNING: failed to auto-resolve database connectivity incident: %v", err)
 			}
 		}
 	}

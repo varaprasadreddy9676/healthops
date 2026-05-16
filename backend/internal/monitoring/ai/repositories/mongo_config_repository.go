@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	monitoringai "medics-health-check/backend/internal/monitoring/ai"
+
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -95,6 +97,7 @@ type MongoAIConfigRepository struct {
 	client        *mongo.Client
 	db            *mongo.Database
 	collection    *mongo.Collection
+	settings      *mongo.Collection
 	encKey        []byte
 	encKeyMutex   sync.RWMutex
 	keyConfig     *EncryptionKeyConfig
@@ -174,6 +177,7 @@ func NewMongoAIConfigRepository(cfg MongoAIConfigRepositoryConfig) (*MongoAIConf
 		client:        client,
 		db:            client.Database(cfg.DatabaseName),
 		collection:    client.Database(cfg.DatabaseName).Collection(cfg.CollectionName),
+		settings:      client.Database(cfg.DatabaseName).Collection(cfg.CollectionName + "_settings"),
 		keyConfig:     keyConfig,
 		retentionDays: cfg.RetentionDays,
 	}
@@ -209,6 +213,87 @@ func (r *MongoAIConfigRepository) ensureIndexes(ctx context.Context) error {
 		{Keys: bson.D{{Key: "updatedAt", Value: -1}}},
 	})
 	return err
+}
+
+const aiServiceSettingsDocumentID = "service"
+
+// GetServiceConfig loads AI service-level settings from MongoDB.
+// Providers are intentionally not stored here; they remain in the encrypted provider collection.
+func (r *MongoAIConfigRepository) GetServiceConfig(ctx context.Context) (monitoringai.AIServiceConfig, error) {
+	cfg := monitoringai.DefaultAIServiceConfig()
+
+	var doc struct {
+		ID              string                          `bson:"_id"`
+		Enabled         bool                            `bson:"enabled"`
+		AutoAnalyze     bool                            `bson:"autoAnalyze"`
+		MaxConcurrent   int                             `bson:"maxConcurrent"`
+		TimeoutSeconds  int                             `bson:"timeoutSeconds"`
+		RetryCount      int                             `bson:"retryCount"`
+		RetryDelayMs    int                             `bson:"retryDelayMs"`
+		DefaultPromptID string                          `bson:"defaultPromptId,omitempty"`
+		Prompts         []monitoringai.AIPromptTemplate `bson:"prompts,omitempty"`
+		UpdatedAt       time.Time                       `bson:"updatedAt"`
+	}
+
+	err := r.settings.FindOne(ctx, bson.M{"_id": aiServiceSettingsDocumentID}).Decode(&doc)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return cfg, nil
+		}
+		return cfg, fmt.Errorf("find ai service settings: %w", err)
+	}
+
+	cfg.Enabled = doc.Enabled
+	cfg.AutoAnalyze = doc.AutoAnalyze
+	if doc.MaxConcurrent > 0 {
+		cfg.MaxConcurrent = doc.MaxConcurrent
+	}
+	if doc.TimeoutSeconds > 0 {
+		cfg.TimeoutSeconds = doc.TimeoutSeconds
+	}
+	if doc.RetryDelayMs > 0 {
+		cfg.RetryDelayMs = doc.RetryDelayMs
+	}
+	cfg.RetryCount = doc.RetryCount
+	cfg.DefaultPromptID = doc.DefaultPromptID
+	if len(doc.Prompts) > 0 {
+		cfg.Prompts = doc.Prompts
+	}
+
+	return cfg, nil
+}
+
+// UpdateServiceConfig persists AI service-level settings to MongoDB.
+func (r *MongoAIConfigRepository) UpdateServiceConfig(ctx context.Context, cfg monitoringai.AIServiceConfig) error {
+	doc := struct {
+		ID              string                          `bson:"_id"`
+		Enabled         bool                            `bson:"enabled"`
+		AutoAnalyze     bool                            `bson:"autoAnalyze"`
+		MaxConcurrent   int                             `bson:"maxConcurrent"`
+		TimeoutSeconds  int                             `bson:"timeoutSeconds"`
+		RetryCount      int                             `bson:"retryCount"`
+		RetryDelayMs    int                             `bson:"retryDelayMs"`
+		DefaultPromptID string                          `bson:"defaultPromptId,omitempty"`
+		Prompts         []monitoringai.AIPromptTemplate `bson:"prompts,omitempty"`
+		UpdatedAt       time.Time                       `bson:"updatedAt"`
+	}{
+		ID:              aiServiceSettingsDocumentID,
+		Enabled:         cfg.Enabled,
+		AutoAnalyze:     cfg.AutoAnalyze,
+		MaxConcurrent:   cfg.MaxConcurrent,
+		TimeoutSeconds:  cfg.TimeoutSeconds,
+		RetryCount:      cfg.RetryCount,
+		RetryDelayMs:    cfg.RetryDelayMs,
+		DefaultPromptID: cfg.DefaultPromptID,
+		Prompts:         cfg.Prompts,
+		UpdatedAt:       time.Now().UTC(),
+	}
+
+	_, err := r.settings.ReplaceOne(ctx, bson.M{"_id": aiServiceSettingsDocumentID}, doc, options.Replace().SetUpsert(true))
+	if err != nil {
+		return fmt.Errorf("update ai service settings: %w", err)
+	}
+	return nil
 }
 
 // loadOrCreateEncKey loads an existing encryption key or creates a new one.

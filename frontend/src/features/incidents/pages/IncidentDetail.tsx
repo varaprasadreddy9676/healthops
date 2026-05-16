@@ -7,6 +7,7 @@ import { aiApi } from "@/features/ai/api/ai"
 import { RCAPanel } from "@/features/incidents/components/RCAPanel"
 import { EvidenceBriefCard } from "@/features/incidents/components/EvidenceBriefCard"
 import { EvidenceTimeline } from "@/features/incidents/components/EvidenceTimeline"
+import { MarkdownContent } from "@/shared/components/MarkdownContent"
 import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
 import { useConfirm } from "@/shared/components/ConfirmDialog"
@@ -280,9 +281,7 @@ function AIAnalysisCard({ aiResult }: { aiResult: { summary?: string; analysis: 
 
       {/* Summary */}
       {aiResult.summary && (
-        <p className="mb-4 text-sm font-medium leading-relaxed text-slate-800 dark:text-slate-200">
-          {aiResult.summary}
-        </p>
+        <MarkdownContent text={aiResult.summary} className="mb-4 font-medium text-slate-800 dark:text-slate-200" />
       )}
 
       {/* Suggestions */}
@@ -312,9 +311,9 @@ function AIAnalysisCard({ aiResult }: { aiResult: { summary?: string; analysis: 
         {expanded ? 'Hide' : 'Show'} full analysis
       </button>
       {expanded && (
-        <pre className="mt-3 max-h-80 overflow-auto rounded-lg bg-slate-900/5 p-4 font-mono text-xs leading-relaxed text-slate-600 dark:bg-slate-950/50 dark:text-slate-400">
-          {aiResult.analysis}
-        </pre>
+        <div className="mt-3 max-h-80 overflow-auto rounded-lg bg-slate-900/5 p-4 dark:bg-slate-950/50">
+          <MarkdownContent text={aiResult.analysis} className="text-xs text-slate-600 dark:text-slate-400" />
+        </div>
       )}
     </div>
   )

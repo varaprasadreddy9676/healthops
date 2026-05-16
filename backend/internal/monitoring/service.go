@@ -160,7 +160,11 @@ func (s *Service) SetIncidentManager(im *IncidentManager) {
 	s.incidentManager = im
 	// Also set incident manager in degraded mode
 	if s.degradedMode != nil {
-		s.degradedMode.SetIncidentManager(im)
+		if im == nil {
+			s.degradedMode.SetIncidentManager(nil)
+		} else {
+			s.degradedMode.SetIncidentManager(im)
+		}
 	}
 }
 
@@ -240,6 +244,21 @@ func (s *Service) SetServerRepo(repo ServerRepository) {
 // the service cannot operate without MongoDB.
 func (s *Service) SetMongoHealthCheck(fn func(ctx context.Context) error) {
 	s.mongoHealthCheck = fn
+}
+
+// SetDegradedHealthCheck enables fail-closed write protection for database-backed
+// operational state. Used by Mongo-primary deployments where writes must stop if
+// the primary database is unavailable.
+func (s *Service) SetDegradedHealthCheck(fn func(ctx context.Context) error) {
+	if fn == nil {
+		s.degradedMode = nil
+		return
+	}
+	var im incidentManager
+	if s.incidentManager != nil {
+		im = s.incidentManager
+	}
+	s.degradedMode = NewDegradedMode(fn, im, s.logger)
 }
 
 // SetAlertRuleRepo sets the alert rule repository.
@@ -377,10 +396,10 @@ func (s *Service) Run(ctx context.Context) error {
 		handler = s.degradedMode.Middleware(handler)
 	}
 
-	handler = maxBodyMiddleware(1<<20, handler)                           // 1 MB request body limit
-	handler = httpx.RateLimit(3000, time.Minute, handler)                // 3000 API req/min per IP
-	handler = httpx.LoginRateLimit(10, time.Minute, handler)             // 10 login attempts/min per IP
-	handler = httpx.SecurityHeaders(handler)                             // X-Content-Type-Options, X-Frame-Options, CSP
+	handler = maxBodyMiddleware(1<<20, handler)              // 1 MB request body limit
+	handler = httpx.RateLimit(3000, time.Minute, handler)    // 3000 API req/min per IP
+	handler = httpx.LoginRateLimit(10, time.Minute, handler) // 10 login attempts/min per IP
+	handler = httpx.SecurityHeaders(handler)                 // X-Content-Type-Options, X-Frame-Options, CSP
 	handler = metricsMiddleware(s.metrics, handler)
 	handler = loggingMiddleware(s.logger, handler)
 	if s.userStore != nil {

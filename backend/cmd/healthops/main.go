@@ -127,9 +127,41 @@ func main() {
 
 	// Phase 0: /healthz must fail when MongoDB is unreachable
 	if mongoStore != nil {
-		service.SetMongoHealthCheck(func(ctx context.Context) error {
+		mongoHealthCheck := func(ctx context.Context) error {
 			return mongoClient.Ping(ctx, nil)
-		})
+		}
+		service.SetMongoHealthCheck(mongoHealthCheck)
+		service.SetDegradedHealthCheck(mongoHealthCheck)
+	}
+
+	if mongoClient != nil {
+		serverRepo, err := monitoring.NewMongoServerRepositoryFromClient(mongoClient, mongoDB, mongoPrefix)
+		if err != nil {
+			if useMongoPhase0 {
+				logger.Fatalf("init MongoDB server repository: %v", err)
+			}
+			logger.Printf("Warning: Failed to init MongoDB server repository: %v", err)
+		} else {
+			serverCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			if err := serverRepo.SeedIfEmpty(serverCtx, cfg.Servers); err != nil {
+				cancel()
+				if useMongoPhase0 {
+					logger.Fatalf("seed MongoDB server repository: %v", err)
+				}
+				logger.Printf("Warning: Failed to seed MongoDB server repository: %v", err)
+			} else if servers, err := serverRepo.List(serverCtx); err != nil {
+				cancel()
+				if useMongoPhase0 {
+					logger.Fatalf("load MongoDB server repository: %v", err)
+				}
+				logger.Printf("Warning: Failed to load MongoDB server repository: %v", err)
+			} else {
+				cancel()
+				cfg.Servers = servers
+				service.SetServerRepo(serverRepo)
+				logger.Printf("Server repository: MongoDB (collection %s_servers, %d servers)", mongoPrefix, len(servers))
+			}
+		}
 	}
 
 	// Initialize user store with MongoDB if available, otherwise file-based

@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { mysqlApi, type MySQLAIResponse } from "@/features/mysql/api/mysql"
 import { aiApi } from "@/features/ai/api/ai"
 import { useQuery } from '@tanstack/react-query'
+import { MarkdownContent } from "@/shared/components/MarkdownContent"
 import { cn } from "@/shared/lib/utils"
 import { Bot, Send, X, Sparkles, AlertTriangle, Info, Loader2, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react'
 
@@ -251,7 +252,7 @@ export function MySQLAIPanel() {
                               {msg.severity === 'critical' ? 'Critical Issue' : msg.severity === 'warning' ? 'Warning' : 'Analysis'}
                             </div>
                           )}
-                          <div className="whitespace-pre-wrap text-[13px] leading-relaxed">{msg.content}</div>
+                          <MarkdownContent text={msg.content} className="text-[13px]" />
                           {msg.suggestions && msg.suggestions.length > 0 && (
                             <div className="mt-3 border-t border-slate-200 dark:border-slate-700 pt-2">
                               <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 mb-1.5">

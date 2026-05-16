@@ -6,6 +6,7 @@ import { MetricCard } from "@/shared/components/MetricCard"
 import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
 import { EmptyState } from "@/shared/components/EmptyState"
+import { markdownToPlainText } from "@/shared/lib/markdown"
 import { cn, relativeTime } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import type { AIProviderConfig, AIAnalysisResult } from "@/shared/types"
@@ -131,8 +132,8 @@ export default function AIAnalysis() {
                   <span>{r.provider} / {r.model}</span>
                   <span className="ml-auto">{relativeTime(r.createdAt)}</span>
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-slate-300 line-clamp-3 whitespace-pre-wrap">
-                  {r.analysis}
+                <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+                  {markdownToPlainText(r.analysis)}
                 </p>
                 {r.suggestions && r.suggestions.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1">

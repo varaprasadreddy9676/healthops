@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/smtp"
+	neturl "net/url"
 	"strings"
 	"sync"
 	"text/template"
@@ -57,6 +58,13 @@ type pendingNotification struct {
 	incident        monitoring.Incident
 	checkResult     *monitoring.CheckResult
 	checkChannelIDs []string
+}
+
+type deliveryTrace struct {
+	RequestURL     string
+	RequestBody    string
+	ResponseStatus int
+	ResponseBody   string
 }
 
 // NewNotificationDispatcher creates a dispatcher wired to the channel store.
@@ -364,40 +372,41 @@ func (d *NotificationDispatcher) CleanupStaleTracking() {
 
 // sendToChannel dispatches the notification to the specific channel type.
 func (d *NotificationDispatcher) sendToChannel(ch NotificationChannelConfig, payload NotificationPayload, incidentID string) {
+	trace := deliveryTrace{}
 	var err error
-	var httpStatus int
-	var httpRespBody string
-	var reqURL string
 
 	switch ch.Type {
 	case ChannelSlack:
-		err = d.sendSlack(ch, payload)
+		trace, err = d.sendSlack(ch, payload)
 	case ChannelDiscord:
-		err = d.sendDiscord(ch, payload)
+		trace, err = d.sendDiscord(ch, payload)
 	case ChannelWebhook:
-		reqURL = ch.WebhookURL
-		httpStatus, httpRespBody, err = d.sendWebhook(ch, payload)
+		trace, err = d.sendWebhook(ch, payload)
 	case ChannelEmail:
-		err = d.sendEmail(ch, payload)
+		trace, err = d.sendEmail(ch, payload)
 	case ChannelTelegram:
-		err = d.sendTelegram(ch, payload)
+		trace, err = d.sendTelegram(ch, payload)
 	case ChannelPagerDuty:
-		err = d.sendPagerDuty(ch, payload)
+		trace, err = d.sendPagerDuty(ch, payload)
 	default:
 		err = fmt.Errorf("unsupported channel type: %s", ch.Type)
 	}
 
 	// Record in outbox for audit trail
 	if d.outbox != nil {
-		payloadJSON, _ := json.Marshal(payload)
+		payloadJSON := trace.RequestBody
+		if payloadJSON == "" {
+			fallbackPayloadJSON, _ := json.Marshal(payload)
+			payloadJSON = string(fallbackPayloadJSON)
+		}
 		evt := monitoring.NotificationEvent{
 			NotificationID: fmt.Sprintf("notif-%s-%d", incidentID, time.Now().UnixNano()),
 			IncidentID:     incidentID,
 			Channel:        fmt.Sprintf("%s:%s", ch.Type, ch.Name),
-			PayloadJSON:    string(payloadJSON),
-			RequestURL:     reqURL,
-			ResponseStatus: httpStatus,
-			ResponseBody:   httpRespBody,
+			PayloadJSON:    payloadJSON,
+			RequestURL:     trace.RequestURL,
+			ResponseStatus: trace.ResponseStatus,
+			ResponseBody:   trace.ResponseBody,
 		}
 		if err != nil {
 			evt.LastError = err.Error()
@@ -406,6 +415,8 @@ func (d *NotificationDispatcher) sendToChannel(ch NotificationChannelConfig, pay
 			d.logger.Printf("notification: failed to record in outbox: %v", enqErr)
 		} else if err == nil {
 			_ = d.outbox.MarkSent(evt.NotificationID)
+		} else {
+			_ = d.outbox.MarkFailed(evt.NotificationID, err.Error())
 		}
 	}
 
@@ -418,23 +429,24 @@ func (d *NotificationDispatcher) sendToChannel(ch NotificationChannelConfig, pay
 
 // sendDigest sends a consolidated notification for multiple incidents to a single channel.
 func (d *NotificationDispatcher) sendDigest(ch NotificationChannelConfig, payloads []NotificationPayload) {
+	trace := deliveryTrace{}
 	var err error
 
 	switch ch.Type {
 	case ChannelSlack:
-		err = d.sendSlackDigest(ch, payloads)
+		trace, err = d.sendSlackDigest(ch, payloads)
 	case ChannelDiscord:
-		err = d.sendDiscordDigest(ch, payloads)
+		trace, err = d.sendDiscordDigest(ch, payloads)
 	case ChannelWebhook:
-		err = d.sendWebhookDigest(ch, payloads)
+		trace, err = d.sendWebhookDigest(ch, payloads)
 	case ChannelEmail:
-		err = d.sendEmailDigest(ch, payloads)
+		trace, err = d.sendEmailDigest(ch, payloads)
 	case ChannelTelegram:
-		err = d.sendTelegramDigest(ch, payloads)
+		trace, err = d.sendTelegramDigest(ch, payloads)
 	case ChannelPagerDuty:
 		// PagerDuty requires one event per incident for proper dedup_key tracking
 		for _, p := range payloads {
-			if pErr := d.sendPagerDuty(ch, p); pErr != nil {
+			if _, pErr := d.sendPagerDuty(ch, p); pErr != nil {
 				d.logger.Printf("notification: failed to send pagerduty for %s: %v", p.IncidentID, pErr)
 			}
 		}
@@ -449,7 +461,11 @@ func (d *NotificationDispatcher) sendDigest(ch NotificationChannelConfig, payloa
 		for i, p := range payloads {
 			ids[i] = p.IncidentID
 		}
-		digestJSON, _ := json.Marshal(payloads)
+		digestJSON := trace.RequestBody
+		if digestJSON == "" {
+			fallbackDigestJSON, _ := json.Marshal(payloads)
+			digestJSON = string(fallbackDigestJSON)
+		}
 		incidentSummary := strings.Join(ids, ",")
 		status := "sent"
 		lastErr := ""
@@ -462,10 +478,13 @@ func (d *NotificationDispatcher) sendDigest(ch NotificationChannelConfig, payloa
 			NotificationID: fmt.Sprintf("notif-digest-%d", now.UnixNano()),
 			IncidentID:     incidentSummary,
 			Channel:        fmt.Sprintf("%s:%s", ch.Type, ch.Name),
-			PayloadJSON:    string(digestJSON),
+			PayloadJSON:    digestJSON,
 			Status:         status,
 			LastError:      lastErr,
 			CreatedAt:      now,
+			RequestURL:     trace.RequestURL,
+			ResponseStatus: trace.ResponseStatus,
+			ResponseBody:   trace.ResponseBody,
 		}
 		if err == nil {
 			evt.SentAt = &now
@@ -498,7 +517,7 @@ func slackSeverityEmoji(severity, status string) string {
 	}
 }
 
-func (d *NotificationDispatcher) sendSlack(ch NotificationChannelConfig, p NotificationPayload) error {
+func (d *NotificationDispatcher) sendSlack(ch NotificationChannelConfig, p NotificationPayload) (deliveryTrace, error) {
 	emoji := slackSeverityEmoji(p.Severity, p.Status)
 	headerText := fmt.Sprintf("%s %s — %s", emoji, strings.ToUpper(p.Status), p.CheckName)
 
@@ -543,13 +562,22 @@ func (d *NotificationDispatcher) sendSlack(ch NotificationChannelConfig, p Notif
 		},
 	}
 
-	_, _, err := d.postJSON(ch.WebhookURL, body, nil)
-	return err
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return deliveryTrace{}, fmt.Errorf("marshal slack payload: %w", err)
+	}
+	status, responseBody, err := d.postJSON(ch.WebhookURL, body, nil)
+	return deliveryTrace{
+		RequestURL:     sanitizeRequestURL(ch.WebhookURL),
+		RequestBody:    string(bodyJSON),
+		ResponseStatus: status,
+		ResponseBody:   responseBody,
+	}, err
 }
 
 // --- Discord ---
 
-func (d *NotificationDispatcher) sendDiscord(ch NotificationChannelConfig, p NotificationPayload) error {
+func (d *NotificationDispatcher) sendDiscord(ch NotificationChannelConfig, p NotificationPayload) (deliveryTrace, error) {
 	color := 0x36a64f
 	if p.Severity == "critical" {
 		color = 0xe01e5a
@@ -577,18 +605,37 @@ func (d *NotificationDispatcher) sendDiscord(ch NotificationChannelConfig, p Not
 		},
 	}
 
-	_, _, err := d.postJSON(ch.WebhookURL, discordBody, nil)
-	return err
+	bodyJSON, err := json.Marshal(discordBody)
+	if err != nil {
+		return deliveryTrace{}, fmt.Errorf("marshal discord payload: %w", err)
+	}
+	status, responseBody, err := d.postJSON(ch.WebhookURL, discordBody, nil)
+	return deliveryTrace{
+		RequestURL:     sanitizeRequestURL(ch.WebhookURL),
+		RequestBody:    string(bodyJSON),
+		ResponseStatus: status,
+		ResponseBody:   responseBody,
+	}, err
 }
 
 // --- Generic Webhook ---
 
 // sendWebhook dispatches to a webhook channel and returns (httpStatus, responseBody, error).
-func (d *NotificationDispatcher) sendWebhook(ch NotificationChannelConfig, p NotificationPayload) (int, string, error) {
+func (d *NotificationDispatcher) sendWebhook(ch NotificationChannelConfig, p NotificationPayload) (deliveryTrace, error) {
 	if ch.BodyTemplate != "" {
 		return d.sendWebhookWithTemplate(ch, p)
 	}
-	return d.postJSON(ch.WebhookURL, p, ch.Headers)
+	bodyJSON, err := json.Marshal(p)
+	if err != nil {
+		return deliveryTrace{}, fmt.Errorf("marshal webhook payload: %w", err)
+	}
+	status, responseBody, err := d.postJSON(ch.WebhookURL, p, ch.Headers)
+	return deliveryTrace{
+		RequestURL:     sanitizeRequestURL(ch.WebhookURL),
+		RequestBody:    string(bodyJSON),
+		ResponseStatus: status,
+		ResponseBody:   responseBody,
+	}, err
 }
 
 // TemplateData extends NotificationPayload with extra context for body templates.
@@ -623,7 +670,7 @@ type DigestTemplateData struct {
 	Server    string // ""
 }
 
-func (d *NotificationDispatcher) sendWebhookWithTemplate(ch NotificationChannelConfig, p NotificationPayload) (int, string, error) {
+func (d *NotificationDispatcher) sendWebhookWithTemplate(ch NotificationChannelConfig, p NotificationPayload) (deliveryTrace, error) {
 	incidentURL := ""
 	if d.dashboardURL != "" {
 		incidentURL = strings.TrimRight(d.dashboardURL, "/") + "/incidents/" + p.IncidentID
@@ -649,16 +696,22 @@ func (d *NotificationDispatcher) sendWebhookWithTemplate(ch NotificationChannelC
 
 	tmpl, err := template.New("body").Funcs(funcMap).Parse(ch.BodyTemplate)
 	if err != nil {
-		return 0, "", fmt.Errorf("parse body template: %w", err)
+		return deliveryTrace{}, fmt.Errorf("parse body template: %w", err)
 	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return 0, "", fmt.Errorf("render body template: %w", err)
+		return deliveryTrace{}, fmt.Errorf("render body template: %w", err)
 	}
-	return d.postRaw(ch.WebhookURL, buf.Bytes(), ch.Headers)
+	status, responseBody, err := d.postRaw(ch.WebhookURL, buf.Bytes(), ch.Headers)
+	return deliveryTrace{
+		RequestURL:     sanitizeRequestURL(ch.WebhookURL),
+		RequestBody:    buf.String(),
+		ResponseStatus: status,
+		ResponseBody:   responseBody,
+	}, err
 }
 
-func (d *NotificationDispatcher) sendWebhookDigestWithTemplate(ch NotificationChannelConfig, payloads []NotificationPayload) error {
+func (d *NotificationDispatcher) sendWebhookDigestWithTemplate(ch NotificationChannelConfig, payloads []NotificationPayload) (deliveryTrace, error) {
 	critical, warning, _, highest := digestSummary(payloads)
 	data := DigestTemplateData{
 		Incidents:    payloads,
@@ -685,14 +738,19 @@ func (d *NotificationDispatcher) sendWebhookDigestWithTemplate(ch NotificationCh
 
 	tmpl, err := template.New("body").Funcs(funcMap).Parse(ch.BodyTemplate)
 	if err != nil {
-		return fmt.Errorf("parse body template: %w", err)
+		return deliveryTrace{}, fmt.Errorf("parse body template: %w", err)
 	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return fmt.Errorf("render body template: %w", err)
+		return deliveryTrace{}, fmt.Errorf("render body template: %w", err)
 	}
-	_, _, err = d.postRaw(ch.WebhookURL, buf.Bytes(), ch.Headers)
-	return err
+	status, responseBody, err := d.postRaw(ch.WebhookURL, buf.Bytes(), ch.Headers)
+	return deliveryTrace{
+		RequestURL:     sanitizeRequestURL(ch.WebhookURL),
+		RequestBody:    buf.String(),
+		ResponseStatus: status,
+		ResponseBody:   responseBody,
+	}, err
 }
 
 // renderHTMLEmailForTemplate is the shared implementation behind both {{htmlEmail .}} and
@@ -714,7 +772,7 @@ func renderHTMLEmailForTemplate(td interface{}, dashURL string) (string, error) 
 
 // --- Email (SMTP) ---
 
-func (d *NotificationDispatcher) sendEmail(ch NotificationChannelConfig, p NotificationPayload) error {
+func (d *NotificationDispatcher) sendEmail(ch NotificationChannelConfig, p NotificationPayload) (deliveryTrace, error) {
 	subject := fmt.Sprintf("[HealthOps] %s — %s (%s)", strings.ToUpper(p.Status), p.CheckName, strings.ToUpper(p.Severity))
 
 	htmlBody := buildHTMLEmail(p, d.dashboardURL)
@@ -745,12 +803,19 @@ func (d *NotificationDispatcher) sendEmail(ch NotificationChannelConfig, p Notif
 		auth = smtp.PlainAuth("", ch.SMTPUser, ch.SMTPPass, ch.SMTPHost)
 	}
 
-	return smtp.SendMail(addr, auth, from, recipients, []byte(msg))
+	trace := deliveryTrace{
+		RequestURL:  smtpEndpoint(ch),
+		RequestBody: msg,
+	}
+	if err := smtp.SendMail(addr, auth, from, recipients, []byte(msg)); err != nil {
+		return trace, err
+	}
+	return trace, nil
 }
 
 // --- Telegram ---
 
-func (d *NotificationDispatcher) sendTelegram(ch NotificationChannelConfig, p NotificationPayload) error {
+func (d *NotificationDispatcher) sendTelegram(ch NotificationChannelConfig, p NotificationPayload) (deliveryTrace, error) {
 	statusIndicator := "[CRITICAL]"
 	if p.Status == "resolved" {
 		statusIndicator = "[RESOLVED]"
@@ -772,13 +837,22 @@ func (d *NotificationDispatcher) sendTelegram(ch NotificationChannelConfig, p No
 		"parse_mode": "Markdown",
 	}
 
-	_, _, err := d.postJSON(url, body, nil)
-	return err
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return deliveryTrace{}, fmt.Errorf("marshal telegram payload: %w", err)
+	}
+	status, responseBody, err := d.postJSON(url, body, nil)
+	return deliveryTrace{
+		RequestURL:     sanitizeRequestURL(url),
+		RequestBody:    string(bodyJSON),
+		ResponseStatus: status,
+		ResponseBody:   responseBody,
+	}, err
 }
 
 // --- PagerDuty ---
 
-func (d *NotificationDispatcher) sendPagerDuty(ch NotificationChannelConfig, p NotificationPayload) error {
+func (d *NotificationDispatcher) sendPagerDuty(ch NotificationChannelConfig, p NotificationPayload) (deliveryTrace, error) {
 	eventAction := "trigger"
 	if p.Status == "resolved" {
 		eventAction = "resolve"
@@ -802,8 +876,23 @@ func (d *NotificationDispatcher) sendPagerDuty(ch NotificationChannelConfig, p N
 		},
 	}
 
-	_, _, err := d.postJSON("https://events.pagerduty.com/v2/enqueue", pdBody, nil)
-	return err
+	auditBody := make(map[string]interface{}, len(pdBody))
+	for k, v := range pdBody {
+		auditBody[k] = v
+	}
+	auditBody["routing_key"] = "[REDACTED]"
+
+	bodyJSON, err := json.Marshal(auditBody)
+	if err != nil {
+		return deliveryTrace{}, fmt.Errorf("marshal pagerduty payload: %w", err)
+	}
+	status, responseBody, err := d.postJSON("https://events.pagerduty.com/v2/enqueue", pdBody, nil)
+	return deliveryTrace{
+		RequestURL:     sanitizeRequestURL("https://events.pagerduty.com/v2/enqueue"),
+		RequestBody:    string(bodyJSON),
+		ResponseStatus: status,
+		ResponseBody:   responseBody,
+	}, err
 }
 
 // --- Helpers ---
@@ -857,6 +946,58 @@ func buildPayload(incident monitoring.Incident, status string) NotificationPaylo
 		Status:     status,
 		Message:    incident.Message,
 		StartedAt:  incident.StartedAt.Format(time.RFC3339),
+	}
+}
+
+func smtpEndpoint(ch NotificationChannelConfig) string {
+	port := ch.SMTPPort
+	if port == 0 {
+		port = 25
+	}
+	host := strings.TrimSpace(ch.SMTPHost)
+	if host == "" {
+		host = "unknown"
+	}
+	return fmt.Sprintf("smtp://%s:%d", host, port)
+}
+
+func sanitizeRequestURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	parsed, err := neturl.Parse(raw)
+	if err != nil {
+		return "[invalid-url]"
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	parsed.Path = sanitizeRequestPath(parsed.Hostname(), parsed.Path)
+	return parsed.String()
+}
+
+func sanitizeRequestPath(host, path string) string {
+	trimmed := strings.Trim(path, "/")
+	if trimmed == "" {
+		return path
+	}
+	segments := strings.Split(trimmed, "/")
+	lowerHost := strings.ToLower(host)
+
+	switch {
+	case strings.Contains(lowerHost, "slack.com") && len(segments) > 0 && segments[0] == "services":
+		return "/services/REDACTED"
+	case strings.Contains(lowerHost, "discord.com") && len(segments) > 1 && segments[0] == "api" && segments[1] == "webhooks":
+		return "/api/webhooks/REDACTED"
+	case strings.Contains(lowerHost, "telegram.org") && len(segments) > 0 && strings.HasPrefix(segments[0], "bot"):
+		if len(segments) == 1 {
+			return "/botREDACTED"
+		}
+		return "/botREDACTED/" + strings.Join(segments[1:], "/")
+	case len(segments) == 1:
+		return "/" + segments[0]
+	default:
+		return "/" + segments[0] + "/REDACTED"
 	}
 }
 
@@ -927,35 +1068,32 @@ func (d *NotificationDispatcher) TestChannel(ch NotificationChannelConfig) error
 		StartedAt:  time.Now().Format(time.RFC3339),
 	}
 
+	var trace deliveryTrace
 	var err error
-	var httpStatus int
-	var httpRespBody string
-	var reqURL string
 
 	switch ch.Type {
 	case ChannelSlack:
-		reqURL = ch.WebhookURL
-		err = d.sendSlack(ch, payload)
+		trace, err = d.sendSlack(ch, payload)
 	case ChannelDiscord:
-		reqURL = ch.WebhookURL
-		err = d.sendDiscord(ch, payload)
+		trace, err = d.sendDiscord(ch, payload)
 	case ChannelWebhook:
-		reqURL = ch.WebhookURL
-		httpStatus, httpRespBody, err = d.sendWebhook(ch, payload)
+		trace, err = d.sendWebhook(ch, payload)
 	case ChannelEmail:
-		err = d.sendEmail(ch, payload)
+		trace, err = d.sendEmail(ch, payload)
 	case ChannelTelegram:
-		reqURL = ch.WebhookURL
-		err = d.sendTelegram(ch, payload)
+		trace, err = d.sendTelegram(ch, payload)
 	case ChannelPagerDuty:
-		reqURL = ch.WebhookURL
-		err = d.sendPagerDuty(ch, payload)
+		trace, err = d.sendPagerDuty(ch, payload)
 	default:
 		err = fmt.Errorf("unsupported channel type: %s", ch.Type)
 	}
 
-	if d.outbox != nil && reqURL != "" {
-		payloadJSON, _ := json.Marshal(payload)
+	if d.outbox != nil {
+		payloadJSON := trace.RequestBody
+		if payloadJSON == "" {
+			fallbackPayloadJSON, _ := json.Marshal(payload)
+			payloadJSON = string(fallbackPayloadJSON)
+		}
 		status := "sent"
 		lastErr := ""
 		if err != nil {
@@ -967,10 +1105,10 @@ func (d *NotificationDispatcher) TestChannel(ch NotificationChannelConfig) error
 			NotificationID: fmt.Sprintf("notif-%s-%d", incidentID, time.Now().UnixNano()),
 			IncidentID:     incidentID,
 			Channel:        fmt.Sprintf("%s:%s", ch.Type, ch.Name),
-			PayloadJSON:    string(payloadJSON),
-			RequestURL:     reqURL,
-			ResponseStatus: httpStatus,
-			ResponseBody:   httpRespBody,
+			PayloadJSON:    payloadJSON,
+			RequestURL:     trace.RequestURL,
+			ResponseStatus: trace.ResponseStatus,
+			ResponseBody:   trace.ResponseBody,
 			Status:         status,
 			LastError:      lastErr,
 			CreatedAt:      now,
@@ -1013,7 +1151,7 @@ func digestSummary(payloads []NotificationPayload) (critical, warning, other int
 
 // --- Slack Digest ---
 
-func (d *NotificationDispatcher) sendSlackDigest(ch NotificationChannelConfig, payloads []NotificationPayload) error {
+func (d *NotificationDispatcher) sendSlackDigest(ch NotificationChannelConfig, payloads []NotificationPayload) (deliveryTrace, error) {
 	critical, warning, _, highest := digestSummary(payloads)
 
 	headerEmoji := ":large_yellow_circle:"
@@ -1069,13 +1207,22 @@ func (d *NotificationDispatcher) sendSlackDigest(ch NotificationChannelConfig, p
 		},
 	}
 
-	_, _, err := d.postJSON(ch.WebhookURL, body, nil)
-	return err
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return deliveryTrace{}, fmt.Errorf("marshal slack digest payload: %w", err)
+	}
+	status, responseBody, err := d.postJSON(ch.WebhookURL, body, nil)
+	return deliveryTrace{
+		RequestURL:     sanitizeRequestURL(ch.WebhookURL),
+		RequestBody:    string(bodyJSON),
+		ResponseStatus: status,
+		ResponseBody:   responseBody,
+	}, err
 }
 
 // --- Discord Digest ---
 
-func (d *NotificationDispatcher) sendDiscordDigest(ch NotificationChannelConfig, payloads []NotificationPayload) error {
+func (d *NotificationDispatcher) sendDiscordDigest(ch NotificationChannelConfig, payloads []NotificationPayload) (deliveryTrace, error) {
 	_, _, _, highest := digestSummary(payloads)
 
 	color := 0xe01e5a
@@ -1105,13 +1252,22 @@ func (d *NotificationDispatcher) sendDiscordDigest(ch NotificationChannelConfig,
 		},
 	}
 
-	_, _, err := d.postJSON(ch.WebhookURL, discordBody, nil)
-	return err
+	bodyJSON, err := json.Marshal(discordBody)
+	if err != nil {
+		return deliveryTrace{}, fmt.Errorf("marshal discord digest payload: %w", err)
+	}
+	status, responseBody, err := d.postJSON(ch.WebhookURL, discordBody, nil)
+	return deliveryTrace{
+		RequestURL:     sanitizeRequestURL(ch.WebhookURL),
+		RequestBody:    string(bodyJSON),
+		ResponseStatus: status,
+		ResponseBody:   responseBody,
+	}, err
 }
 
 // --- Webhook Digest ---
 
-func (d *NotificationDispatcher) sendWebhookDigest(ch NotificationChannelConfig, payloads []NotificationPayload) error {
+func (d *NotificationDispatcher) sendWebhookDigest(ch NotificationChannelConfig, payloads []NotificationPayload) (deliveryTrace, error) {
 	if ch.BodyTemplate != "" {
 		return d.sendWebhookDigestWithTemplate(ch, payloads)
 	}
@@ -1121,13 +1277,22 @@ func (d *NotificationDispatcher) sendWebhookDigest(ch NotificationChannelConfig,
 		"incidents": payloads,
 		"timestamp": time.Now().Format(time.RFC3339),
 	}
-	_, _, err := d.postJSON(ch.WebhookURL, body, ch.Headers)
-	return err
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return deliveryTrace{}, fmt.Errorf("marshal webhook digest payload: %w", err)
+	}
+	status, responseBody, err := d.postJSON(ch.WebhookURL, body, ch.Headers)
+	return deliveryTrace{
+		RequestURL:     sanitizeRequestURL(ch.WebhookURL),
+		RequestBody:    string(bodyJSON),
+		ResponseStatus: status,
+		ResponseBody:   responseBody,
+	}, err
 }
 
 // --- Telegram Digest ---
 
-func (d *NotificationDispatcher) sendTelegramDigest(ch NotificationChannelConfig, payloads []NotificationPayload) error {
+func (d *NotificationDispatcher) sendTelegramDigest(ch NotificationChannelConfig, payloads []NotificationPayload) (deliveryTrace, error) {
 	critical, warning, _, _ := digestSummary(payloads)
 
 	header := fmt.Sprintf("[ALERT] *%d checks failing*", len(payloads))
@@ -1158,13 +1323,22 @@ func (d *NotificationDispatcher) sendTelegramDigest(ch NotificationChannelConfig
 		"parse_mode": "MarkdownV2",
 	}
 
-	_, _, err := d.postJSON(url, body, nil)
-	return err
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return deliveryTrace{}, fmt.Errorf("marshal telegram digest payload: %w", err)
+	}
+	status, responseBody, err := d.postJSON(url, body, nil)
+	return deliveryTrace{
+		RequestURL:     sanitizeRequestURL(url),
+		RequestBody:    string(bodyJSON),
+		ResponseStatus: status,
+		ResponseBody:   responseBody,
+	}, err
 }
 
 // --- Email Digest ---
 
-func (d *NotificationDispatcher) sendEmailDigest(ch NotificationChannelConfig, payloads []NotificationPayload) error {
+func (d *NotificationDispatcher) sendEmailDigest(ch NotificationChannelConfig, payloads []NotificationPayload) (deliveryTrace, error) {
 	critical, warning, _, highest := digestSummary(payloads)
 
 	subject := fmt.Sprintf("[HealthOps] ALERT — %d checks failing", len(payloads))
@@ -1203,7 +1377,14 @@ func (d *NotificationDispatcher) sendEmailDigest(ch NotificationChannelConfig, p
 		auth = smtp.PlainAuth("", ch.SMTPUser, ch.SMTPPass, ch.SMTPHost)
 	}
 
-	return smtp.SendMail(addr, auth, from, recipients, []byte(msg))
+	trace := deliveryTrace{
+		RequestURL:  smtpEndpoint(ch),
+		RequestBody: msg,
+	}
+	if err := smtp.SendMail(addr, auth, from, recipients, []byte(msg)); err != nil {
+		return trace, err
+	}
+	return trace, nil
 }
 
 func buildDigestPlainText(payloads []NotificationPayload) string {

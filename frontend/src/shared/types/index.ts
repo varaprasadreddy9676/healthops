@@ -4,6 +4,12 @@
 
 // --- Core ---
 
+export interface SystemStatus {
+  healthy: boolean
+  degradedSince?: string
+  lastError?: string
+}
+
 export interface CheckConfig {
   id: string
   name: string
@@ -188,6 +194,9 @@ export interface NotificationEvent {
   lastError?: string
   createdAt: string
   sentAt?: string
+  requestUrl?: string
+  responseStatus?: number
+  responseBody?: string
 }
 
 // --- AI ---

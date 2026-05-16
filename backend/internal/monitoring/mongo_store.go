@@ -257,7 +257,11 @@ func (s *MongoStore) SetLastRun(at time.Time) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	return s.writeStateMeta(ctx, s.cache)
+	if err := s.writeStateMeta(ctx, s.cache); err != nil {
+		return err
+	}
+	_ = s.writeDashboardSnapshot(ctx, s.cache)
+	return nil
 }
 
 // Client returns the underlying MongoDB client.

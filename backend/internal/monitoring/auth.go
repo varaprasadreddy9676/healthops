@@ -17,6 +17,7 @@ func authMiddleware(cfg AuthConfig, userStore UserStoreBackend, next http.Handle
 
 		// Public endpoints — no auth required
 		if path == "/healthz" || path == "/readyz" ||
+			path == "/api/v1/system/status" ||
 			path == "/api/v1/auth/login" || strings.HasPrefix(path, "/assets/") ||
 			path == "/" || path == "/favicon.ico" {
 			next.ServeHTTP(w, r)
