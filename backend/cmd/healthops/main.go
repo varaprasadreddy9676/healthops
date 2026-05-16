@@ -14,6 +14,7 @@ import (
 	"medics-health-check/backend/internal/monitoring"
 	"medics-health-check/backend/internal/monitoring/ai"
 	airepositories "medics-health-check/backend/internal/monitoring/ai/repositories"
+	"medics-health-check/backend/internal/monitoring/assistant"
 	"medics-health-check/backend/internal/monitoring/evidence"
 	"medics-health-check/backend/internal/monitoring/logs"
 	"medics-health-check/backend/internal/monitoring/mysql"
@@ -613,6 +614,17 @@ func main() {
 		evidenceAPIHandler := evidence.NewAPIHandler(briefGenerator, briefRepo, incidentEventRepo, signalEventRepo)
 		service.SetEvidenceRoutes(evidenceAPIHandler)
 		logger.Printf("Evidence backbone initialized (%d providers registered)", len(registry.Categories()))
+	}
+
+	// --- Natural-Language Ops Assistant (Phase 4) ---
+	{
+		var assistantAICall assistant.AIProvider
+		if aiService != nil {
+			assistantAICall = aiService.CallProvider
+		}
+		assistantHandler := assistant.NewHandler(store, incidentRepo, assistantAICall, logger)
+		service.SetAssistantRoutes(assistantHandler)
+		logger.Printf("NL Ops Assistant initialized (AI available: %v)", assistantAICall != nil)
 	}
 
 	stopRetention := make(chan struct{})

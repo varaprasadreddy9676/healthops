@@ -35,6 +35,7 @@ type Service struct {
 	logRoutes         RouteRegistrar
 	rcaRoutes         RouteRegistrar
 	evidenceRoutes    RouteRegistrar
+	assistantRoutes   RouteRegistrar
 	snapshotRepo      IncidentSnapshotRepository
 	userStore         UserStoreBackend
 	userAPI           *UserAPIHandler
@@ -200,6 +201,11 @@ func (s *Service) SetEvidenceRoutes(r RouteRegistrar) {
 	s.evidenceRoutes = r
 }
 
+// SetAssistantRoutes sets the NL ops assistant route registrar for the service.
+func (s *Service) SetAssistantRoutes(r RouteRegistrar) {
+	s.assistantRoutes = r
+}
+
 // SetSnapshotRepo sets the incident snapshot repository for the service.
 func (s *Service) SetSnapshotRepo(repo IncidentSnapshotRepository) {
 	s.snapshotRepo = repo
@@ -320,6 +326,11 @@ func (s *Service) Run(ctx context.Context) error {
 	// Register evidence backbone routes if handler is configured
 	if s.evidenceRoutes != nil {
 		s.evidenceRoutes.RegisterRoutes(mux)
+	}
+
+	// Register NL ops assistant routes if handler is configured
+	if s.assistantRoutes != nil {
+		s.assistantRoutes.RegisterRoutes(mux)
 	}
 
 	// Add Prometheus metrics endpoint
