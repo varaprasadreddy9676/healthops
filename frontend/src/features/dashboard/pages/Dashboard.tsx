@@ -158,11 +158,11 @@ export default function Dashboard() {
   else if (period === '7d') periodStart.setDate(periodStart.getDate() - 7)
   else periodStart.setDate(periodStart.getDate() - 30)
 
-  const periodIncidents = allIncidents?.items.filter(
+  const periodIncidents = (allIncidents?.items ?? []).filter(
     inc => new Date(inc.startedAt) >= periodStart
-  ) ?? []
+  )
   const resolvedInPeriod = periodIncidents.filter(i => i.status === 'resolved').length
-  const openCount = incidents?.items.length ?? live.activeIncidents
+  const openCount = incidents?.items?.length ?? live.activeIncidents
   const resolvedIncidentCount = incidentStats?.resolved ?? 0
   const mttrValue = resolvedIncidentCount > 0 && incidentStats?.mttrMinutes != null
     ? formatMinutesMetric(incidentStats.mttrMinutes)
@@ -362,7 +362,7 @@ export default function Dashboard() {
         <MetricCard
           label="Open Incidents"
           value={openCount}
-          subValue={openCount > 0 ? `${incidents?.items.filter(i => i.severity === 'critical').length ?? 0} critical` : 'All clear'}
+          subValue={openCount > 0 ? `${(incidents?.items ?? []).filter(i => i.severity === 'critical').length} critical` : 'All clear'}
           icon={<AlertTriangle className="h-5 w-5" />}
           className={cn(openCount > 0 && 'ring-1 ring-red-200 dark:ring-red-900')}
         />
@@ -665,8 +665,8 @@ export default function Dashboard() {
             </Link>
           </div>
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {incidents && incidents.items.length > 0 ? (
-              incidents.items.slice(0, 5).map(inc => (
+            {incidents && (incidents.items?.length ?? 0) > 0 ? (
+              (incidents.items ?? []).slice(0, 5).map(inc => (
                 <Link
                   key={inc.id}
                   to={`/incidents/${inc.id}`}

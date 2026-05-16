@@ -1081,7 +1081,7 @@ function CheckForm({ initial, isEdit, saving, servers, onSave, onCancel }: {
             <select value={form.serverId ?? ''} onChange={e => set('serverId', e.target.value || undefined as unknown as string)}
               className={selectCls}>
               <option value="">Local (this server)</option>
-              {servers.filter(s => s.enabled).map(s => (
+              {(servers ?? []).filter(s => s.enabled).map(s => (
                 <option key={s.id} value={s.id}>{s.name} ({s.host})</option>
               ))}
             </select>
@@ -1105,7 +1105,7 @@ function CheckForm({ initial, isEdit, saving, servers, onSave, onCancel }: {
             <select value={form.serverId ?? ''} onChange={e => set('serverId', e.target.value || undefined as unknown as string)}
               className={cn(selectCls, 'max-w-xs')}>
               <option value="">Local (this server)</option>
-              {servers.filter(s => s.enabled).map(s => (
+              {(servers ?? []).filter(s => s.enabled).map(s => (
                 <option key={s.id} value={s.id}>{s.name} ({s.host})</option>
               ))}
             </select>
@@ -1130,7 +1130,7 @@ function CheckForm({ initial, isEdit, saving, servers, onSave, onCancel }: {
             <select value={form.serverId ?? ''} onChange={e => set('serverId', e.target.value || undefined as unknown as string)}
               className={cn(selectCls, 'max-w-xs')}>
               <option value="">Local (this server)</option>
-              {servers.filter(s => s.enabled).map(s => (
+              {(servers ?? []).filter(s => s.enabled).map(s => (
                 <option key={s.id} value={s.id}>{s.name} ({s.host})</option>
               ))}
             </select>
@@ -1294,7 +1294,7 @@ function CheckForm({ initial, isEdit, saving, servers, onSave, onCancel }: {
             <span className="text-[10px] text-slate-400">(channels targeting this check)</span>
           </div>
           <div className="space-y-1">
-            {channels.map(ch => {
+            {(channels ?? []).map(ch => {
               const linked = !ch.checkIds?.length || ch.checkIds.includes(form.id!)
               return (
                 <div key={ch.id} className="flex items-center gap-2 rounded px-2 py-1.5 text-xs">
