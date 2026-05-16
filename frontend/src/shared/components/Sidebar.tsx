@@ -2,14 +2,14 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Activity, AlertTriangle, Database,
   BarChart3, Brain, Settings, ChevronsLeft, X, Heart, Server,
-  Users, Bell, LogOut,
+  Users, Bell, LogOut, FileText,
 } from 'lucide-react'
 import { cn } from "@/shared/lib/utils"
 import { useAuth } from "@/shared/hooks/useAuth"
 
 const ICON_MAP = {
   LayoutDashboard, Activity, AlertTriangle, Database,
-  BarChart3, Brain, Settings, Server, Users, Bell,
+  BarChart3, Brain, Settings, Server, Users, Bell, FileText,
 } as const
 
 const NAV = [
@@ -20,6 +20,7 @@ const NAV = [
   { label: 'MySQL', path: '/mysql', icon: 'Database' as const },
   { label: 'Analytics', path: '/analytics', icon: 'BarChart3' as const },
   { label: 'AI Analysis', path: '/ai', icon: 'Brain' as const },
+  { label: 'Logs', path: '/logs', icon: 'FileText' as const },
   { label: 'Notifications', path: '/notifications', icon: 'Bell' as const },
   { label: 'Users', path: '/users', icon: 'Users' as const },
   { label: 'Settings', path: '/settings', icon: 'Settings' as const },

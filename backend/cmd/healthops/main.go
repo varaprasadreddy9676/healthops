@@ -14,6 +14,7 @@ import (
 	"medics-health-check/backend/internal/monitoring"
 	"medics-health-check/backend/internal/monitoring/ai"
 	airepositories "medics-health-check/backend/internal/monitoring/ai/repositories"
+	"medics-health-check/backend/internal/monitoring/logs"
 	"medics-health-check/backend/internal/monitoring/mysql"
 	"medics-health-check/backend/internal/monitoring/notify"
 	"medics-health-check/backend/internal/monitoring/repositories"
@@ -495,6 +496,21 @@ func main() {
 			channelIDs := lookupCheckChannelIDs(store, incident.CheckID)
 			notificationDispatcher.NotifyResolved(incident, nil, channelIDs...)
 		})
+	}
+
+	// --- Log Intelligence ---
+	logRepo, err := logs.NewFileRepository(dataDir)
+	if err != nil {
+		logger.Printf("Warning: Failed to init log repository: %v", err)
+	} else {
+		var logCategorizer *logs.Categorizer
+		if aiConfigStore != nil {
+			// Create a bridge provider for log categorization that uses the AI service
+			logCategorizer = logs.NewCategorizer(logRepo, nil, logger) // Provider set later when AI is ready
+		}
+		logAPIHandler := logs.NewAPIHandler(logRepo, logCategorizer, logger)
+		service.SetLogRoutes(logAPIHandler)
+		logger.Printf("Log intelligence initialized (data dir: %s/logs)", dataDir)
 	}
 
 	stopRetention := make(chan struct{})

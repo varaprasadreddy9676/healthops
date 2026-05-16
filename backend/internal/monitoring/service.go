@@ -32,6 +32,7 @@ type Service struct {
 	mysqlRoutes       RouteRegistrar
 	aiRoutes          RouteRegistrar
 	notifyRoutes      RouteRegistrar
+	logRoutes         RouteRegistrar
 	snapshotRepo      IncidentSnapshotRepository
 	userStore         UserStoreBackend
 	userAPI           *UserAPIHandler
@@ -181,6 +182,11 @@ func (s *Service) SetNotifyRoutes(r RouteRegistrar) {
 	s.notifyRoutes = r
 }
 
+// SetLogRoutes sets the log intelligence route registrar for the service
+func (s *Service) SetLogRoutes(r RouteRegistrar) {
+	s.logRoutes = r
+}
+
 // SetSnapshotRepo sets the incident snapshot repository for the service.
 func (s *Service) SetSnapshotRepo(repo IncidentSnapshotRepository) {
 	s.snapshotRepo = repo
@@ -279,6 +285,11 @@ func (s *Service) Run(ctx context.Context) error {
 	// Register notification channel API routes if handler is configured
 	if s.notifyRoutes != nil {
 		s.notifyRoutes.RegisterRoutes(mux)
+	}
+
+	// Register log intelligence routes if handler is configured
+	if s.logRoutes != nil {
+		s.logRoutes.RegisterRoutes(mux)
 	}
 
 	// Add Prometheus metrics endpoint
