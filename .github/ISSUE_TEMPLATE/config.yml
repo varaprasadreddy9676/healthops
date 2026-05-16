@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/varaprasadreddy9676/healthops/blob/main/docs/deployment-guide.md
+    about: Check the deployment guide before opening an issue
+  - name: Security Vulnerability
+    url: https://github.com/varaprasadreddy9676/healthops/security/advisories/new
+    about: Report security issues privately

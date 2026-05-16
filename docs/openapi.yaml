@@ -1,0 +1,2964 @@
+openapi: 3.0.3
+info:
+  title: HealthOps API
+  description: Infrastructure monitoring API — health checks, incidents, notifications, AI analysis
+  version: 0.1.0
+  license:
+    name: MIT
+    url: https://github.com/varaprasadreddy9676/healthops/blob/main/LICENSE
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: health
+    description: Liveness and readiness probes
+  - name: auth
+    description: Authentication info
+  - name: checks
+    description: Health check configuration and results
+  - name: runs
+    description: On-demand check execution
+  - name: summary
+    description: Aggregated health summary
+  - name: results
+    description: Historical check results
+  - name: dashboard
+    description: Optimized read endpoints for the dashboard UI
+  - name: incidents
+    description: Incident lifecycle management
+  - name: audit
+    description: Audit event log
+  - name: analytics
+    description: Uptime, response times, and failure statistics
+  - name: stats
+    description: Dashboard overview metrics
+  - name: config
+    description: Runtime configuration
+  - name: alert-rules
+    description: Configurable alert rule engine
+  - name: events
+    description: Server-Sent Events live stream
+  - name: mysql
+    description: MySQL database monitoring
+  - name: notifications
+    description: Notification delivery tracking
+  - name: ai-queue
+    description: AI analysis queue management
+  - name: ai
+    description: BYOK AI service configuration and analysis
+  - name: export
+    description: Data export (CSV / JSON)
+  - name: metrics
+    description: Prometheus metrics
+
+security: []
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: HTTP Basic Auth. Write endpoints require auth when `auth.enabled = true`.
+
+  schemas:
+    # ─── Enums ───────────────────────────────────────────────────────────────
+
+    CheckType:
+      type: string
+      enum: [api, tcp, process, command, log, mysql]
+      description: |
+        - `api` — HTTP endpoint health check
+        - `tcp` — TCP port connectivity check
+        - `process` — OS process existence check
+        - `command` — Shell command execution check
+        - `log` — Log file freshness check
+        - `mysql` — MySQL database monitoring
+
+    CheckStatus:
+      type: string
+      enum: [healthy, warning, critical, unknown]
+
+    IncidentStatus:
+      type: string
+      enum: [open, acknowledged, resolved]
+
+    Severity:
+      type: string
+      enum: [warning, critical]
+
+    NotificationStatus:
+      type: string
+      enum: [pending, sent, failed]
+
+    AIQueueStatus:
+      type: string
+      enum: [pending, processing, completed, failed]
+
+    AlertOperator:
+      type: string
+      enum: [equals, not_equals, greater_than, less_than]
+
+    Period:
+      type: string
+      enum: ["24h", "7d", "30d", "90d"]
+      default: "24h"
+
+    Interval:
+      type: string
+      enum: ["1h", "6h", "1d"]
+      default: "1h"
+
+    # ─── Core response envelope ───────────────────────────────────────────────
+
+    SuccessResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          description: Response payload (shape depends on endpoint)
+
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+          example: 400
+        message:
+          type: string
+          example: "human-readable error message"
+
+    ErrorResponse:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+
+    PaginationMeta:
+      type: object
+      required: [total, limit, offset]
+      properties:
+        total:
+          type: integer
+          example: 100
+        limit:
+          type: integer
+          example: 50
+        offset:
+          type: integer
+          example: 0
+
+    # ─── Check types ─────────────────────────────────────────────────────────
+
+    MySQLCheckConfig:
+      type: object
+      required: [dsnEnv]
+      properties:
+        dsnEnv:
+          type: string
+          description: Environment variable name containing the MySQL DSN
+          example: MYSQL_PROD_DSN
+        connectTimeoutSeconds:
+          type: integer
+          default: 3
+        queryTimeoutSeconds:
+          type: integer
+          default: 5
+        processlistLimit:
+          type: integer
+          default: 50
+        statementLimit:
+          type: integer
+          default: 20
+        hostUserLimit:
+          type: integer
+          default: 20
+
+    CheckConfig:
+      type: object
+      required: [name, type]
+      properties:
+        id:
+          type: string
+          pattern: "^[a-z0-9-]+$"
+          description: Unique identifier (auto-generated if omitted)
+          example: api-health
+        name:
+          type: string
+          example: API Health Check
+        type:
+          $ref: "#/components/schemas/CheckType"
+        server:
+          type: string
+          default: default
+          example: prod-1
+        application:
+          type: string
+          example: backend
+        target:
+          type: string
+          description: Target URL (api) or process keyword (process)
+          example: https://api.example.com/health
+        host:
+          type: string
+          description: Hostname for tcp checks
+        port:
+          type: integer
+          description: Port number for tcp checks
+        command:
+          type: string
+          description: Shell command for command checks
+        path:
+          type: string
+          description: File path for log checks
+        expectedStatus:
+          type: integer
+          default: 200
+          example: 200
+        expectedContains:
+          type: string
+          description: Expected substring in response body
+        timeoutSeconds:
+          type: integer
+          default: 5
+        warningThresholdMs:
+          type: integer
+          description: Response time warning threshold in milliseconds
+        freshnessSeconds:
+          type: integer
+          description: Log file freshness threshold in seconds
+        intervalSeconds:
+          type: integer
+          minimum: 10
+          description: Override global check interval
+        retryCount:
+          type: integer
+          default: 0
+        retryDelaySeconds:
+          type: integer
+          description: Delay between retries (required when retryCount > 0)
+        cooldownSeconds:
+          type: integer
+          default: 0
+        enabled:
+          type: boolean
+          default: true
+        tags:
+          type: array
+          items:
+            type: string
+          example: [critical, production]
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Arbitrary key-value metadata
+        mysql:
+          $ref: "#/components/schemas/MySQLCheckConfig"
+
+    CheckListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: api-health
+        name:
+          type: string
+          example: API Health Check
+        type:
+          $ref: "#/components/schemas/CheckType"
+        server:
+          type: string
+          example: prod-1
+        application:
+          type: string
+          example: backend
+        enabled:
+          type: boolean
+          example: true
+        tags:
+          type: array
+          items:
+            type: string
+
+    CheckResult:
+      type: object
+      properties:
+        id:
+          type: string
+          example: result-abc
+        checkId:
+          type: string
+          example: api-health
+        name:
+          type: string
+          example: API Health Check
+        type:
+          $ref: "#/components/schemas/CheckType"
+        server:
+          type: string
+          example: prod-1
+        application:
+          type: string
+          example: backend
+        status:
+          $ref: "#/components/schemas/CheckStatus"
+        healthy:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: ""
+        durationMs:
+          type: number
+          example: 45
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        metrics:
+          type: object
+          additionalProperties: true
+          example:
+            statusCode: 200
+            bodyLength: 1234
+        tags:
+          type: array
+          items:
+            type: string
+
+    CheckDetail:
+      type: object
+      properties:
+        config:
+          $ref: "#/components/schemas/CheckConfig"
+        latestResult:
+          $ref: "#/components/schemas/CheckResult"
+        uptime24h:
+          type: number
+          format: float
+          example: 99.8
+        uptime7d:
+          type: number
+          format: float
+          example: 99.5
+        avgDurationMs:
+          type: number
+          format: float
+          example: 42.3
+        recentResults:
+          type: array
+          items:
+            $ref: "#/components/schemas/CheckResult"
+        openIncidents:
+          type: array
+          items:
+            $ref: "#/components/schemas/Incident"
+
+    # ─── Summary ─────────────────────────────────────────────────────────────
+
+    GroupStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        healthy:
+          type: integer
+        warning:
+          type: integer
+        critical:
+          type: integer
+        unknown:
+          type: integer
+
+    Summary:
+      type: object
+      properties:
+        totalChecks:
+          type: integer
+          example: 12
+        enabledChecks:
+          type: integer
+          example: 10
+        healthy:
+          type: integer
+          example: 8
+        warning:
+          type: integer
+          example: 1
+        critical:
+          type: integer
+          example: 1
+        unknown:
+          type: integer
+          example: 2
+        lastRunAt:
+          type: string
+          format: date-time
+        byServer:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/GroupStats"
+        byApplication:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/GroupStats"
+        latest:
+          type: array
+          items:
+            $ref: "#/components/schemas/CheckResult"
+
+    # ─── Incidents ───────────────────────────────────────────────────────────
+
+    Incident:
+      type: object
+      properties:
+        id:
+          type: string
+          example: api-health-1713520200
+        checkId:
+          type: string
+          example: api-health
+        checkName:
+          type: string
+          example: API Health Check
+        type:
+          $ref: "#/components/schemas/CheckType"
+        status:
+          $ref: "#/components/schemas/IncidentStatus"
+        severity:
+          $ref: "#/components/schemas/Severity"
+        message:
+          type: string
+          example: "HTTP 503 Service Unavailable"
+        startedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        acknowledgedAt:
+          type: string
+          format: date-time
+          nullable: true
+        acknowledgedBy:
+          type: string
+          example: ""
+        resolvedBy:
+          type: string
+          example: ""
+        metadata:
+          type: object
+          additionalProperties: true
+
+    IncidentSnapshot:
+      type: object
+      properties:
+        incidentId:
+          type: string
+          example: db-prod-1713520200
+        snapshotType:
+          type: string
+          enum:
+            - latest_sample
+            - recent_deltas
+            - processlist
+            - statement_analysis
+            - host_summary
+            - user_summary
+            - host_cache
+        timestamp:
+          type: string
+          format: date-time
+        payloadJson:
+          type: string
+          description: JSON-encoded evidence payload
+
+    IncidentListResponse:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Incident"
+
+    # ─── Alert rules ─────────────────────────────────────────────────────────
+
+    AlertCondition:
+      type: object
+      required: [field, operator, value]
+      properties:
+        field:
+          type: string
+          description: Field to evaluate (status, healthy, durationMs, or any metric key)
+          example: status
+        operator:
+          $ref: "#/components/schemas/AlertOperator"
+        value:
+          description: Comparison value (string, boolean, or number)
+          example: critical
+
+    AlertChannel:
+      type: object
+      properties:
+        type:
+          type: string
+          description: "Channel type: webhook, email, etc."
+          example: webhook
+        config:
+          type: object
+          additionalProperties: true
+
+    AlertRule:
+      type: object
+      required: [id, name, conditions]
+      properties:
+        id:
+          type: string
+          example: mysql-conn-util-crit
+        name:
+          type: string
+          example: Connection Utilization Critical
+        enabled:
+          type: boolean
+          default: true
+        checkIds:
+          type: array
+          items:
+            type: string
+          description: Empty array means the rule applies to all checks
+        conditions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertCondition"
+          description: All conditions must be true (AND logic)
+        severity:
+          $ref: "#/components/schemas/Severity"
+        channels:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertChannel"
+        cooldownMinutes:
+          type: integer
+          default: 5
+        description:
+          type: string
+        consecutiveBreaches:
+          type: integer
+          default: 1
+          description: Number of consecutive breaches before the alert fires
+        recoverySamples:
+          type: integer
+          default: 1
+          description: Number of healthy samples required before recovery is signalled
+        thresholdNum:
+          type: number
+          format: float
+          default: 0
+        ruleCode:
+          type: string
+          description: MySQL rule code identifier
+          example: CONN_UTIL_CRIT
+
+    # ─── Audit ───────────────────────────────────────────────────────────────
+
+    AuditEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          example: evt-abc123
+        action:
+          type: string
+          example: check.created
+        actor:
+          type: string
+          example: admin
+        target:
+          type: string
+          example: check
+        targetId:
+          type: string
+          example: api-health
+        details:
+          type: object
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+
+    # ─── Analytics ───────────────────────────────────────────────────────────
+
+    UptimeStats:
+      type: object
+      properties:
+        checkId:
+          type: string
+        checkName:
+          type: string
+        period:
+          type: string
+        totalResults:
+          type: integer
+        healthyCount:
+          type: integer
+        uptimePct:
+          type: number
+          format: float
+          example: 99.4
+        avgDurationMs:
+          type: number
+          format: float
+        maxDurationMs:
+          type: integer
+        minDurationMs:
+          type: integer
+
+    ResponseTimeBucket:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        avgDurationMs:
+          type: number
+          format: float
+        p50DurationMs:
+          type: number
+          format: float
+        p95DurationMs:
+          type: number
+          format: float
+        p99DurationMs:
+          type: number
+          format: float
+        maxDurationMs:
+          type: integer
+        minDurationMs:
+          type: integer
+        count:
+          type: integer
+
+    StatusTimelineEntry:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          $ref: "#/components/schemas/CheckStatus"
+        durationMs:
+          type: integer
+        message:
+          type: string
+
+    FailureRateEntry:
+      type: object
+      properties:
+        group:
+          type: string
+          example: prod-1
+        totalResults:
+          type: integer
+        failedCount:
+          type: integer
+        failureRate:
+          type: number
+          format: float
+          example: 2.5
+
+    IncidentStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        open:
+          type: integer
+        acknowledged:
+          type: integer
+        resolved:
+          type: integer
+        mttaMinutes:
+          type: number
+          format: float
+          example: 4.5
+        mttrMinutes:
+          type: number
+          format: float
+          example: 32.8
+        bySeverity:
+          type: object
+          properties:
+            warning:
+              type: integer
+            critical:
+              type: integer
+
+    # ─── Stats / Config ───────────────────────────────────────────────────────
+
+    OverviewStats:
+      type: object
+      properties:
+        totalChecks:
+          type: integer
+        enabledChecks:
+          type: integer
+        healthyChecks:
+          type: integer
+        activeIncidents:
+          type: integer
+        avgUptimePct:
+          type: number
+          format: float
+        checksByType:
+          type: object
+          additionalProperties:
+            type: integer
+        checksByServer:
+          type: object
+          additionalProperties:
+            type: integer
+
+    SafeConfigView:
+      type: object
+      properties:
+        server:
+          type: object
+          properties:
+            addr:
+              type: string
+              example: ":8080"
+            readTimeoutSeconds:
+              type: integer
+            writeTimeoutSeconds:
+              type: integer
+            idleTimeoutSeconds:
+              type: integer
+        authEnabled:
+          type: boolean
+        retentionDays:
+          type: integer
+        checkIntervalSeconds:
+          type: integer
+        workers:
+          type: integer
+        allowCommandChecks:
+          type: boolean
+        totalChecks:
+          type: integer
+
+    ConfigUpdate:
+      type: object
+      properties:
+        retentionDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+        checkIntervalSeconds:
+          type: integer
+          minimum: 5
+          maximum: 3600
+        workers:
+          type: integer
+          minimum: 1
+          maximum: 100
+        allowCommandChecks:
+          type: boolean
+
+    # ─── Notifications ────────────────────────────────────────────────────────
+
+    NotificationEvent:
+      type: object
+      properties:
+        notificationId:
+          type: string
+          example: notif-db-prod-1713520200-1713520200123456789
+        incidentId:
+          type: string
+          example: db-prod-1713520200
+        channel:
+          type: string
+          example: email
+        payloadJson:
+          type: string
+        status:
+          $ref: "#/components/schemas/NotificationStatus"
+        retryCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    NotificationStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        pending:
+          type: integer
+        sent:
+          type: integer
+        failed:
+          type: integer
+
+    # ─── MySQL monitoring ─────────────────────────────────────────────────────
+
+    MySQLSample:
+      type: object
+      properties:
+        sampleId:
+          type: string
+          example: db-prod-1713520200123456789
+        checkId:
+          type: string
+          example: db-prod
+        timestamp:
+          type: string
+          format: date-time
+        connections:
+          type: integer
+        maxConnections:
+          type: integer
+        maxUsedConnections:
+          type: integer
+        threadsRunning:
+          type: integer
+        threadsConnected:
+          type: integer
+        threadsCreated:
+          type: integer
+        abortedConnects:
+          type: integer
+        abortedClients:
+          type: integer
+        slowQueries:
+          type: integer
+        questions:
+          type: integer
+        questionsPerSec:
+          type: number
+          format: float
+        uptimeSeconds:
+          type: integer
+        innodbRowLockWaits:
+          type: integer
+        innodbRowLockTime:
+          type: integer
+        createdTmpDiskTables:
+          type: integer
+        createdTmpTables:
+          type: integer
+        connectionsRefused:
+          type: integer
+
+    MySQLDelta:
+      type: object
+      properties:
+        sampleId:
+          type: string
+        checkId:
+          type: string
+        intervalSec:
+          type: number
+          format: float
+        timestamp:
+          type: string
+          format: date-time
+        abortedConnectsDelta:
+          type: integer
+        abortedConnectsPerSec:
+          type: number
+          format: float
+        slowQueriesDelta:
+          type: integer
+        slowQueriesPerSec:
+          type: number
+          format: float
+        questionsDelta:
+          type: integer
+        questionsPerSec:
+          type: number
+          format: float
+        rowLockWaitsDelta:
+          type: integer
+        rowLockWaitsPerSec:
+          type: number
+          format: float
+        tmpDiskTablesDelta:
+          type: integer
+        tmpDiskTablesPct:
+          type: number
+          format: float
+        threadsCreatedDelta:
+          type: integer
+        threadsCreatedPerSec:
+          type: number
+          format: float
+        connectionsRefusedDelta:
+          type: integer
+
+    MySQLHealthSummary:
+      type: object
+      properties:
+        checkId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        connectionUtilPct:
+          type: number
+          format: float
+        threadsRunning:
+          type: integer
+        queriesPerSec:
+          type: number
+          format: float
+        slowQueriesPerSec:
+          type: number
+          format: float
+        rowLockWaitsPerSec:
+          type: number
+          format: float
+        tmpDiskTablesPct:
+          type: number
+          format: float
+        abortedConnectsPerSec:
+          type: number
+          format: float
+        uptimeSeconds:
+          type: integer
+        status:
+          $ref: "#/components/schemas/CheckStatus"
+
+    MySQLTimeSeriesPoint:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        connectionUtilPct:
+          type: number
+          format: float
+        threadsRunning:
+          type: integer
+        queriesPerSec:
+          type: number
+          format: float
+        slowQueriesPerSec:
+          type: number
+          format: float
+        rowLockWaitsPerSec:
+          type: number
+          format: float
+        tmpDiskTablesPct:
+          type: number
+          format: float
+        connections:
+          type: integer
+        maxConnections:
+          type: integer
+
+    # ─── AI types ─────────────────────────────────────────────────────────────
+
+    AIQueueItem:
+      type: object
+      properties:
+        incidentId:
+          type: string
+          example: db-prod-1713520200
+        promptVersion:
+          type: string
+          example: v1
+        status:
+          $ref: "#/components/schemas/AIQueueStatus"
+        createdAt:
+          type: string
+          format: date-time
+
+    AIQueueStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        pending:
+          type: integer
+        processing:
+          type: integer
+        completed:
+          type: integer
+        failed:
+          type: integer
+
+    AIAnalysisResult:
+      type: object
+      properties:
+        incidentId:
+          type: string
+          example: db-prod-1713520200
+        analysis:
+          type: string
+          example: "**Root Cause**: Connection pool exhaustion..."
+        suggestions:
+          type: array
+          items:
+            type: string
+        severity:
+          $ref: "#/components/schemas/Severity"
+        createdAt:
+          type: string
+          format: date-time
+
+    SafeAIProviderView:
+      type: object
+      properties:
+        id:
+          type: string
+          example: openai-prod
+        provider:
+          type: string
+          enum: [openai, anthropic, google, ollama, custom]
+        name:
+          type: string
+        apiKey:
+          type: string
+          description: Masked API key (never the real value)
+          example: "sk-p...****ef12"
+        baseUrl:
+          type: string
+        model:
+          type: string
+          example: gpt-4o
+        maxTokens:
+          type: integer
+        temperature:
+          type: number
+          format: float
+        enabled:
+          type: boolean
+        isDefault:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AIProviderConfig:
+      type: object
+      required: [id, provider, name, model]
+      properties:
+        id:
+          type: string
+          example: anthropic-prod
+        provider:
+          type: string
+          enum: [openai, anthropic, google, ollama, custom]
+        name:
+          type: string
+          example: Production Anthropic
+        apiKey:
+          type: string
+          description: Required for openai, anthropic, google providers
+        baseUrl:
+          type: string
+          description: Required for ollama and custom providers
+        model:
+          type: string
+          example: claude-sonnet-4-20250514
+        maxTokens:
+          type: integer
+          minimum: 0
+          maximum: 128000
+        temperature:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 2.0
+        enabled:
+          type: boolean
+        isDefault:
+          type: boolean
+
+    AIPromptTemplateSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          example: incident-analysis-v1
+        name:
+          type: string
+          example: General Incident Analysis
+        description:
+          type: string
+        version:
+          type: string
+          example: v1
+        isDefault:
+          type: boolean
+
+    AIPromptTemplate:
+      allOf:
+        - $ref: "#/components/schemas/AIPromptTemplateSummary"
+        - type: object
+          properties:
+            systemMsg:
+              type: string
+              description: System prompt (Go template)
+            userMsg:
+              type: string
+              description: User prompt (Go template); required on create
+
+    SafeAIConfigView:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        autoAnalyze:
+          type: boolean
+        maxConcurrent:
+          type: integer
+        timeoutSeconds:
+          type: integer
+        retryCount:
+          type: integer
+        retryDelayMs:
+          type: integer
+        defaultPromptId:
+          type: string
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/SafeAIProviderView"
+        prompts:
+          type: array
+          items:
+            $ref: "#/components/schemas/AIPromptTemplateSummary"
+
+    AIConfigUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        autoAnalyze:
+          type: boolean
+        maxConcurrent:
+          type: integer
+          minimum: 1
+          maximum: 20
+        timeoutSeconds:
+          type: integer
+          minimum: 5
+          maximum: 300
+        retryCount:
+          type: integer
+          minimum: 0
+          maximum: 10
+        retryDelayMs:
+          type: integer
+          minimum: 0
+          maximum: 60000
+        defaultPromptId:
+          type: string
+
+    ProviderHealth:
+      type: object
+      properties:
+        id:
+          type: string
+          example: openai-prod
+        provider:
+          type: string
+        model:
+          type: string
+        healthy:
+          type: boolean
+        isDefault:
+          type: boolean
+
+    # ─── Auth ─────────────────────────────────────────────────────────────────
+
+    AuthInfo:
+      type: object
+      properties:
+        username:
+          type: string
+          example: admin
+        authEnabled:
+          type: boolean
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            success: false
+            error:
+              code: 401
+              message: "unauthorized"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            success: false
+            error:
+              code: 404
+              message: "not found"
+
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  parameters:
+    checkIdQuery:
+      name: checkId
+      in: query
+      schema:
+        type: string
+      description: Filter by check ID
+
+    limitQuery:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 50
+      description: Maximum number of results
+
+    offsetQuery:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        default: 0
+      description: Pagination offset
+
+    periodQuery:
+      name: period
+      in: query
+      schema:
+        $ref: "#/components/schemas/Period"
+
+    daysQuery:
+      name: days
+      in: query
+      schema:
+        type: integer
+        default: 7
+      description: Number of days to look back
+
+paths:
+  # ─── Health & Readiness ──────────────────────────────────────────────────────
+
+  /healthz:
+    get:
+      tags: [health]
+      summary: Liveness probe
+      operationId: getLiveness
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+              example:
+                success: true
+                data:
+                  status: ok
+
+  /readyz:
+    get:
+      tags: [health]
+      summary: Readiness probe
+      operationId: getReadiness
+      responses:
+        "200":
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+              example:
+                success: true
+                data:
+                  status: ready
+                  checks: 12
+                  lastRunAt: "2026-04-19T10:30:00Z"
+
+  # ─── Auth ────────────────────────────────────────────────────────────────────
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      summary: Get current authentication info
+      operationId: getAuthMe
+      responses:
+        "200":
+          description: Auth info for the current caller
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AuthInfo"
+
+  # ─── Checks ──────────────────────────────────────────────────────────────────
+
+  /api/v1/checks:
+    get:
+      tags: [checks]
+      summary: List all configured checks
+      operationId: listChecks
+      responses:
+        "200":
+          description: List of checks
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/CheckListItem"
+
+    post:
+      tags: [checks]
+      summary: Create a new check
+      operationId: createCheck
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckConfig"
+      responses:
+        "201":
+          description: Check created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/CheckConfig"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/checks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Check ID
+
+    get:
+      tags: [checks]
+      summary: Get detailed view of a single check
+      operationId: getCheck
+      responses:
+        "200":
+          description: Check detail with uptime, recent results, and open incidents
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/CheckDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      tags: [checks]
+      summary: Update an existing check
+      operationId: updateCheck
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckConfig"
+      responses:
+        "200":
+          description: Updated check config
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/CheckConfig"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [checks]
+      summary: Delete a check and remove from scheduler
+      operationId: deleteCheck
+      security:
+        - basicAuth: []
+      responses:
+        "204":
+          description: Check deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─── Runs ─────────────────────────────────────────────────────────────────────
+
+  /api/v1/runs:
+    post:
+      tags: [runs]
+      summary: Trigger an immediate check run
+      operationId: triggerRun
+      description: |
+        If `checkId` is provided, runs a single check and returns `CheckResult`.
+        If omitted, runs all checks and returns a `RunSummary`.
+      security:
+        - basicAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                checkId:
+                  type: string
+                  description: Specific check to run; omit to run all checks
+      responses:
+        "202":
+          description: Run started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─── Summary & Results ────────────────────────────────────────────────────────
+
+  /api/v1/summary:
+    get:
+      tags: [summary]
+      summary: Get current health summary
+      operationId: getSummary
+      responses:
+        "200":
+          description: Aggregated health summary
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Summary"
+
+  /api/v1/results:
+    get:
+      tags: [results]
+      summary: Get historical check results
+      operationId: getResults
+      parameters:
+        - $ref: "#/components/parameters/checkIdQuery"
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 7
+          description: Time window in days (defaults to retentionDays config)
+      responses:
+        "200":
+          description: Array of check results
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/CheckResult"
+
+  # ─── Dashboard ────────────────────────────────────────────────────────────────
+
+  /api/v1/dashboard/checks:
+    get:
+      tags: [dashboard]
+      summary: Dashboard-optimised check list
+      operationId: getDashboardChecks
+      description: Prefers MongoDB snapshot when available for low-latency reads.
+      responses:
+        "200":
+          description: Check list items
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/CheckListItem"
+
+  /api/v1/dashboard/summary:
+    get:
+      tags: [dashboard]
+      summary: Dashboard-optimised health summary
+      operationId: getDashboardSummary
+      responses:
+        "200":
+          description: Health summary
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Summary"
+
+  /api/v1/dashboard/results:
+    get:
+      tags: [dashboard]
+      summary: Dashboard-optimised results
+      operationId: getDashboardResults
+      parameters:
+        - $ref: "#/components/parameters/checkIdQuery"
+        - $ref: "#/components/parameters/daysQuery"
+      responses:
+        "200":
+          description: Check results
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/CheckResult"
+
+  # ─── Incidents ────────────────────────────────────────────────────────────────
+
+  /api/v1/incidents:
+    get:
+      tags: [incidents]
+      summary: List incidents with filtering and pagination
+      operationId: listIncidents
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/IncidentStatus"
+          description: Filter by incident status
+        - name: severity
+          in: query
+          schema:
+            $ref: "#/components/schemas/Severity"
+        - $ref: "#/components/parameters/checkIdQuery"
+        - $ref: "#/components/parameters/limitQuery"
+        - $ref: "#/components/parameters/offsetQuery"
+      responses:
+        "200":
+          description: Paginated incident list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/IncidentListResponse"
+
+  /api/v1/incidents/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Incident ID
+
+    get:
+      tags: [incidents]
+      summary: Get a single incident
+      operationId: getIncident
+      responses:
+        "200":
+          description: Incident detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Incident"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: Incident manager not configured
+
+  /api/v1/incidents/{id}/acknowledge:
+    post:
+      tags: [incidents]
+      summary: Acknowledge an incident
+      operationId: acknowledgeIncident
+      security:
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                acknowledgedBy:
+                  type: string
+                  description: Defaults to "anonymous" if empty
+                  example: jane.doe
+      responses:
+        "200":
+          description: Incident acknowledged
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Incident"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/incidents/{id}/resolve:
+    post:
+      tags: [incidents]
+      summary: Resolve an incident
+      operationId: resolveIncident
+      security:
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resolvedBy:
+                  type: string
+                  description: Defaults to "anonymous" if empty
+                  example: jane.doe
+      responses:
+        "200":
+          description: Incident resolved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Incident"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/incidents/{id}/snapshots:
+    get:
+      tags: [incidents]
+      summary: Get evidence snapshots for an incident
+      operationId: getIncidentSnapshots
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Evidence snapshots captured at incident creation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/IncidentSnapshot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─── Audit ────────────────────────────────────────────────────────────────────
+
+  /api/v1/audit:
+    get:
+      tags: [audit]
+      summary: Query audit events
+      operationId: getAuditLog
+      parameters:
+        - name: action
+          in: query
+          schema:
+            type: string
+          description: "e.g. check.created, incident.resolved"
+        - name: actor
+          in: query
+          schema:
+            type: string
+        - name: target
+          in: query
+          schema:
+            type: string
+          description: "Target type, e.g. check or incident"
+        - name: targetId
+          in: query
+          schema:
+            type: string
+        - name: startTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - $ref: "#/components/parameters/offsetQuery"
+      responses:
+        "200":
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AuditEvent"
+
+  # ─── Analytics ────────────────────────────────────────────────────────────────
+
+  /api/v1/analytics/uptime:
+    get:
+      tags: [analytics]
+      summary: Get uptime statistics for checks
+      operationId: getUptimeStats
+      parameters:
+        - $ref: "#/components/parameters/checkIdQuery"
+        - $ref: "#/components/parameters/periodQuery"
+      responses:
+        "200":
+          description: Uptime stats (single object when checkId given, array otherwise)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /api/v1/analytics/response-times:
+    get:
+      tags: [analytics]
+      summary: Get response time distribution with percentiles
+      operationId: getResponseTimes
+      parameters:
+        - name: checkId
+          in: query
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/periodQuery"
+        - name: interval
+          in: query
+          schema:
+            $ref: "#/components/schemas/Interval"
+      responses:
+        "200":
+          description: Time-bucketed response time percentiles
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ResponseTimeBucket"
+
+  /api/v1/analytics/status-timeline:
+    get:
+      tags: [analytics]
+      summary: Get chronological status changes for a check
+      operationId: getStatusTimeline
+      parameters:
+        - name: checkId
+          in: query
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/daysQuery"
+      responses:
+        "200":
+          description: Status timeline entries
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/StatusTimelineEntry"
+
+  /api/v1/analytics/failure-rate:
+    get:
+      tags: [analytics]
+      summary: Get failure rates grouped by server, application, or type
+      operationId: getFailureRate
+      parameters:
+        - $ref: "#/components/parameters/periodQuery"
+        - name: groupBy
+          in: query
+          schema:
+            type: string
+            enum: [server, application, type]
+            default: server
+      responses:
+        "200":
+          description: Failure rate entries
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/FailureRateEntry"
+
+  /api/v1/analytics/incidents:
+    get:
+      tags: [analytics]
+      summary: Get incident analytics with MTTA and MTTR
+      operationId: getIncidentAnalytics
+      responses:
+        "200":
+          description: Incident statistics
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/IncidentStats"
+
+  # ─── Stats ────────────────────────────────────────────────────────────────────
+
+  /api/v1/stats/overview:
+    get:
+      tags: [stats]
+      summary: Dashboard hero card — top-level metrics in one call
+      operationId: getOverviewStats
+      responses:
+        "200":
+          description: Overview stats
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OverviewStats"
+
+  # ─── Configuration ────────────────────────────────────────────────────────────
+
+  /api/v1/config:
+    get:
+      tags: [config]
+      summary: Get current runtime configuration
+      operationId: getConfig
+      description: Credentials are never exposed in the response.
+      responses:
+        "200":
+          description: Runtime configuration (safe view)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SafeConfigView"
+
+    put:
+      tags: [config]
+      summary: Update runtime configuration
+      operationId: updateConfig
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigUpdate"
+      responses:
+        "200":
+          description: Updated configuration
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SafeConfigView"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─── Alert Rules ──────────────────────────────────────────────────────────────
+
+  /api/v1/alert-rules:
+    get:
+      tags: [alert-rules]
+      summary: List all alert rules
+      operationId: listAlertRules
+      responses:
+        "200":
+          description: Alert rules
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AlertRule"
+
+    post:
+      tags: [alert-rules]
+      summary: Create a new alert rule
+      operationId: createAlertRule
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertRule"
+      responses:
+        "201":
+          description: Alert rule created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AlertRule"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/alert-rules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Alert rule ID
+
+    put:
+      tags: [alert-rules]
+      summary: Update an existing alert rule
+      operationId: updateAlertRule
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertRule"
+      responses:
+        "200":
+          description: Updated alert rule
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AlertRule"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [alert-rules]
+      summary: Delete an alert rule
+      operationId: deleteAlertRule
+      security:
+        - basicAuth: []
+      responses:
+        "200":
+          description: Alert rule deleted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          deleted:
+                            type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─── Server-Sent Events ───────────────────────────────────────────────────────
+
+  /api/v1/events:
+    get:
+      tags: [events]
+      summary: Live event stream for real-time dashboard updates
+      operationId: getEventStream
+      description: |
+        Returns a `text/event-stream` SSE stream. Events are emitted every 5 seconds
+        with a `snapshot` event containing the current health summary and active incident count.
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  `event: snapshot`
+                  `data: {"type":"snapshot","timestamp":"...","summary":{...},"activeIncidents":3}`
+
+  # ─── MySQL Monitoring ─────────────────────────────────────────────────────────
+
+  /api/v1/mysql/samples:
+    get:
+      tags: [mysql]
+      summary: Get raw MySQL metric samples
+      operationId: getMySQLSamples
+      parameters:
+        - name: checkId
+          in: query
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/limitQuery"
+      responses:
+        "200":
+          description: MySQL samples
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/MySQLSample"
+
+  /api/v1/mysql/deltas:
+    get:
+      tags: [mysql]
+      summary: Get computed deltas between consecutive MySQL samples
+      operationId: getMySQLDeltas
+      parameters:
+        - name: checkId
+          in: query
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/limitQuery"
+      responses:
+        "200":
+          description: MySQL deltas
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/MySQLDelta"
+
+  /api/v1/mysql/health:
+    get:
+      tags: [mysql]
+      summary: Get MySQL health summary card
+      operationId: getMySQLHealth
+      parameters:
+        - name: checkId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: MySQL health summary
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/MySQLHealthSummary"
+
+  /api/v1/mysql/timeseries:
+    get:
+      tags: [mysql]
+      summary: Get MySQL metrics as time-series data for charting
+      operationId: getMySQLTimeSeries
+      parameters:
+        - name: checkId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: metric
+          in: query
+          schema:
+            type: string
+            enum: [all, connections, qps, slow_queries, threads, locks]
+            default: all
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: MySQL time-series data (sorted ascending by timestamp)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/MySQLTimeSeriesPoint"
+
+  # ─── Notifications ────────────────────────────────────────────────────────────
+
+  /api/v1/notifications:
+    get:
+      tags: [notifications]
+      summary: List pending notifications
+      operationId: listNotifications
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: Notification events
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/NotificationEvent"
+
+  /api/v1/notifications/stats:
+    get:
+      tags: [notifications]
+      summary: Get notification delivery statistics
+      operationId: getNotificationStats
+      responses:
+        "200":
+          description: Notification stats
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/NotificationStats"
+
+  /api/v1/notifications/{id}/sent:
+    post:
+      tags: [notifications]
+      summary: Mark a notification as successfully sent
+      operationId: markNotificationSent
+      security:
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Notification ID
+      responses:
+        "200":
+          description: Notification marked sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/notifications/{id}/failed:
+    post:
+      tags: [notifications]
+      summary: Mark a notification as failed
+      operationId: markNotificationFailed
+      security:
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Notification ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  example: SMTP connection timeout
+      responses:
+        "200":
+          description: Notification marked failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─── AI Queue ─────────────────────────────────────────────────────────────────
+
+  /api/v1/ai/queue:
+    get:
+      tags: [ai-queue]
+      summary: List pending AI analysis queue items
+      operationId: listAIQueue
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: AI queue items
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AIQueueItem"
+
+  /api/v1/ai/queue/stats:
+    get:
+      tags: [ai-queue]
+      summary: Get AI queue statistics
+      operationId: getAIQueueStats
+      responses:
+        "200":
+          description: AI queue stats
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AIQueueStats"
+
+  /api/v1/ai/queue/{incidentId}/done:
+    post:
+      tags: [ai-queue]
+      summary: Complete AI analysis for an incident
+      operationId: completeAIAnalysis
+      security:
+        - basicAuth: []
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AIAnalysisResult"
+      responses:
+        "200":
+          description: Analysis marked completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/ai/queue/{incidentId}/failed:
+    post:
+      tags: [ai-queue]
+      summary: Mark AI analysis as failed
+      operationId: failAIAnalysis
+      security:
+        - basicAuth: []
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  example: OpenAI API rate limit exceeded
+      responses:
+        "200":
+          description: Analysis marked failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─── BYOK AI Service ──────────────────────────────────────────────────────────
+
+  /api/v1/ai/config:
+    get:
+      tags: [ai]
+      summary: Get AI service configuration (API keys masked)
+      operationId: getAIConfig
+      responses:
+        "200":
+          description: Safe AI config view
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SafeAIConfigView"
+
+    put:
+      tags: [ai]
+      summary: Update AI service settings
+      operationId: updateAIConfig
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AIConfigUpdate"
+      responses:
+        "200":
+          description: Updated AI config
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SafeAIConfigView"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/ai/providers:
+    get:
+      tags: [ai]
+      summary: List all configured AI providers (API keys masked)
+      operationId: listAIProviders
+      responses:
+        "200":
+          description: AI providers
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SafeAIProviderView"
+
+    post:
+      tags: [ai]
+      summary: Add a new AI provider
+      operationId: createAIProvider
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AIProviderConfig"
+      responses:
+        "201":
+          description: Provider created (API key masked in response)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SafeAIProviderView"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/ai/providers/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Provider ID
+
+    put:
+      tags: [ai]
+      summary: Update an existing AI provider
+      operationId: updateAIProvider
+      security:
+        - basicAuth: []
+      description: |
+        If `apiKey` is empty or contains `****`, the existing encrypted key is preserved.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AIProviderConfig"
+      responses:
+        "200":
+          description: Updated provider
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SafeAIProviderView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [ai]
+      summary: Remove an AI provider
+      operationId: deleteAIProvider
+      security:
+        - basicAuth: []
+      responses:
+        "200":
+          description: Provider deleted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          deleted:
+                            type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/ai/prompts:
+    get:
+      tags: [ai]
+      summary: List all prompt templates (including built-in defaults)
+      operationId: listAIPrompts
+      responses:
+        "200":
+          description: Prompt templates
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AIPromptTemplate"
+
+    post:
+      tags: [ai]
+      summary: Create a custom prompt template
+      operationId: createAIPrompt
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AIPromptTemplate"
+      responses:
+        "201":
+          description: Prompt template created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AIPromptTemplate"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/ai/prompts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Prompt template ID
+
+    put:
+      tags: [ai]
+      summary: Update a prompt template
+      operationId: updateAIPrompt
+      security:
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AIPromptTemplate"
+      responses:
+        "200":
+          description: Updated prompt template
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AIPromptTemplate"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [ai]
+      summary: Delete a prompt template
+      operationId: deleteAIPrompt
+      security:
+        - basicAuth: []
+      responses:
+        "200":
+          description: Prompt template deleted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          deleted:
+                            type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/ai/analyze/{incidentId}:
+    post:
+      tags: [ai]
+      summary: Manually trigger AI analysis for a specific incident
+      operationId: triggerAIAnalysis
+      security:
+        - basicAuth: []
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                providerId:
+                  type: string
+                  description: Use a specific provider (defaults to default provider)
+                promptId:
+                  type: string
+                  description: Use a specific prompt template
+      responses:
+        "200":
+          description: AI analysis result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AIAnalysisResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/ai/health:
+    get:
+      tags: [ai]
+      summary: Check connectivity to all configured AI providers
+      operationId: getAIProviderHealth
+      responses:
+        "200":
+          description: Provider health status
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ProviderHealth"
+
+  /api/v1/ai/results/{incidentId}:
+    get:
+      tags: [ai]
+      summary: Get AI analysis results for a specific incident
+      operationId: getAIResults
+      parameters:
+        - name: incidentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: AI analysis results
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AIAnalysisResult"
+
+  # ─── Data Export ──────────────────────────────────────────────────────────────
+
+  /api/v1/export/mysql/samples:
+    get:
+      tags: [export]
+      summary: Export MySQL samples as CSV or JSON
+      operationId: exportMySQLSamples
+      parameters:
+        - name: checkId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [csv, json]
+            default: json
+      responses:
+        "200":
+          description: MySQL samples export
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+            text/csv:
+              schema:
+                type: string
+                description: CSV with columns sampleId, checkId, timestamp, connections, maxConnections, threadsRunning, threadsConnected, slowQueries, questionsPerSec, uptimeSeconds
+
+  /api/v1/export/incidents:
+    get:
+      tags: [export]
+      summary: Export all incidents as CSV or JSON
+      operationId: exportIncidents
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [csv, json]
+            default: json
+      responses:
+        "200":
+          description: Incidents export
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+            text/csv:
+              schema:
+                type: string
+                description: CSV with columns id, checkId, checkName, type, status, severity, message, startedAt, resolvedAt
+
+  /api/v1/export/results:
+    get:
+      tags: [export]
+      summary: Export check results as CSV or JSON
+      operationId: exportResults
+      parameters:
+        - $ref: "#/components/parameters/checkIdQuery"
+        - $ref: "#/components/parameters/daysQuery"
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [csv, json]
+            default: json
+      responses:
+        "200":
+          description: Results export
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+            text/csv:
+              schema:
+                type: string
+                description: CSV with columns id, checkId, name, type, server, application, status, healthy, durationMs, startedAt, finishedAt, message
+
+  # ─── Prometheus Metrics ───────────────────────────────────────────────────────
+
+  /metrics:
+    get:
+      tags: [metrics]
+      summary: Prometheus metrics endpoint
+      operationId: getMetrics
+      description: |
+        Returns Prometheus exposition format text. Available metrics:
+        - `healthops_check_runs_total` (counter) — total check runs by check ID and status
+        - `healthops_check_duration_seconds` (histogram) — check execution duration
+        - `healthops_check_failures_total` (counter) — total check failures
+        - `healthops_incidents_total` (counter) — total incidents by severity
+        - `healthops_alerts_triggered_total` (counter) — total alerts triggered
+        - `healthops_http_requests_total` (counter) — HTTP requests by method, path, status
+        - `healthops_http_request_duration_seconds` (histogram) — HTTP request duration
+      responses:
+        "200":
+          description: Prometheus exposition format
+          content:
+            text/plain:
+              schema:
+                type: string
