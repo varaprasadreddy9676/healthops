@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Activity, AlertTriangle, Database,
   BarChart3, Brain, Settings, ChevronsLeft, X, Heart, Server,
   Users, Bell, LogOut, FileText, GitBranch, MessageSquare, Eye, Zap, Globe2,
-  ChevronDown,
+  ChevronDown, Wrench,
 } from 'lucide-react'
 import { cn } from "@/shared/lib/utils"
 import { useAuth } from "@/shared/hooks/useAuth"
@@ -12,7 +12,7 @@ import { useAIAvailability } from "@/features/ai/hooks/useAIAvailability"
 
 const ICON_MAP = {
   LayoutDashboard, Activity, AlertTriangle, Database,
-  BarChart3, Brain, Settings, Server, Users, Bell, FileText, GitBranch, MessageSquare, Eye, Zap, Globe2,
+  BarChart3, Brain, Settings, Server, Users, Bell, FileText, GitBranch, MessageSquare, Eye, Zap, Globe2, Wrench,
 } as const
 
 type IconName = keyof typeof ICON_MAP
@@ -51,7 +51,8 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: 'Incidents', path: '/incidents', icon: 'AlertTriangle' },
       { label: 'Root Cause', path: '/rca', icon: 'GitBranch', requiresAI: true },
-      { label: 'Remediation', path: '/automation', icon: 'Zap', requiresAI: true },
+      { label: 'Automation', path: '/automation', icon: 'Zap', requiresAI: true },
+      { label: 'Auto-Heal', path: '/remediation', icon: 'Wrench' },
       { label: 'Status Pages', path: '/status-pages', icon: 'Globe2' },
     ],
   },

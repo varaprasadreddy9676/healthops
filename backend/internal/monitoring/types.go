@@ -101,6 +101,9 @@ type CheckConfig struct {
 	Domain    *DomainCheckConfig    `json:"domain,omitempty" bson:"domain,omitempty"`
 	Heartbeat *HeartbeatCheckConfig `json:"heartbeat,omitempty" bson:"heartbeat,omitempty"`
 
+	// Auto-remediation: references a pre-approved action from the registry.
+	Remediation *CheckRemediationConfig `json:"remediation,omitempty" bson:"remediation,omitempty"`
+
 	// Reliability controls (Phase 2 — alert trust).
 	// FailuresToOpen: number of consecutive failed runs before an incident opens.
 	// Defaults to 1 (open immediately) for backward compatibility.
@@ -108,6 +111,19 @@ type CheckConfig struct {
 	// SuccessesToResolve: number of consecutive successful runs before an open
 	// incident auto-resolves. Defaults to 1.
 	SuccessesToResolve int `json:"successesToResolve,omitempty" bson:"successesToResolve,omitempty"`
+}
+
+// CheckRemediationConfig attaches to a CheckConfig and references a pre-approved
+// remediation action from the registry. Raw commands are never stored here to
+// prevent check-edit permissions from becoming RCE.
+type CheckRemediationConfig struct {
+	ActionRef                   string `json:"actionRef" bson:"actionRef"`
+	MaxAttempts                 int    `json:"maxAttempts,omitempty" bson:"maxAttempts,omitempty"`
+	CooldownSeconds             int    `json:"cooldownSeconds,omitempty" bson:"cooldownSeconds,omitempty"`
+	ConsecutiveFailuresRequired int    `json:"consecutiveFailuresRequired,omitempty" bson:"consecutiveFailuresRequired,omitempty"`
+	VerifyAfterSeconds          int    `json:"verifyAfterSeconds,omitempty" bson:"verifyAfterSeconds,omitempty"`
+	NotifyOnRemediation         bool   `json:"notifyOnRemediation,omitempty" bson:"notifyOnRemediation,omitempty"`
+	EscalateOnExhaustion        bool   `json:"escalateOnExhaustion,omitempty" bson:"escalateOnExhaustion,omitempty"`
 }
 
 type State struct {

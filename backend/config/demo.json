@@ -347,7 +347,16 @@
       "timeoutSeconds": 5,
       "intervalSeconds": 30,
       "enabled": true,
-      "tags": ["process", "nginx", "demo"]
+      "tags": ["process", "nginx", "demo"],
+      "remediation": {
+        "actionRef": "restart-nginx",
+        "maxAttempts": 3,
+        "cooldownSeconds": 120,
+        "consecutiveFailuresRequired": 2,
+        "verifyAfterSeconds": 10,
+        "notifyOnRemediation": true,
+        "escalateOnExhaustion": true
+      }
     },
     {
       "id": "python-http-server-1",
@@ -386,7 +395,16 @@
       "timeoutSeconds": 5,
       "intervalSeconds": 30,
       "enabled": true,
-      "tags": ["process", "nginx", "demo"]
+      "tags": ["process", "nginx", "demo"],
+      "remediation": {
+        "actionRef": "restart-nginx",
+        "maxAttempts": 3,
+        "cooldownSeconds": 120,
+        "consecutiveFailuresRequired": 2,
+        "verifyAfterSeconds": 10,
+        "notifyOnRemediation": true,
+        "escalateOnExhaustion": true
+      }
     },
     {
       "id": "python-http-server-2",

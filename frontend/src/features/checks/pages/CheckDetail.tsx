@@ -1,13 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { useState } from 'react'
-import { ArrowLeft, Server, Tag, Pencil, X, Save, Bell, BarChart2, List } from 'lucide-react'
+import { ArrowLeft, Server, Tag, Pencil, X, Save, Bell, BarChart2, List, Wrench } from 'lucide-react'
 import {
   ComposedChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, ReferenceLine,
 } from 'recharts'
 import { checksApi } from "@/features/checks/api/checks"
 import { analyticsApi } from "@/features/analytics/api/analytics"
+import { remediationApi } from "@/features/remediation/api/remediation"
 import { StatusBadge } from "@/shared/components/StatusBadge"
 import { MetricCard } from "@/shared/components/MetricCard"
 import { LoadingState } from "@/shared/components/LoadingState"
@@ -226,6 +227,7 @@ export default function CheckDetail() {
       tags: c.tags || [],
       mysql: c.mysql,
       ssh: c.ssh,
+      remediation: c.remediation,
       notificationChannelIds: c.notificationChannelIds?.length
         ? c.notificationChannelIds
         : channels.filter(ch => !ch.checkIds?.length).map(ch => ch.id),
@@ -629,6 +631,9 @@ export default function CheckDetail() {
                 <span className="text-sm text-slate-700 dark:text-slate-300">Enabled</span>
               </div>
 
+              {/* Auto-Remediation section */}
+              <RemediationConfigSection form={form} setForm={setForm} />
+
               {/* Notification Channels section */}
               <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
                 <div className="flex items-center gap-2 mb-3">
@@ -696,6 +701,141 @@ export default function CheckDetail() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Remediation Config Section (inside check edit form) ────────────────────
+
+function RemediationConfigSection({
+  form,
+  setForm,
+}: {
+  form: Partial<CheckConfig>
+  setForm: React.Dispatch<React.SetStateAction<Partial<CheckConfig>>>
+}) {
+  const { data: actionsData } = useQuery({
+    queryKey: ['remediation-actions'],
+    queryFn: remediationApi.listActions,
+  })
+  const actions = actionsData?.actions ?? []
+
+  const rem = form.remediation
+  const hasRemediation = !!rem?.actionRef
+
+  const setRemField = (key: string, value: unknown) => {
+    setForm(prev => ({
+      ...prev,
+      remediation: { ...(prev.remediation || { actionRef: '' }), [key]: value },
+    }))
+  }
+
+  const clearRemediation = () => {
+    setForm(prev => ({ ...prev, remediation: undefined }))
+  }
+
+  const inputCls = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white'
+
+  return (
+    <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Wrench className="h-4 w-4 text-violet-500" />
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Auto-Remediation</h4>
+        </div>
+        {hasRemediation && (
+          <button
+            type="button"
+            onClick={clearRemediation}
+            className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400"
+          >
+            Remove
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-slate-500 mb-3">
+        Link a pre-approved action to automatically fix this check when it fails.
+      </p>
+
+      {actions.length === 0 ? (
+        <p className="text-xs text-slate-400 italic">
+          No remediation actions available. Create actions in the Auto-Heal page first.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Action</label>
+            <select
+              className={inputCls}
+              value={rem?.actionRef ?? ''}
+              onChange={e => setRemField('actionRef', e.target.value)}
+            >
+              <option value="">None (no auto-remediation)</option>
+              {actions.map(a => (
+                <option key={a.id} value={a.id}>
+                  {a.name} — {a.type} ({a.id})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {hasRemediation && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Max Attempts</label>
+                <input
+                  type="number"
+                  className={inputCls}
+                  value={rem?.maxAttempts ?? 3}
+                  onChange={e => setRemField('maxAttempts', Number(e.target.value))}
+                  min={1}
+                  max={10}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Cooldown (s)</label>
+                <input
+                  type="number"
+                  className={inputCls}
+                  value={rem?.cooldownSeconds ?? 300}
+                  onChange={e => setRemField('cooldownSeconds', Number(e.target.value))}
+                  min={0}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Verify After (s)</label>
+                <input
+                  type="number"
+                  className={inputCls}
+                  value={rem?.verifyAfterSeconds ?? 10}
+                  onChange={e => setRemField('verifyAfterSeconds', Number(e.target.value))}
+                  min={0}
+                />
+              </div>
+              <div className="col-span-2 sm:col-span-3 flex flex-wrap gap-4">
+                <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rem?.notifyOnRemediation ?? false}
+                    onChange={e => setRemField('notifyOnRemediation', e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600"
+                  />
+                  Notify on remediation
+                </label>
+                <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rem?.escalateOnExhaustion ?? false}
+                    onChange={e => setRemField('escalateOnExhaustion', e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600"
+                  />
+                  Escalate when attempts exhausted
+                </label>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

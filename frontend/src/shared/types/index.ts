@@ -40,8 +40,19 @@ export interface CheckConfig {
   ping?: PingCheckConfig
   domain?: DomainCheckConfig
   heartbeat?: HeartbeatCheckConfig
+  remediation?: CheckRemediationConfig
   serverId?: string
   notificationChannelIds?: string[]
+}
+
+export interface CheckRemediationConfig {
+  actionRef: string
+  maxAttempts?: number
+  cooldownSeconds?: number
+  consecutiveFailuresRequired?: number
+  verifyAfterSeconds?: number
+  notifyOnRemediation?: boolean
+  escalateOnExhaustion?: boolean
 }
 
 export type CheckType =

@@ -21,6 +21,7 @@ import (
 	"medics-health-check/backend/internal/monitoring/notify"
 	"medics-health-check/backend/internal/monitoring/rca"
 	"medics-health-check/backend/internal/monitoring/recommendations"
+	"medics-health-check/backend/internal/monitoring/remediation"
 	"medics-health-check/backend/internal/monitoring/repositories"
 
 	"github.com/joho/godotenv"
@@ -151,6 +152,10 @@ func main() {
 	logger.Printf("Incident repository: MongoDB (collection %s_incidents)", mongoPrefix)
 	incidentManager := monitoring.NewIncidentManager(incidentRepo, logger)
 	service.SetIncidentManager(incidentManager)
+
+	// Forward-declare remediation engine so incident callbacks can reference it.
+	// Actual initialization happens later in the "Auto-Remediation Engine" block.
+	var remediationEngine *remediation.Engine
 
 	// Initialize heartbeat API (unauthenticated ping endpoints for cron jobs)
 	heartbeatAPI := monitoring.NewHeartbeatAPIHandler()
@@ -384,7 +389,7 @@ func main() {
 		}
 		service.SetAIRoutes(aiAPIHandler)
 
-		// Wire auto-analysis + notifications: trigger when incidents are created
+		// Wire auto-analysis + notifications + remediation: trigger when incidents are created
 		incidentManager.SetOnIncidentCreated(func(incident monitoring.Incident) {
 			if err := aiService.EnqueueIncidentAnalysis(incident.ID); err != nil {
 				logger.Printf("AI: failed to enqueue analysis for incident %s: %v", incident.ID, err)
@@ -393,17 +398,31 @@ func main() {
 				channelIDs := lookupCheckChannelIDs(store, incident.CheckID)
 				notificationDispatcher.NotifyIncident(incident, nil, channelIDs...)
 			}
+			// Trigger auto-remediation if engine is wired and check has remediation config
+			if remediationEngine != nil {
+				triggerRemediation(remediationEngine, store, incident, logger)
+			}
 		})
 
 		logger.Printf("BYOK AI service initialized (background worker active)")
 	}
 
-	// If AI not configured, still wire notification dispatch for incidents
+	// If AI not configured, still wire notification dispatch + remediation for incidents
 	if aiConfigStore == nil || aiQueue == nil {
 		if notificationDispatcher != nil {
 			incidentManager.SetOnIncidentCreated(func(incident monitoring.Incident) {
 				channelIDs := lookupCheckChannelIDs(store, incident.CheckID)
 				notificationDispatcher.NotifyIncident(incident, nil, channelIDs...)
+				if remediationEngine != nil {
+					triggerRemediation(remediationEngine, store, incident, logger)
+				}
+			})
+		} else {
+			// No notifications, no AI — still try remediation
+			incidentManager.SetOnIncidentCreated(func(incident monitoring.Incident) {
+				if remediationEngine != nil {
+					triggerRemediation(remediationEngine, store, incident, logger)
+				}
 			})
 		}
 	}
@@ -558,6 +577,133 @@ func main() {
 		logger.Printf("Automation engine initialized (AI available: %v)", autoAICall != nil)
 	}
 
+	// --- Auto-Remediation Engine ---
+	{
+		remRepo, err := repositories.NewMongoRemediationRepository(mongoClient, mongoDB, mongoPrefix)
+		if err != nil {
+			logger.Printf("WARNING: remediation repository init failed: %v", err)
+		} else {
+			remediationEngine = remediation.NewEngine(remRepo, logger)
+
+			// Wire AI provider for failure analysis
+			if aiService != nil {
+				remediationEngine.SetAIProvider(func(systemMsg, userMsg string) (string, error) {
+					return aiService.CallProvider(context.Background(), systemMsg, userMsg)
+				})
+			}
+
+			// Wire check resolver for manual remediation
+			remediationEngine.SetCheckResolver(func(checkID string) (remediation.CheckInfo, error) {
+				state := store.Snapshot()
+				for _, c := range state.Checks {
+					if c.ID == checkID {
+						info := remediation.CheckInfo{
+							CheckID:   c.ID,
+							CheckName: c.Name,
+							CheckType: c.Type,
+							Target:    c.Target,
+							ServerID:  c.ServerId,
+						}
+						if c.SSH != nil {
+							info.SSH = &remediation.SSHConfig{
+								Host:               c.SSH.Host,
+								Port:               c.SSH.Port,
+								User:               c.SSH.User,
+								KeyPath:            c.SSH.KeyPath,
+								KeyEnv:             c.SSH.KeyEnv,
+								Password:           c.SSH.Password,
+								PasswordEnv:        c.SSH.PasswordEnv,
+								HostKeyFingerprint: c.SSH.HostKeyFingerprint,
+							}
+						}
+						if c.Remediation != nil {
+							info.Ref = remediation.RemediationRef{
+								ActionRef:                   c.Remediation.ActionRef,
+								MaxAttempts:                 c.Remediation.MaxAttempts,
+								CooldownSeconds:             c.Remediation.CooldownSeconds,
+								ConsecutiveFailuresRequired: c.Remediation.ConsecutiveFailuresRequired,
+								VerifyAfterSeconds:          c.Remediation.VerifyAfterSeconds,
+								NotifyOnRemediation:         c.Remediation.NotifyOnRemediation,
+								EscalateOnExhaustion:        c.Remediation.EscalateOnExhaustion,
+							}
+						}
+						return info, nil
+					}
+				}
+				return remediation.CheckInfo{}, errors.New("check not found")
+			})
+
+			remHandler := remediation.NewHandler(remediationEngine, logger)
+			service.SetRemediationRoutes(remHandler)
+
+			// Wire auto-resolve on successful remediation
+			remediationEngine.SetOnSuccess(func(checkID, incidentID, actionName, attemptID string) {
+				logger.Printf("[remediation] auto-resolving incident %s for check %s (action: %s)", incidentID, checkID, actionName)
+				if err := incidentManager.ResolveIncident(incidentID, "auto-remediation"); err != nil {
+					logger.Printf("[remediation] failed to auto-resolve incident %s: %v", incidentID, err)
+				}
+			})
+
+			// Seed demo remediation actions if none exist
+			existing, _ := remRepo.ListActions()
+			if len(existing) == 0 {
+				seedActions := []remediation.AllowedAction{
+					{
+						ID:             "restart-nginx",
+						Name:           "Restart Nginx",
+						Type:           remediation.ActionSSHCommand,
+						Command:        "service nginx restart",
+						TimeoutSeconds: 30,
+						Risk:           remediation.RiskLow,
+						Description:    "Restarts the Nginx web server via SSH",
+					},
+					{
+						ID:             "restart-python-http",
+						Name:           "Restart Python HTTP Server",
+						Type:           remediation.ActionSSHCommand,
+						Command:        "pkill -f 'http.server' && nohup python3 -m http.server 8000 &",
+						TimeoutSeconds: 15,
+						Risk:           remediation.RiskLow,
+						Description:    "Kills and restarts the Python HTTP server",
+					},
+					{
+						ID:             "restart-cron",
+						Name:           "Restart Cron Daemon",
+						Type:           remediation.ActionSSHCommand,
+						Command:        "service cron restart",
+						TimeoutSeconds: 15,
+						Risk:           remediation.RiskLow,
+						Description:    "Restarts the cron daemon via SSH",
+					},
+					{
+						ID:             "restart-mysql",
+						Name:           "Restart MySQL",
+						Type:           remediation.ActionSSHCommand,
+						Command:        "service mysql restart",
+						TimeoutSeconds: 60,
+						Risk:           remediation.RiskMedium,
+						Description:    "Restarts the MySQL database server",
+					},
+				}
+				for _, a := range seedActions {
+					if err := remRepo.CreateAction(a); err != nil {
+						logger.Printf("[remediation] failed to seed action %s: %v", a.ID, err)
+					}
+				}
+				// Enable engine with dry-run=false for demo
+				_ = remRepo.SaveConfig(remediation.GlobalConfig{
+					Enabled:         true,
+					DryRun:          false,
+					MaxConcurrent:   2,
+					OutputLimitBytes: 8192,
+				})
+				logger.Printf("Seeded %d demo remediation actions", len(seedActions))
+			}
+
+			logger.Printf("Remediation engine initialized (AI available: %v)", aiService != nil)
+		}
+	}
+
 	// Wire AI provider into chat handler now that AI service is available
 	if aiService != nil && chatStore != nil {
 		service.SetAIChatStore(chatStore, monitoring.ChatProvider(aiService.CallProvider))
@@ -582,6 +728,53 @@ func lookupCheckChannelIDs(store monitoring.Store, checkID string) []string {
 		}
 	}
 	return nil
+}
+
+// triggerRemediation builds CheckInfo from the store and fires the remediation engine.
+func triggerRemediation(engine *remediation.Engine, store monitoring.Store, incident monitoring.Incident, logger *log.Logger) {
+	state := store.Snapshot()
+	for _, c := range state.Checks {
+		if c.ID != incident.CheckID {
+			continue
+		}
+		if c.Remediation == nil || c.Remediation.ActionRef == "" {
+			return // no remediation configured for this check
+		}
+
+		info := remediation.CheckInfo{
+			CheckID:    c.ID,
+			CheckName:  c.Name,
+			CheckType:  c.Type,
+			Target:     c.Target,
+			ServerID:   c.ServerId,
+			IncidentID: incident.ID,
+			Ref: remediation.RemediationRef{
+				ActionRef:                   c.Remediation.ActionRef,
+				MaxAttempts:                 c.Remediation.MaxAttempts,
+				CooldownSeconds:             c.Remediation.CooldownSeconds,
+				ConsecutiveFailuresRequired: c.Remediation.ConsecutiveFailuresRequired,
+				VerifyAfterSeconds:          c.Remediation.VerifyAfterSeconds,
+				NotifyOnRemediation:         c.Remediation.NotifyOnRemediation,
+				EscalateOnExhaustion:        c.Remediation.EscalateOnExhaustion,
+			},
+		}
+		if c.SSH != nil {
+			info.SSH = &remediation.SSHConfig{
+				Host:               c.SSH.Host,
+				Port:               c.SSH.Port,
+				User:               c.SSH.User,
+				KeyPath:            c.SSH.KeyPath,
+				KeyEnv:             c.SSH.KeyEnv,
+				Password:           c.SSH.Password,
+				PasswordEnv:        c.SSH.PasswordEnv,
+				HostKeyFingerprint: c.SSH.HostKeyFingerprint,
+			}
+		}
+
+		engine.TryRemediate(info)
+		return
+	}
+	logger.Printf("[remediation] check %s not found in store — skipping", incident.CheckID)
 }
 
 func resolvePath(envKey string, candidates ...string) string {

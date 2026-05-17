@@ -40,6 +40,7 @@ type Service struct {
 	assistantRoutes      RouteRegistrar
 	recommendationRoutes RouteRegistrar
 	automationRoutes     RouteRegistrar
+	remediationRoutes    RouteRegistrar
 	snapshotRepo         IncidentSnapshotRepository
 	userStore            UserStoreBackend
 	userAPI              *UserAPIHandler
@@ -329,6 +330,11 @@ func (s *Service) SetAutomationRoutes(r RouteRegistrar) {
 	s.automationRoutes = r
 }
 
+// SetRemediationRoutes sets the auto-remediation route registrar.
+func (s *Service) SetRemediationRoutes(r RouteRegistrar) {
+	s.remediationRoutes = r
+}
+
 // SetHeartbeatAPI sets the heartbeat API handler for unauthenticated ping endpoints.
 func (s *Service) SetHeartbeatAPI(h *HeartbeatAPIHandler) {
 	s.heartbeatAPI = h
@@ -529,6 +535,11 @@ func (s *Service) Run(ctx context.Context) error {
 	// Register automation routes if handler is configured
 	if s.automationRoutes != nil {
 		s.automationRoutes.RegisterRoutes(mux)
+	}
+
+	// Register remediation routes if handler is configured
+	if s.remediationRoutes != nil {
+		s.remediationRoutes.RegisterRoutes(mux)
 	}
 
 	// Register heartbeat ping endpoints (unauthenticated — cron jobs call them)
