@@ -113,17 +113,33 @@ type CheckConfig struct {
 	SuccessesToResolve int `json:"successesToResolve,omitempty" bson:"successesToResolve,omitempty"`
 }
 
-// CheckRemediationConfig attaches to a CheckConfig and references a pre-approved
-// remediation action from the registry. Raw commands are never stored here to
-// prevent check-edit permissions from becoming RCE.
+// CheckRemediationConfig attaches to a CheckConfig. Users define the action
+// inline (type + command/url + timeout/risk). The service auto-syncs each
+// inline definition into a hidden action in the registry with ID "auto-{checkId}",
+// so the engine continues to look up actions by ActionRef. Power users can
+// instead set ActionRef directly to reference a shared registry action.
 type CheckRemediationConfig struct {
-	ActionRef                   string `json:"actionRef" bson:"actionRef"`
-	MaxAttempts                 int    `json:"maxAttempts,omitempty" bson:"maxAttempts,omitempty"`
-	CooldownSeconds             int    `json:"cooldownSeconds,omitempty" bson:"cooldownSeconds,omitempty"`
-	ConsecutiveFailuresRequired int    `json:"consecutiveFailuresRequired,omitempty" bson:"consecutiveFailuresRequired,omitempty"`
-	VerifyAfterSeconds          int    `json:"verifyAfterSeconds,omitempty" bson:"verifyAfterSeconds,omitempty"`
-	NotifyOnRemediation         bool   `json:"notifyOnRemediation,omitempty" bson:"notifyOnRemediation,omitempty"`
-	EscalateOnExhaustion        bool   `json:"escalateOnExhaustion,omitempty" bson:"escalateOnExhaustion,omitempty"`
+	// Inline action definition (typical UI flow)
+	Type           string            `json:"type,omitempty" bson:"type,omitempty"`                     // command | ssh_command | http
+	Command        string            `json:"command,omitempty" bson:"command,omitempty"`               // command / ssh_command
+	URL            string            `json:"url,omitempty" bson:"url,omitempty"`                       // http
+	Method         string            `json:"method,omitempty" bson:"method,omitempty"`                 // http
+	Headers        map[string]string `json:"headers,omitempty" bson:"headers,omitempty"`               // http
+	TimeoutSeconds int               `json:"timeoutSeconds,omitempty" bson:"timeoutSeconds,omitempty"` // action exec timeout
+	Risk           string            `json:"risk,omitempty" bson:"risk,omitempty"`                     // low | medium | high
+	Description    string            `json:"description,omitempty" bson:"description,omitempty"`
+
+	// Registry reference (set automatically from inline fields on save, or
+	// manually for shared actions)
+	ActionRef string `json:"actionRef,omitempty" bson:"actionRef,omitempty"`
+
+	// Execution policy
+	MaxAttempts                 int  `json:"maxAttempts,omitempty" bson:"maxAttempts,omitempty"`
+	CooldownSeconds             int  `json:"cooldownSeconds,omitempty" bson:"cooldownSeconds,omitempty"`
+	ConsecutiveFailuresRequired int  `json:"consecutiveFailuresRequired,omitempty" bson:"consecutiveFailuresRequired,omitempty"`
+	VerifyAfterSeconds          int  `json:"verifyAfterSeconds,omitempty" bson:"verifyAfterSeconds,omitempty"`
+	NotifyOnRemediation         bool `json:"notifyOnRemediation,omitempty" bson:"notifyOnRemediation,omitempty"`
+	EscalateOnExhaustion        bool `json:"escalateOnExhaustion,omitempty" bson:"escalateOnExhaustion,omitempty"`
 }
 
 type State struct {

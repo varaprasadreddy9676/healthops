@@ -46,7 +46,18 @@ export interface CheckConfig {
 }
 
 export interface CheckRemediationConfig {
-  actionRef: string
+  // Inline action (typical flow)
+  type?: 'command' | 'ssh_command' | 'http'
+  command?: string
+  url?: string
+  method?: string
+  headers?: Record<string, string>
+  timeoutSeconds?: number
+  risk?: 'low' | 'medium' | 'high'
+  description?: string
+  // Registry reference (optional, for shared actions)
+  actionRef?: string
+  // Execution policy
   maxAttempts?: number
   cooldownSeconds?: number
   consecutiveFailuresRequired?: number

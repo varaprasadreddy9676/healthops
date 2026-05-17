@@ -22,7 +22,11 @@
       "port": 22,
       "user": "root",
       "password": "testpass123",
-      "tags": ["linux", "docker", "demo"]
+      "tags": [
+        "linux",
+        "docker",
+        "demo"
+      ]
     },
     {
       "id": "linux-server-2",
@@ -31,7 +35,11 @@
       "port": 22,
       "user": "root",
       "password": "testpass123",
-      "tags": ["linux", "docker", "demo"]
+      "tags": [
+        "linux",
+        "docker",
+        "demo"
+      ]
     }
   ],
   "checks": [
@@ -51,7 +59,11 @@
       "retryDelaySeconds": 3,
       "cooldownSeconds": 30,
       "enabled": true,
-      "tags": ["api", "self", "critical"]
+      "tags": [
+        "api",
+        "self",
+        "critical"
+      ]
     },
     {
       "id": "mongo-tcp",
@@ -68,7 +80,11 @@
       "retryDelaySeconds": 3,
       "cooldownSeconds": 30,
       "enabled": true,
-      "tags": ["tcp", "database", "critical"]
+      "tags": [
+        "tcp",
+        "database",
+        "critical"
+      ]
     },
     {
       "id": "nginx-health",
@@ -86,7 +102,11 @@
       "retryDelaySeconds": 3,
       "cooldownSeconds": 30,
       "enabled": true,
-      "tags": ["api", "webserver", "demo"]
+      "tags": [
+        "api",
+        "webserver",
+        "demo"
+      ]
     },
     {
       "id": "nginx-homepage",
@@ -104,7 +124,11 @@
       "retryDelaySeconds": 3,
       "cooldownSeconds": 60,
       "enabled": true,
-      "tags": ["api", "webserver", "demo"]
+      "tags": [
+        "api",
+        "webserver",
+        "demo"
+      ]
     },
     {
       "id": "nginx-tcp",
@@ -121,7 +145,11 @@
       "retryDelaySeconds": 3,
       "cooldownSeconds": 30,
       "enabled": true,
-      "tags": ["tcp", "webserver", "demo"]
+      "tags": [
+        "tcp",
+        "webserver",
+        "demo"
+      ]
     },
     {
       "id": "redis-tcp",
@@ -138,7 +166,11 @@
       "retryDelaySeconds": 3,
       "cooldownSeconds": 30,
       "enabled": true,
-      "tags": ["tcp", "cache", "demo"]
+      "tags": [
+        "tcp",
+        "cache",
+        "demo"
+      ]
     },
     {
       "id": "echo-api",
@@ -156,7 +188,10 @@
       "retryDelaySeconds": 3,
       "cooldownSeconds": 30,
       "enabled": true,
-      "tags": ["api", "demo"]
+      "tags": [
+        "api",
+        "demo"
+      ]
     },
     {
       "id": "demo-api-health",
@@ -174,7 +209,12 @@
       "retryDelaySeconds": 2,
       "cooldownSeconds": 20,
       "enabled": true,
-      "tags": ["api", "checkout", "critical", "demo"]
+      "tags": [
+        "api",
+        "checkout",
+        "critical",
+        "demo"
+      ]
     },
     {
       "id": "demo-api-checkout",
@@ -192,7 +232,12 @@
       "retryDelaySeconds": 2,
       "cooldownSeconds": 20,
       "enabled": true,
-      "tags": ["api", "checkout", "synthetic", "demo"]
+      "tags": [
+        "api",
+        "checkout",
+        "synthetic",
+        "demo"
+      ]
     },
     {
       "id": "demo-api-latency",
@@ -210,7 +255,12 @@
       "retryDelaySeconds": 2,
       "cooldownSeconds": 20,
       "enabled": true,
-      "tags": ["api", "checkout", "latency", "demo"]
+      "tags": [
+        "api",
+        "checkout",
+        "latency",
+        "demo"
+      ]
     },
     {
       "id": "mysql-tcp",
@@ -227,7 +277,11 @@
       "retryDelaySeconds": 3,
       "cooldownSeconds": 30,
       "enabled": true,
-      "tags": ["tcp", "database", "demo"]
+      "tags": [
+        "tcp",
+        "database",
+        "demo"
+      ]
     },
     {
       "id": "mysql-health",
@@ -241,7 +295,12 @@
       "retryDelaySeconds": 5,
       "cooldownSeconds": 60,
       "enabled": true,
-      "tags": ["mysql", "database", "critical", "demo"],
+      "tags": [
+        "mysql",
+        "database",
+        "critical",
+        "demo"
+      ],
       "mysql": {
         "dsnEnv": "MYSQL_DSN",
         "connectTimeoutSeconds": 3,
@@ -261,7 +320,10 @@
       "timeoutSeconds": 5,
       "intervalSeconds": 30,
       "enabled": true,
-      "tags": ["process", "self"]
+      "tags": [
+        "process",
+        "self"
+      ]
     },
     {
       "id": "disk-space",
@@ -274,7 +336,11 @@
       "timeoutSeconds": 5,
       "intervalSeconds": 60,
       "enabled": true,
-      "tags": ["command", "system", "disk"]
+      "tags": [
+        "command",
+        "system",
+        "disk"
+      ]
     },
     {
       "id": "dns-check",
@@ -287,7 +353,10 @@
       "timeoutSeconds": 5,
       "intervalSeconds": 60,
       "enabled": true,
-      "tags": ["command", "network"]
+      "tags": [
+        "command",
+        "network"
+      ]
     },
     {
       "id": "app-log",
@@ -300,7 +369,10 @@
       "timeoutSeconds": 5,
       "intervalSeconds": 30,
       "enabled": true,
-      "tags": ["logs", "self"]
+      "tags": [
+        "logs",
+        "self"
+      ]
     },
     {
       "id": "ssh-linux-server-1",
@@ -311,7 +383,11 @@
       "timeoutSeconds": 10,
       "intervalSeconds": 30,
       "enabled": true,
-      "tags": ["ssh", "linux", "demo"],
+      "tags": [
+        "ssh",
+        "linux",
+        "demo"
+      ],
       "ssh": {
         "host": "linux-server-1",
         "port": 22,
@@ -328,7 +404,11 @@
       "timeoutSeconds": 10,
       "intervalSeconds": 30,
       "enabled": true,
-      "tags": ["ssh", "linux", "demo"],
+      "tags": [
+        "ssh",
+        "linux",
+        "demo"
+      ],
       "ssh": {
         "host": "linux-server-2",
         "port": 22,
@@ -347,7 +427,11 @@
       "timeoutSeconds": 5,
       "intervalSeconds": 30,
       "enabled": true,
-      "tags": ["process", "nginx", "demo"],
+      "tags": [
+        "process",
+        "nginx",
+        "demo"
+      ],
       "remediation": {
         "actionRef": "restart-nginx",
         "maxAttempts": 3,
@@ -369,7 +453,11 @@
       "timeoutSeconds": 5,
       "intervalSeconds": 30,
       "enabled": true,
-      "tags": ["process", "python", "demo"]
+      "tags": [
+        "process",
+        "python",
+        "demo"
+      ]
     },
     {
       "id": "cron-server-1",
@@ -382,7 +470,11 @@
       "timeoutSeconds": 5,
       "intervalSeconds": 30,
       "enabled": true,
-      "tags": ["process", "cron", "demo"]
+      "tags": [
+        "process",
+        "cron",
+        "demo"
+      ]
     },
     {
       "id": "nginx-process-server-2",
@@ -395,7 +487,11 @@
       "timeoutSeconds": 5,
       "intervalSeconds": 30,
       "enabled": true,
-      "tags": ["process", "nginx", "demo"],
+      "tags": [
+        "process",
+        "nginx",
+        "demo"
+      ],
       "remediation": {
         "actionRef": "restart-nginx",
         "maxAttempts": 3,
@@ -417,7 +513,11 @@
       "timeoutSeconds": 5,
       "intervalSeconds": 30,
       "enabled": true,
-      "tags": ["process", "python", "demo"]
+      "tags": [
+        "process",
+        "python",
+        "demo"
+      ]
     },
     {
       "id": "cron-server-2",
@@ -430,7 +530,11 @@
       "timeoutSeconds": 5,
       "intervalSeconds": 30,
       "enabled": true,
-      "tags": ["process", "cron", "demo"]
+      "tags": [
+        "process",
+        "cron",
+        "demo"
+      ]
     }
   ]
 }

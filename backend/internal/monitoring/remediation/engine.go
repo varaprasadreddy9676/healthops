@@ -44,6 +44,10 @@ type CheckInfo struct {
 	SSH        *SSHConfig
 	Ref        RemediationRef
 	IncidentID string
+	// InlineAction is used when a check defines its remediation inline
+	// (no registry lookup). If set, the engine uses this directly and skips
+	// repo.GetAction(Ref.ActionRef).
+	InlineAction *AllowedAction
 }
 
 // RunnerFunc re-runs a check to verify remediation worked.
@@ -62,14 +66,14 @@ type RemediationSuccessCallback func(checkID, incidentID, actionName, attemptID 
 type Engine struct {
 	repo          Repository
 	logger        *log.Logger
-	aiCall        AIProvider           // optional — used for failed-attempt analysis
-	runCheck      RunnerFunc           // optional — verify after remediation
-	auditFn       AuditFunc            // optional — audit log
-	checkResolver CheckResolverFunc    // optional — resolves check ID to CheckInfo
+	aiCall        AIProvider                 // optional — used for failed-attempt analysis
+	runCheck      RunnerFunc                 // optional — verify after remediation
+	auditFn       AuditFunc                  // optional — audit log
+	checkResolver CheckResolverFunc          // optional — resolves check ID to CheckInfo
 	onSuccess     RemediationSuccessCallback // optional — fires on verified recovery
-	running       int32                // current concurrent executions (atomic)
-	mu            sync.Mutex           // guards per-check cooldown state
-	cooldowns     map[string]time.Time // checkID → earliest next attempt
+	running       int32                      // current concurrent executions (atomic)
+	mu            sync.Mutex                 // guards per-check cooldown state
+	cooldowns     map[string]time.Time       // checkID → earliest next attempt
 }
 
 // NewEngine creates a remediation engine.
@@ -84,10 +88,10 @@ func NewEngine(repo Repository, logger *log.Logger) *Engine {
 	}
 }
 
-func (e *Engine) SetAIProvider(ai AIProvider)           { e.aiCall = ai }
-func (e *Engine) SetRunnerFunc(fn RunnerFunc)           { e.runCheck = fn }
-func (e *Engine) SetAuditFunc(fn AuditFunc)             { e.auditFn = fn }
-func (e *Engine) SetCheckResolver(fn CheckResolverFunc) { e.checkResolver = fn }
+func (e *Engine) SetAIProvider(ai AIProvider)                { e.aiCall = ai }
+func (e *Engine) SetRunnerFunc(fn RunnerFunc)                { e.runCheck = fn }
+func (e *Engine) SetAuditFunc(fn AuditFunc)                  { e.auditFn = fn }
+func (e *Engine) SetCheckResolver(fn CheckResolverFunc)      { e.checkResolver = fn }
 func (e *Engine) SetOnSuccess(fn RemediationSuccessCallback) { e.onSuccess = fn }
 
 // TryRemediate is called when an incident is created or when a check continues
@@ -109,11 +113,17 @@ func (e *Engine) tryRemediateAsync(info CheckInfo) {
 	ref := info.Ref
 	ref.Defaults()
 
-	// Look up the allowed action
-	action, err := e.repo.GetAction(ref.ActionRef)
-	if err != nil {
-		e.logger.Printf("[remediation] action %q not found for check %s: %v", ref.ActionRef, info.CheckID, err)
-		return
+	// Resolve the action: prefer inline, fall back to registry lookup
+	var action AllowedAction
+	if info.InlineAction != nil {
+		action = *info.InlineAction
+	} else {
+		a, err := e.repo.GetAction(ref.ActionRef)
+		if err != nil {
+			e.logger.Printf("[remediation] action %q not found for check %s: %v", ref.ActionRef, info.CheckID, err)
+			return
+		}
+		action = a
 	}
 
 	// Check max concurrent
@@ -167,9 +177,15 @@ func (e *Engine) ManualRemediate(info CheckInfo, actor string) (*Attempt, error)
 	ref := info.Ref
 	ref.Defaults()
 
-	action, err := e.repo.GetAction(ref.ActionRef)
-	if err != nil {
-		return nil, fmt.Errorf("action %q not found: %w", ref.ActionRef, err)
+	var action AllowedAction
+	if info.InlineAction != nil {
+		action = *info.InlineAction
+	} else {
+		a, err := e.repo.GetAction(ref.ActionRef)
+		if err != nil {
+			return nil, fmt.Errorf("action %q not found: %w", ref.ActionRef, err)
+		}
+		action = a
 	}
 
 	// Check cooldown

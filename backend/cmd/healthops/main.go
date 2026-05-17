@@ -626,6 +626,7 @@ func main() {
 								NotifyOnRemediation:         c.Remediation.NotifyOnRemediation,
 								EscalateOnExhaustion:        c.Remediation.EscalateOnExhaustion,
 							}
+							info.InlineAction = buildInlineAction(c)
 						}
 						return info, nil
 					}
@@ -692,9 +693,9 @@ func main() {
 				}
 				// Enable engine with dry-run=false for demo
 				_ = remRepo.SaveConfig(remediation.GlobalConfig{
-					Enabled:         true,
-					DryRun:          false,
-					MaxConcurrent:   2,
+					Enabled:          true,
+					DryRun:           false,
+					MaxConcurrent:    2,
 					OutputLimitBytes: 8192,
 				})
 				logger.Printf("Seeded %d demo remediation actions", len(seedActions))
@@ -737,8 +738,12 @@ func triggerRemediation(engine *remediation.Engine, store monitoring.Store, inci
 		if c.ID != incident.CheckID {
 			continue
 		}
-		if c.Remediation == nil || c.Remediation.ActionRef == "" {
+		if c.Remediation == nil {
 			return // no remediation configured for this check
+		}
+		// Allow either inline (Type+Command set) or registry reference (ActionRef set)
+		if c.Remediation.ActionRef == "" && c.Remediation.Type == "" {
+			return
 		}
 
 		info := remediation.CheckInfo{
@@ -757,6 +762,7 @@ func triggerRemediation(engine *remediation.Engine, store monitoring.Store, inci
 				NotifyOnRemediation:         c.Remediation.NotifyOnRemediation,
 				EscalateOnExhaustion:        c.Remediation.EscalateOnExhaustion,
 			},
+			InlineAction: buildInlineAction(c),
 		}
 		if c.SSH != nil {
 			info.SSH = &remediation.SSHConfig{
@@ -775,6 +781,35 @@ func triggerRemediation(engine *remediation.Engine, store monitoring.Store, inci
 		return
 	}
 	logger.Printf("[remediation] check %s not found in store — skipping", incident.CheckID)
+}
+
+// buildInlineAction constructs an AllowedAction from a check's inline
+// remediation fields. Returns nil if the check uses the registry (ActionRef set)
+// or has no inline action configured.
+func buildInlineAction(c monitoring.CheckConfig) *remediation.AllowedAction {
+	if c.Remediation == nil || c.Remediation.Type == "" {
+		return nil
+	}
+	risk := remediation.RiskLevel(c.Remediation.Risk)
+	if risk == "" {
+		risk = remediation.RiskLow
+	}
+	timeout := c.Remediation.TimeoutSeconds
+	if timeout <= 0 {
+		timeout = 30
+	}
+	return &remediation.AllowedAction{
+		ID:             "inline-" + c.ID,
+		Name:           c.Name + " remediation",
+		Type:           remediation.ActionType(c.Remediation.Type),
+		Command:        c.Remediation.Command,
+		URL:            c.Remediation.URL,
+		Method:         c.Remediation.Method,
+		Headers:        c.Remediation.Headers,
+		TimeoutSeconds: timeout,
+		Risk:           risk,
+		Description:    c.Remediation.Description,
+	}
 }
 
 func resolvePath(envKey string, candidates ...string) string {

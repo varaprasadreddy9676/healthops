@@ -8,7 +8,6 @@ import {
 } from 'recharts'
 import { checksApi } from "@/features/checks/api/checks"
 import { analyticsApi } from "@/features/analytics/api/analytics"
-import { remediationApi } from "@/features/remediation/api/remediation"
 import { StatusBadge } from "@/shared/components/StatusBadge"
 import { MetricCard } from "@/shared/components/MetricCard"
 import { LoadingState } from "@/shared/components/LoadingState"
@@ -349,11 +348,10 @@ export default function CheckDetail() {
             <button
               onClick={() => setResultView('table')}
               title="Table view"
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                resultView === 'table'
-                  ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${resultView === 'table'
+                ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
             >
               <List className="h-3.5 w-3.5" />
               Table
@@ -361,11 +359,10 @@ export default function CheckDetail() {
             <button
               onClick={() => setResultView('chart')}
               title="Chart view"
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                resultView === 'chart'
-                  ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              }`}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${resultView === 'chart'
+                ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
             >
               <BarChart2 className="h-3.5 w-3.5" />
               Chart
@@ -650,11 +647,10 @@ export default function CheckDetail() {
                     {channels.map(ch => (
                       <label
                         key={ch.id}
-                        className={`flex items-center gap-3 rounded-lg border p-3 text-sm cursor-pointer transition-colors ${
-                          (form.notificationChannelIds || []).includes(ch.id)
-                            ? 'border-blue-300 bg-blue-50/50 dark:border-blue-700 dark:bg-blue-950/30'
-                            : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-750'
-                        }`}
+                        className={`flex items-center gap-3 rounded-lg border p-3 text-sm cursor-pointer transition-colors ${(form.notificationChannelIds || []).includes(ch.id)
+                          ? 'border-blue-300 bg-blue-50/50 dark:border-blue-700 dark:bg-blue-950/30'
+                          : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-750'
+                          }`}
                       >
                         <input
                           type="checkbox"
@@ -716,19 +712,31 @@ function RemediationConfigSection({
   form: Partial<CheckConfig>
   setForm: React.Dispatch<React.SetStateAction<Partial<CheckConfig>>>
 }) {
-  const { data: actionsData } = useQuery({
-    queryKey: ['remediation-actions'],
-    queryFn: remediationApi.listActions,
-  })
-  const actions = actionsData?.actions ?? []
-
   const rem = form.remediation
-  const hasRemediation = !!rem?.actionRef
+  const hasRemediation = !!(rem && (rem.type || rem.actionRef))
 
   const setRemField = (key: string, value: unknown) => {
     setForm(prev => ({
       ...prev,
-      remediation: { ...(prev.remediation || { actionRef: '' }), [key]: value },
+      remediation: { ...(prev.remediation || {}), [key]: value },
+    }))
+  }
+
+  const enableRemediation = () => {
+    setForm(prev => ({
+      ...prev,
+      remediation: {
+        type: 'ssh_command',
+        command: '',
+        timeoutSeconds: 30,
+        risk: 'low',
+        maxAttempts: 3,
+        cooldownSeconds: 300,
+        verifyAfterSeconds: 10,
+        notifyOnRemediation: true,
+        escalateOnExhaustion: true,
+        ...(prev.remediation || {}),
+      },
     }))
   }
 
@@ -756,86 +764,156 @@ function RemediationConfigSection({
         )}
       </div>
       <p className="text-xs text-slate-500 mb-3">
-        Link a pre-approved action to automatically fix this check when it fails.
+        When this check fails, automatically run a command to fix it. See attempt history under Auto-Heal.
       </p>
 
-      {actions.length === 0 ? (
-        <p className="text-xs text-slate-400 italic">
-          No remediation actions available. Create actions in the Auto-Heal page first.
-        </p>
+      {!hasRemediation ? (
+        <button
+          type="button"
+          onClick={enableRemediation}
+          className="text-xs font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400"
+        >
+          + Add remediation command
+        </button>
       ) : (
         <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Action</label>
-            <select
-              className={inputCls}
-              value={rem?.actionRef ?? ''}
-              onChange={e => setRemField('actionRef', e.target.value)}
-            >
-              <option value="">None (no auto-remediation)</option>
-              {actions.map(a => (
-                <option key={a.id} value={a.id}>
-                  {a.name} — {a.type} ({a.id})
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Type</label>
+              <select
+                className={inputCls}
+                value={rem?.type ?? 'ssh_command'}
+                onChange={e => setRemField('type', e.target.value)}
+              >
+                <option value="ssh_command">SSH command</option>
+                <option value="command">Local command</option>
+                <option value="http">HTTP call</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Risk</label>
+              <select
+                className={inputCls}
+                value={rem?.risk ?? 'low'}
+                onChange={e => setRemField('risk', e.target.value)}
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Timeout (s)</label>
+              <input
+                type="number"
+                className={inputCls}
+                value={rem?.timeoutSeconds ?? 30}
+                onChange={e => setRemField('timeoutSeconds', Number(e.target.value))}
+                min={1}
+              />
+            </div>
           </div>
 
-          {hasRemediation && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Max Attempts</label>
-                <input
-                  type="number"
-                  className={inputCls}
-                  value={rem?.maxAttempts ?? 3}
-                  onChange={e => setRemField('maxAttempts', Number(e.target.value))}
-                  min={1}
-                  max={10}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Cooldown (s)</label>
-                <input
-                  type="number"
-                  className={inputCls}
-                  value={rem?.cooldownSeconds ?? 300}
-                  onChange={e => setRemField('cooldownSeconds', Number(e.target.value))}
-                  min={0}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Verify After (s)</label>
-                <input
-                  type="number"
-                  className={inputCls}
-                  value={rem?.verifyAfterSeconds ?? 10}
-                  onChange={e => setRemField('verifyAfterSeconds', Number(e.target.value))}
-                  min={0}
-                />
-              </div>
-              <div className="col-span-2 sm:col-span-3 flex flex-wrap gap-4">
-                <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
+          {rem?.type === 'http' ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="sm:col-span-1">
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Method</label>
+                  <select
+                    className={inputCls}
+                    value={rem?.method ?? 'POST'}
+                    onChange={e => setRemField('method', e.target.value)}
+                  >
+                    <option>GET</option>
+                    <option>POST</option>
+                    <option>PUT</option>
+                    <option>DELETE</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-3">
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">URL</label>
                   <input
-                    type="checkbox"
-                    checked={rem?.notifyOnRemediation ?? false}
-                    onChange={e => setRemField('notifyOnRemediation', e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600"
+                    type="text"
+                    className={inputCls}
+                    placeholder="https://api.example.com/restart"
+                    value={rem?.url ?? ''}
+                    onChange={e => setRemField('url', e.target.value)}
                   />
-                  Notify on remediation
-                </label>
-                <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={rem?.escalateOnExhaustion ?? false}
-                    onChange={e => setRemField('escalateOnExhaustion', e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600"
-                  />
-                  Escalate when attempts exhausted
-                </label>
+                </div>
               </div>
+            </>
+          ) : (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                {rem?.type === 'command' ? 'Command' : 'SSH command'}
+              </label>
+              <input
+                type="text"
+                className={`${inputCls} font-mono`}
+                placeholder={rem?.type === 'command' ? 'systemctl restart nginx' : 'service nginx restart'}
+                value={rem?.command ?? ''}
+                onChange={e => setRemField('command', e.target.value)}
+              />
+              {rem?.type === 'ssh_command' && (
+                <p className="mt-1 text-[11px] text-slate-400">Runs over the check's SSH connection (configure SSH above if not set).</p>
+              )}
             </div>
           )}
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Max Attempts</label>
+              <input
+                type="number"
+                className={inputCls}
+                value={rem?.maxAttempts ?? 3}
+                onChange={e => setRemField('maxAttempts', Number(e.target.value))}
+                min={1}
+                max={10}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Cooldown (s)</label>
+              <input
+                type="number"
+                className={inputCls}
+                value={rem?.cooldownSeconds ?? 300}
+                onChange={e => setRemField('cooldownSeconds', Number(e.target.value))}
+                min={0}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Verify After (s)</label>
+              <input
+                type="number"
+                className={inputCls}
+                value={rem?.verifyAfterSeconds ?? 10}
+                onChange={e => setRemField('verifyAfterSeconds', Number(e.target.value))}
+                min={0}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-4 pt-1">
+            <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={rem?.notifyOnRemediation ?? false}
+                onChange={e => setRemField('notifyOnRemediation', e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600"
+              />
+              Notify on remediation
+            </label>
+            <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={rem?.escalateOnExhaustion ?? false}
+                onChange={e => setRemField('escalateOnExhaustion', e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600"
+              />
+              Escalate when attempts exhausted
+            </label>
+          </div>
         </div>
       )}
     </div>
