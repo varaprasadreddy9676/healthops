@@ -8,23 +8,23 @@
 
 ## 1) Backend Verification
 - [x] `go test ./...` passes
-Evidence: 2026-04-18 `ok  	medics-health-check/backend/internal/monitoring	46.026s`
+Evidence: 2026-04-18 `ok  	health-ops/backend/internal/monitoring	46.026s`
 
 - [x] `go test -race ./internal/monitoring -run 'Test(AllMutatingEndpointsRequireAuth|E2E_FullIncidentLifecycle|POSTChecksContract|MetricsEndpoint)$' -count=1` passes
-Evidence: 2026-04-18 `ok  	medics-health-check/backend/internal/monitoring	1.796s`
+Evidence: 2026-04-18 `ok  	health-ops/backend/internal/monitoring	1.796s`
 
 - [x] Contract tests pass:
 `go test ./internal/monitoring -run 'Test(GET|POST|PUT|DELETE|ResponseEnvelope|ErrorResponses|FieldType|IncidentEndpointsUnAvailable|AuditEndpointsUnAvailable)' -count=1`
-Evidence: 2026-04-18 `ok  	medics-health-check/backend/internal/monitoring	0.520s`
+Evidence: 2026-04-18 `ok  	health-ops/backend/internal/monitoring	0.520s`
 
 - [x] E2E core flows pass:
 `go test ./internal/monitoring -run 'TestE2E_(FullIncidentLifecycle|AlertDeduplication|CooldownEnforcement|RecoveryAutoResolve|AuditTrail|AuthEnforcement)$' -count=1`
-Evidence: 2026-04-18 `ok  	medics-health-check/backend/internal/monitoring	1.364s`
+Evidence: 2026-04-18 `ok  	health-ops/backend/internal/monitoring	1.364s`
 
 ## 2) Security Verification
 - [x] Security audit suite passes:
 `go test ./internal/monitoring -run 'Test(AllMutatingEndpointsRequireAuth|InvalidAuthRejected|ValidAuthAccepted|ReadEndpointsBypassAuth|NoSecretsInAPIResponses|InputValidation|TimingAttackResistance|SecurityHeaders|RateLimitingStatus|CSRFProtectionStatus|SecretsInLogsStatus)$' -count=1`
-Evidence: 2026-04-18 `ok  	medics-health-check/backend/internal/monitoring	0.409s`
+Evidence: 2026-04-18 `ok  	health-ops/backend/internal/monitoring	0.409s`
 
 - [x] Mutating APIs return `401` without valid auth.
 Evidence: 2026-04-18 live check on auth-enabled instance: `POST /api/v1/checks` -> `401` (without auth), `201` (with `admin:secret`).

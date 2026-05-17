@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"medics-health-check/backend/internal/monitoring/cryptoutil"
+	"health-ops/backend/internal/monitoring/cryptoutil"
 )
 
 type fakeServerRepository struct {

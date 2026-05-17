@@ -58,7 +58,7 @@ type Service struct {
 
 ```go
 import (
-    "github.com/medics-health-check/backend/internal/monitoring/repositories"
+    "github.com/health-ops/backend/internal/monitoring/repositories"
 )
 
 func NewService(cfg *Config, store Store, logger *log.Logger) *Service {

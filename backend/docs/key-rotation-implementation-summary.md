@@ -132,7 +132,7 @@ go test -c ./internal/monitoring/ai/repositories  # Tests
 ✅ **Tests pass**
 ```bash
 go test -short ./internal/monitoring/ai/repositories/...
-# ok medics-health-check/backend/internal/monitoring/ai/repositories 0.491s
+# ok health-ops/backend/internal/monitoring/ai/repositories 0.491s
 ```
 
 ## Usage Examples

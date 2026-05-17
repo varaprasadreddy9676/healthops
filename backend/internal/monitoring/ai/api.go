@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 // AIAPIHandler handles all AI-related API endpoints.

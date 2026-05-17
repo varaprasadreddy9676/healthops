@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"health-ops/backend/internal/httpx"
 	"io"
 	"log"
-	"medics-health-check/backend/internal/httpx"
 	"net"
 	"net/http"
 	"os"
@@ -60,6 +60,7 @@ type Service struct {
 	chatAPI              *AIChatHandler
 	consecutiveTracker   map[string]*consecutiveCount // checkID → consecutive failure/success counts
 	consecutiveMu        sync.Mutex                   // guards consecutiveTracker (scheduler may invoke callback from multiple goroutines)
+	isDemoMode           bool                         // true if running demo.json config
 	// alertRuleRepo     repositories.AlertRuleRepository // TODO: uncomment when needed
 }
 
@@ -406,6 +407,12 @@ func (s *Service) SetServerRepo(repo ServerRepository) {
 // MongoDB connectivity. The service cannot operate without MongoDB.
 func (s *Service) SetMongoHealthCheck(fn func(ctx context.Context) error) {
 	s.mongoHealthCheck = fn
+}
+
+// SetDemoMode marks this service as running in demo mode (e.g., using demo.json config).
+// When true, certain UI features like the "Use default" login button are shown.
+func (s *Service) SetDemoMode(demo bool) {
+	s.isDemoMode = demo
 }
 
 // SetDegradedHealthCheck enables fail-closed write protection for database-backed

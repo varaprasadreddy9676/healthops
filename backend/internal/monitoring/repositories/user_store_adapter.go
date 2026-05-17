@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 // NewMongoDBUserStore creates a MongoDB-backed UserStore that wraps MongoUserRepository

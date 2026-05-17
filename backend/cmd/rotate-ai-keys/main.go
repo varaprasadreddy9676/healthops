@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 
-	"medics-health-check/backend/internal/monitoring/ai/repositories"
+	"health-ops/backend/internal/monitoring/ai/repositories"
 )
 
 func main() {

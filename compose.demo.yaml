@@ -1,21 +1,47 @@
+# HealthOps Demo Environment Docker Compose
+#
+# QUICK START:
+#   docker compose -f compose.demo.yaml up -d
+#   Open: http://localhost:18080
+#   Login: admin / healthops-demo-admin
+#
+# This demo environment includes:
+#   - HealthOps monitoring service with auto-remediation
+#   - MongoDB for persistence
+#   - MySQL database with active workload
+#   - Demo API (checkout service with synthetic failures)
+#   - Local demo AI provider (mock RCA)
+#   - Multiple demo servers (Linux containers with SSH)
+#   - Nginx, Redis, log emitters (full microservices-like setup)
+#
+# CLEANUP:
+#   docker compose -f compose.demo.yaml down -v
+#
+# NOTE: This is a DEMO environment. For production, use compose.yaml instead.
+
 name: healthops-demo
 
 services:
+  # HealthOps monitoring service - preloaded with demo checks and auto-remediation
   healthops:
     build: .
     ports:
       - "${HEALTHOPS_DEMO_BIND:-0.0.0.0}:${HEALTHOPS_PORT:-18080}:8080"
     environment:
+      # Use demo configuration with pre-seeded checks, servers, and remediation actions
       CONFIG_PATH: /app/config/demo.json
       DATA_DIR: /app/data
       FRONTEND_DIR: /app/frontend/dist
       MONGODB_URI: mongodb://mongo:27017
       MONGODB_DATABASE: ${MONGODB_DATABASE:-healthops}
       MONGODB_COLLECTION_PREFIX: ${MONGODB_COLLECTION_PREFIX:-healthops}
+      # MySQL monitor DSN - connects to demo MySQL instance
       MYSQL_DSN: ${MYSQL_USER:-healthops}:${MYSQL_PASSWORD:-healthops123}@tcp(mysql:3306)/healthops?timeout=3s&readTimeout=5s&writeTimeout=5s&parseTime=true
+      # Demo admin credentials (pre-configured)
       HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD: ${HEALTHOPS_DEMO_ADMIN_PASSWORD:-healthops-demo-admin}
       HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL: demo@healthops.local
       HEALTHOPS_BOOTSTRAP_ADMIN_RESET: "true"
+      # Auto-wire the local mock AI provider for demo RCA
       HEALTHOPS_BOOTSTRAP_AI_PROVIDER_ID: local-demo-ai
       HEALTHOPS_BOOTSTRAP_AI_PROVIDER_NAME: Local Demo AI
       HEALTHOPS_BOOTSTRAP_AI_PROVIDER_TYPE: custom
@@ -53,6 +79,7 @@ services:
       retries: 3
       start_period: 10s
 
+  # MongoDB persistence - required for all state (checks, incidents, results, AI queue)
   mongo:
     image: mongo:7
     volumes:
@@ -85,6 +112,8 @@ services:
       retries: 10
       start_period: 30s
 
+  # Nginx web server - serves demo static content
+  # HealthOps checks this service for HTTP availability
   nginx:
     build: ./docker/nginx-demo
     restart: unless-stopped
@@ -94,6 +123,7 @@ services:
       timeout: 3s
       retries: 3
 
+  # Redis cache - used by demo-api for session storage
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -103,6 +133,7 @@ services:
       timeout: 3s
       retries: 3
 
+  # Echo server - simple HTTP service for basic connectivity testing
   echo-server:
     image: hashicorp/http-echo
     command: [ "-text=healthy", "-listen=:9000" ]
@@ -111,6 +142,8 @@ services:
     # an exec-based healthcheck is not possible. The healthops `echo-server`
     # API check covers liveness from outside the container.
 
+    # Demo API (Checkout Service) - simulates production API with synthetic failures
+    # HealthOps runs synthetic checkout tests and log ingestion against this service
   demo-api:
     build: ./docker/demo-api
     ports:
@@ -123,6 +156,8 @@ services:
       retries: 3
       start_period: 5s
 
+  # Demo AI Provider - mock OpenAI-compatible service for demo RCA analysis
+  # Returns demo-appropriate root-cause hypotheses for all incident types
   demo-ai-provider:
     build: ./docker/demo-ai-provider
     environment:
@@ -135,6 +170,8 @@ services:
       retries: 3
       start_period: 5s
 
+  # Log Emitter - sends simulated application logs to HealthOps for ingestion
+  # Demonstrates log-based alerting (error families, patterns, exceptions)
   demo-log-emitter:
     build: ./docker/demo-log-emitter
     environment:
@@ -147,6 +184,8 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # MySQL Workload Generator - continuous synthetic transactions on demo MySQL
+  # Demonstrates MySQL monitoring and slow-query alerting
   mysql-workload:
     image: mysql:8.0
     command: [ "sh", "/demo/workload.sh" ]
@@ -163,7 +202,8 @@ services:
       mysql:
         condition: service_healthy
     restart: unless-stopped
-
+  # Demo Linux Server 1 - SSH target for remote process/command checks
+  # Demonstrates SSH connectivity and auto-remediation (restart nginx, etc.)
   linux-server-1:
     build: ./docker/linux-server
     ports:
@@ -178,6 +218,8 @@ services:
       retries: 3
       start_period: 5s
 
+  # Demo Linux Server 2 - Secondary SSH target for high-availability patterns
+  # Demonstrates incident correlation across multiple servers
   linux-server-2:
     build: ./docker/linux-server
     ports:

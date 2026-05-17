@@ -11,7 +11,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 // MySQLLiveSnapshot is a lightweight real-time snapshot streamed via SSE.

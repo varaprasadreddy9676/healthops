@@ -21,7 +21,7 @@ A database-agnostic degraded mode implementation for HealthOps monitoring system
 ## Quick Start
 
 ```go
-import "github.com/medics-health-check/backend/internal/monitoring/repositories"
+import "github.com/health-ops/backend/internal/monitoring/repositories"
 
 // Create health check function
 healthCheck := func(ctx context.Context) error {

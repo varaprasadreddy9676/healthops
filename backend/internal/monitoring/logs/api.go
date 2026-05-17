@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 // APIHandler handles log intelligence HTTP endpoints.

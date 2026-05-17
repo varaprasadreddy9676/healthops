@@ -10,7 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 var (

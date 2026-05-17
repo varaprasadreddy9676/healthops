@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 func TestFileNotificationOutbox_EnqueueAndListPending(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring/notify"
+	"health-ops/backend/internal/monitoring/notify"
 )
 
 func TestChannelStoreAdapterRoundTrip(t *testing.T) {

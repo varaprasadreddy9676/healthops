@@ -8,10 +8,10 @@ export function HeroSection() {
       <div className="mx-auto grid max-w-[1440px] grid-cols-1 gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[minmax(0,0.88fr)_minmax(420px,0.62fr)] lg:px-8 lg:py-20">
         <div className="min-w-0 flex flex-col justify-center">
           <h1 className="max-w-4xl text-4xl font-bold leading-[1.04] tracking-normal text-slate-950 sm:text-5xl lg:text-6xl">
-            Uptime, incidents, and status pages in one self-hosted stack.
+            Detect, heal, and explain — before you open the dashboard.
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-            Open-source uptime checks, log ingestion, incident response, status pages, and MySQL triage in one self-hosted service. Bring your own AI key for root-cause analysis or run without it.
+            Open-source uptime checks, log ingestion, incident response, auto-remediation, status pages, and MySQL triage in one self-hosted service. Bring your own AI key for root-cause analysis or run without it.
           </p>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
             MongoDB-backed persistence. Built for small teams, not distributed tracing or high-volume log aggregation.

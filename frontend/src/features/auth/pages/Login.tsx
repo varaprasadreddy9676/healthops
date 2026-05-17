@@ -1,7 +1,13 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertCircle, ArrowRight, Heart, KeyRound, Sparkles } from 'lucide-react'
 import { useAuth } from '@/shared/hooks/useAuth'
+
+interface ConfigResponse {
+  data: {
+    isDemoMode: boolean
+  }
+}
 
 export default function Login() {
   const { login } = useAuth()
@@ -9,10 +15,20 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [isDemoMode, setIsDemoMode] = useState(false)
 
-  const isLocalHost = useMemo(() => {
-    if (typeof window === 'undefined') return false
-    return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+  // Fetch config to check if demo mode
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch('/api/v1/config')
+        const result: ConfigResponse = await response.json()
+        setIsDemoMode(result.data.isDemoMode)
+      } catch {
+        setIsDemoMode(false)
+      }
+    }
+    fetchConfig()
   }, [])
 
   async function handleSubmit(e: FormEvent) {
@@ -67,7 +83,7 @@ export default function Login() {
               </p>
             </div>
 
-            {isLocalHost && (
+            {isDemoMode && (
               <button
                 type="button"
                 onClick={fillDefaultCredentials}

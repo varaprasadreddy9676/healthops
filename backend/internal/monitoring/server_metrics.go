@@ -1,7 +1,7 @@
 package monitoring
 
 import (
-	"medics-health-check/backend/internal/util/jsonl"
+	"health-ops/backend/internal/util/jsonl"
 	"os"
 	"path/filepath"
 	"sort"

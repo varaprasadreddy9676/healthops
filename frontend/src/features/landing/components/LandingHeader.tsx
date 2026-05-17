@@ -16,6 +16,7 @@ export function LandingHeader() {
         <nav className="hidden items-center gap-5 text-sm font-medium text-slate-600 lg:flex">
           <a href="#capabilities" className="hover:text-slate-950">Capabilities</a>
           <a href="#screens" className="hover:text-slate-950">Screens</a>
+          <a href="#auto-heal" className="hover:text-slate-950">Auto-Heal</a>
           <a href="#engineering" className="hover:text-slate-950">Engineering</a>
           <a href="#replacement" className="hover:text-slate-950">Compare</a>
           <Link to="/help/getting-started" className="hover:text-slate-950">Docs</Link>

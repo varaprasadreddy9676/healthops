@@ -15,7 +15,7 @@ import (
 	"text/template"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 // NotificationPayload is the structured data sent to channels.

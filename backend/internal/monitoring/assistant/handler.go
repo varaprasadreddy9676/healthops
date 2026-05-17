@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 // AIProvider is a function that calls the AI with system + user messages.

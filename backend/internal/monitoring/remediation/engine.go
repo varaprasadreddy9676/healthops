@@ -20,7 +20,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"medics-health-check/backend/internal/monitoring/cryptoutil"
+	"health-ops/backend/internal/monitoring/cryptoutil"
 )
 
 // SSHConfig holds credentials needed to SSH into a remote server.

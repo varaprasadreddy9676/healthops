@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"medics-health-check/backend/internal/monitoring/cryptoutil"
+	"health-ops/backend/internal/monitoring/cryptoutil"
 )
 
 // TestMain initializes the shared secrets encryption key in a temp dir so that

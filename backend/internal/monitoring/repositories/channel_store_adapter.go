@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"medics-health-check/backend/internal/monitoring/notify"
+	"health-ops/backend/internal/monitoring/notify"
 )
 
 // ChannelStoreAdapter adapts MongoChannelRepository to notify.ChannelStore.

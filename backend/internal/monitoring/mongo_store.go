@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"health-ops/backend/internal/monitoring/cryptoutil"
 	"log"
 	"sync"
 	"time"
@@ -68,9 +69,61 @@ func NewMongoStore(client *mongo.Client, dbName, prefix string, retentionDays in
 		return nil, fmt.Errorf("read initial state from mongo: %w", err)
 	}
 
+	// Lazy-migrate: if existing checks in MongoDB have SSH/MySQL blocks
+	// with no encrypted password (bson:"-" silently dropped plaintext on
+	// previous seeds), recover from the seed config and re-persist.
+	if len(state.Checks) > 0 && len(seedChecks) > 0 {
+		seedMap := make(map[string]*CheckConfig, len(seedChecks))
+		for i := range seedChecks {
+			seedMap[seedChecks[i].ID] = &seedChecks[i]
+		}
+		migrated := 0
+		for i := range state.Checks {
+			c := &state.Checks[i]
+			seed, ok := seedMap[c.ID]
+			if !ok {
+				continue
+			}
+			changed := false
+			if c.SSH != nil && seed.SSH != nil &&
+				c.SSH.Password == "" && c.SSH.PasswordEnc == "" && c.SSH.PasswordEnv == "" &&
+				c.SSH.KeyPath == "" && c.SSH.KeyEnv == "" &&
+				seed.SSH.Password != "" {
+				enc, err := cryptoutil.Encrypt(seed.SSH.Password)
+				if err == nil {
+					c.SSH.PasswordEnc = enc
+					changed = true
+				}
+			}
+			if c.MySQL != nil && seed.MySQL != nil &&
+				c.MySQL.Password == "" && c.MySQL.PasswordEnc == "" &&
+				seed.MySQL.Password != "" {
+				enc, err := cryptoutil.Encrypt(seed.MySQL.Password)
+				if err == nil {
+					c.MySQL.PasswordEnc = enc
+					changed = true
+				}
+			}
+			if changed {
+				_ = s.UpsertCheck(state.Checks[i])
+				migrated++
+			}
+		}
+		if migrated > 0 {
+			logger.Printf("Migrated %d check(s) with missing encrypted credentials from seed config", migrated)
+		}
+	}
+
 	// Seed checks on first run (no checks in Mongo yet)
 	if len(state.Checks) == 0 && len(seedChecks) > 0 {
 		state.Checks = cloneChecks(seedChecks)
+		// Encrypt any plaintext passwords in seed checks before persisting.
+		// Password fields have bson:"-" and would be silently dropped without this.
+		for i := range state.Checks {
+			if err := prepareCheckSecrets(&state.Checks[i], nil); err != nil {
+				logger.Printf("WARNING: failed to encrypt seed check %q secrets: %v", state.Checks[i].ID, err)
+			}
+		}
 		state.UpdatedAt = time.Now().UTC()
 		if err := s.writeChecksToMongo(ctx, state.Checks); err != nil {
 			return nil, fmt.Errorf("seed checks to mongo: %w", err)

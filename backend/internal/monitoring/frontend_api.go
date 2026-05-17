@@ -23,6 +23,7 @@ type SafeConfigView struct {
 	AllowCommandChecks   bool         `json:"allowCommandChecks"`
 	TotalChecks          int          `json:"totalChecks"`
 	TotalServers         int          `json:"totalServers"`
+	IsDemoMode           bool         `json:"isDemoMode"`
 }
 
 // ConfigUpdate carries the subset of config fields safe to change at runtime.
@@ -152,6 +153,7 @@ func (s *Service) handleConfigGet(w http.ResponseWriter, _ *http.Request) {
 		AllowCommandChecks:   s.cfg.AllowCommandChecks,
 		TotalChecks:          len(s.cfg.Checks),
 		TotalServers:         len(s.cfg.Servers),
+		IsDemoMode:           s.isDemoMode,
 	}
 	WriteAPIResponse(w, http.StatusOK, NewAPIResponse(view))
 }

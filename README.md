@@ -11,7 +11,7 @@
 [![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=flat-square&logo=mongodb&logoColor=white)](https://www.mongodb.com)
 
 Monitor servers, APIs, databases, and services. Get alerted when things break.
-**AI writes the root-cause analysis before you open the dashboard.**
+**AI writes the root-cause analysis and auto-heal fixes the problem before you open the dashboard.**
 
 One `docker compose up`. No agents. No per-host fees. No seat limits.
 
@@ -68,6 +68,7 @@ One `docker compose up`. No agents. No per-host fees. No seat limits.
 | MySQL deep monitoring | Agent | Agent | Limited | **Agentless** |
 | SSH server monitoring | No | No | Complex | **Modern UI** |
 | Auto AI root-cause analysis | Enterprise | Enterprise | No | **Free (BYOK)** |
+| Auto-remediation | Enterprise | No | Plugin-based | **Built-in** |
 | Self-hosted | No | No | Yes | **Yes** |
 | Cost (5-person team) | $300-500/mo | $250/mo | Your time | **$6-10/mo** |
 
@@ -131,6 +132,11 @@ See the [Deployment Guide](docs/deployment-guide.md) for TLS, reverse proxy, and
 | `log` | Log file modification recency | `/var/log/app.log` |
 | `mysql` | 30+ MySQL status variables, delta rates, 9 alert rules | DSN via env var |
 | `ssh` | Remote server CPU, memory, disk, load over SSH | Host + SSH key |
+| `ssl` | SSL certificate expiry and chain validity | `example.com` |
+| `dns` | DNS record resolution and TTL | `api.example.com` |
+| `ping` | ICMP reachability and latency | `10.0.0.1` |
+| `domain` | Domain registration and expiry | `example.com` |
+| `heartbeat` | Cron / job liveness via inbound ping | Ping URL |
 
 ---
 
@@ -156,6 +162,7 @@ Check fails → Incident created → Evidence captured → AI enqueued
 | Custom | Varies | Any OpenAI-compatible API |
 
 API keys are encrypted with AES-256-GCM at rest.
+MySQL and SSH passwords can be stored inline (encrypted at rest) or via environment variables.
 
 **Set up Ollama (free, local):**
 ```bash
@@ -312,9 +319,10 @@ healthops/
 - JWT auth with role-based access (admin / ops)
 - Bcrypt passwords, login rate-limited (10 attempts/min per IP)
 - Security headers (CSP, X-Frame-Options, HSTS, Referrer-Policy)
-- AES-256-GCM encryption for AI API keys at rest
+- AES-256-GCM encryption for AI API keys and inline credentials at rest
 - SSH host key fingerprint verification
 - Command checks disabled by default
+- Remediation actions are registry-gated to prevent RCE
 
 Found a vulnerability? See [SECURITY.md](SECURITY.md).
 

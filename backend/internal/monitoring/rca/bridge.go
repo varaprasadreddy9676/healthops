@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 // AIServiceBridge adapts the AI service's CallProvider method to the RCA AIProvider interface.

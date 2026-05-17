@@ -70,7 +70,7 @@ We keep package root `backend/internal/monitoring` and add focused modules.
 ## 5. Data Model
 
 ### 5.1 Config additions
-Add to [types.go](/Users/sai/dev/work/medics-health-check/backend/internal/monitoring/types.go):
+Add to [types.go](/Users/sai/dev/work/health-ops/backend/internal/monitoring/types.go):
 1. New check type: `mysql`
 2. `CheckConfig.MySQL *MySQLCheckConfig`
 3. `MySQLCheckConfig` fields:
@@ -161,7 +161,7 @@ Implementation notes:
 3. Evidence failure must be attached as snapshot payload with error metadata
 
 ## 8. API Additions
-Add endpoints in [service.go](/Users/sai/dev/work/medics-health-check/backend/internal/monitoring/service.go) via `mysql_api.go` handlers.
+Add endpoints in [service.go](/Users/sai/dev/work/health-ops/backend/internal/monitoring/service.go) via `mysql_api.go` handlers.
 
 Read-only:
 1. `GET /api/v1/mysql/samples?checkId=...&limit=...`

@@ -1,7 +1,7 @@
 # Security Audit Report
 
 ## Scope
-- Project: `medics-health-check/backend`
+- Project: `health-ops/backend`
 - Audit date: 2026-04-18
 - Scope focus: API auth enforcement, input validation, secrets exposure, command execution controls, auditability.
 

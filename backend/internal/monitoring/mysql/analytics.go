@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 // MySQLHealthSummary is a single-card summary of MySQL health.

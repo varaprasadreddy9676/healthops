@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
-	"medics-health-check/backend/internal/util/jsonl"
+	"health-ops/backend/internal/monitoring"
+	"health-ops/backend/internal/util/jsonl"
 )
 
 // NotificationOutboxRepository defines generic notification queue operations.

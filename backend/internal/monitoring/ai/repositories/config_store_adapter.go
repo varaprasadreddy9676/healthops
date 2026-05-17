@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring/ai"
+	"health-ops/backend/internal/monitoring/ai"
 )
 
 // AIConfigStoreInterface is the interface that all config stores (legacy file-backed and MongoDB) must implement.

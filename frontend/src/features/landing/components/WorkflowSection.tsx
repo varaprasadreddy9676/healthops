@@ -7,7 +7,7 @@ export function WorkflowSection() {
         <div className="grid gap-10 lg:grid-cols-[0.72fr_1fr] lg:items-start">
           <div>
             <h2 className="max-w-2xl text-3xl font-bold leading-tight sm:text-5xl">
-              From failing check to recovery notification.
+              From failing check to auto-heal to recovery notification.
             </h2>
           </div>
 

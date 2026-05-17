@@ -10,7 +10,7 @@ export function CapabilitiesSection() {
               One operating surface for the first 15 minutes of an incident.
             </h2>
             <p className="mt-4 max-w-xl text-base leading-7 text-slate-600">
-              A check fails, an incident opens, the right people get notified, and recovery closes the loop. The goal is fewer tabs when something breaks.
+              A check fails, an incident opens, auto-heal fixes it, the right people get notified, and recovery closes the loop. The goal is fewer tabs and less toil when something breaks.
             </p>
           </div>
 

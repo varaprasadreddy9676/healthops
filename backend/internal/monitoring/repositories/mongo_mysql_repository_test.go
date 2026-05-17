@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
-	"medics-health-check/backend/internal/util/mongotest"
+	"health-ops/backend/internal/monitoring"
+	"health-ops/backend/internal/util/mongotest"
 )
 
 func newTestMySQLRepo(t *testing.T) *MongoMySQLRepository {

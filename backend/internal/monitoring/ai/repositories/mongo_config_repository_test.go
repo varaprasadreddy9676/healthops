@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"medics-health-check/backend/internal/util/mongotest"
+	"health-ops/backend/internal/util/mongotest"
 )
 
 // TestMongoAIConfigRepository tests the MongoDB AI config repository.

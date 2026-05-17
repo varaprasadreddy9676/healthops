@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 // --- AI Config Store Tests ---

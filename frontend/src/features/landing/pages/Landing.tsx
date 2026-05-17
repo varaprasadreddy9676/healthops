@@ -1,3 +1,4 @@
+import { AutoHealSection } from '@/features/landing/components/AutoHealSection'
 import { CapabilitiesSection } from '@/features/landing/components/CapabilitiesSection'
 import { EngineeringSection } from '@/features/landing/components/EngineeringSection'
 import { Footer } from '@/features/landing/components/Footer'
@@ -16,6 +17,7 @@ export default function Landing() {
         <HeroSection />
         <CapabilitiesSection />
         <ScreenshotSection />
+        <AutoHealSection />
         <EngineeringSection />
         <WorkflowSection />
         <ReplacementSection />

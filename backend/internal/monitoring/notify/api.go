@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 // NotificationAPIHandler handles notification channel API endpoints.

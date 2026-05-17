@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
-	"medics-health-check/backend/internal/monitoring/ai"
-	"medics-health-check/backend/internal/monitoring/notify"
+	"health-ops/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring/ai"
+	"health-ops/backend/internal/monitoring/notify"
 )
 
 // ---------------------------------------------------------------------------

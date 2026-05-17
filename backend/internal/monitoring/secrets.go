@@ -3,7 +3,7 @@ package monitoring
 import (
 	"fmt"
 
-	"medics-health-check/backend/internal/monitoring/cryptoutil"
+	"health-ops/backend/internal/monitoring/cryptoutil"
 )
 
 // prepareCheckSecrets transforms inbound plaintext credentials on a check into

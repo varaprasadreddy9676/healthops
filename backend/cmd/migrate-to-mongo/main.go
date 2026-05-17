@@ -28,8 +28,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	"medics-health-check/backend/internal/monitoring"
-	"medics-health-check/backend/internal/util/jsonl"
+	"health-ops/backend/internal/monitoring"
+	"health-ops/backend/internal/util/jsonl"
 )
 
 func main() {

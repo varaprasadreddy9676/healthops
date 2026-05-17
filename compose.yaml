@@ -1,6 +1,29 @@
+# HealthOps Production Docker Compose
+#
+# SETUP INSTRUCTIONS:
+# 1. Create a .env file with required variables (see .env.example or docs/deployment-guide.md)
+# 2. Set HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD to a strong password
+# 3. Run: docker compose up -d
+# 4. Access the dashboard at http://localhost:8080 (or your configured port)
+#
+# REQUIRED ENVIRONMENT VARIABLES:
+#   HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD - Strong password for initial admin user (MUST BE SET)
+#
+# OPTIONAL ENVIRONMENT VARIABLES:
+#   HEALTHOPS_PORT - Port to bind HealthOps to (default: 8080)
+#   HEALTHOPS_BIND - Bind address (default: 0.0.0.0 for all interfaces; use 127.0.0.1 for localhost-only)
+#   HEALTHOPS_PUBLIC_URL - Public-facing URL for email notification links (e.g., https://healthops.example.com)
+#   HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL - Admin user email (default: admin@healthops.local)
+#   MONGODB_DATABASE - MongoDB database name (default: healthops)
+#   MONGODB_COLLECTION_PREFIX - MongoDB collection prefix (default: healthops)
+#   HEALTHOPS_SMTP_PASS - SMTP password for email notifications
+#
+# See docs/deployment-guide.md for production deployment best practices.
+
 name: healthops
 
 services:
+  # HealthOps monitoring service - single Go binary serving API + dashboard
   healthops:
     build: .
     ports:
@@ -12,28 +35,32 @@ services:
       MONGODB_URI: mongodb://mongo:27017
       MONGODB_DATABASE: ${MONGODB_DATABASE:-healthops}
       MONGODB_COLLECTION_PREFIX: ${MONGODB_COLLECTION_PREFIX:-healthops}
+      # REQUIRED: Bootstrap admin password on first startup
+      # If not set, first startup will fail - use a strong password (see .env.example)
       HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD: ${HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD:-}
       HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL: ${HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL:-admin@healthops.local}
       HEALTHOPS_BOOTSTRAP_ADMIN_RESET: ${HEALTHOPS_BOOTSTRAP_ADMIN_RESET:-false}
-      # Set this to your public-facing URL so email notification links work correctly.
+      # Set to your public-facing URL for email notification links to work correctly
       # Example: https://healthops.yourcompany.com
       HEALTHOPS_PUBLIC_URL: ${HEALTHOPS_PUBLIC_URL:-}
       HEALTHOPS_SMTP_PASS: ${HEALTHOPS_SMTP_PASS:-}
-      MYSQL_DSN_MEDICS_EP_DB_CLOUD: ${MYSQL_DSN_MEDICS_EP_DB_CLOUD:-}
+      # Add MySQL monitoring DSN for external MySQL instances
+      MYSQL_DSN: ${MYSQL_DSN:-}
     volumes:
       - healthops_data:/app/data
     depends_on:
       mongo:
         condition: service_healthy
     restart: unless-stopped
+    # Production resource limits - adjust based on your workload
     deploy:
       resources:
         limits:
-          cpus: "1"
-          memory: 512M
+          cpus: "2"
+          memory: 1G
         reservations:
-          cpus: "0.25"
-          memory: 128M
+          cpus: "0.5"
+          memory: 256M
     healthcheck:
       test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/healthz" ]
       interval: 10s
@@ -41,19 +68,21 @@ services:
       retries: 3
       start_period: 10s
 
+  # MongoDB persistence layer - required for all state (checks, incidents, results, AI queue)
   mongo:
     image: mongo:7
     volumes:
       - mongo_data:/data/db
     restart: unless-stopped
+    # Production resource limits - MongoDB typically needs more memory than HealthOps
     deploy:
       resources:
         limits:
-          cpus: "1"
-          memory: 1G
+          cpus: "2"
+          memory: 2G
         reservations:
-          cpus: "0.25"
-          memory: 256M
+          cpus: "0.5"
+          memory: 512M
     healthcheck:
       test: [ "CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok" ]
       interval: 10s

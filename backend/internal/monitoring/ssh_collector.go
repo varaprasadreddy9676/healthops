@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"medics-health-check/backend/internal/monitoring/cryptoutil"
+	"health-ops/backend/internal/monitoring/cryptoutil"
 )
 
 // makeHostKeyCallback returns a HostKeyCallback that either verifies the server's

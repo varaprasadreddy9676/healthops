@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"medics-health-check/backend/internal/util/jsonl"
+	"health-ops/backend/internal/util/jsonl"
 )
 
 // Repository defines log intelligence persistence operations.

@@ -7,23 +7,24 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
-	"medics-health-check/backend/internal/monitoring/ai"
-	airepositories "medics-health-check/backend/internal/monitoring/ai/repositories"
-	"medics-health-check/backend/internal/monitoring/assistant"
-	"medics-health-check/backend/internal/monitoring/automation"
-	"medics-health-check/backend/internal/monitoring/cryptoutil"
-	"medics-health-check/backend/internal/monitoring/evidence"
-	"medics-health-check/backend/internal/monitoring/logs"
-	"medics-health-check/backend/internal/monitoring/mysql"
-	"medics-health-check/backend/internal/monitoring/notify"
-	"medics-health-check/backend/internal/monitoring/rca"
-	"medics-health-check/backend/internal/monitoring/recommendations"
-	"medics-health-check/backend/internal/monitoring/remediation"
-	"medics-health-check/backend/internal/monitoring/repositories"
+	"health-ops/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring/ai"
+	airepositories "health-ops/backend/internal/monitoring/ai/repositories"
+	"health-ops/backend/internal/monitoring/assistant"
+	"health-ops/backend/internal/monitoring/automation"
+	"health-ops/backend/internal/monitoring/cryptoutil"
+	"health-ops/backend/internal/monitoring/evidence"
+	"health-ops/backend/internal/monitoring/logs"
+	"health-ops/backend/internal/monitoring/mysql"
+	"health-ops/backend/internal/monitoring/notify"
+	"health-ops/backend/internal/monitoring/rca"
+	"health-ops/backend/internal/monitoring/recommendations"
+	"health-ops/backend/internal/monitoring/remediation"
+	"health-ops/backend/internal/monitoring/repositories"
 
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -76,6 +77,14 @@ func main() {
 	pingCancel()
 	logger.Printf("MongoDB connection established")
 
+	// Initialize data dir and secrets encryption BEFORE MongoStore so seed checks
+	// can have their plaintext passwords encrypted before being written to MongoDB.
+	dataDir := resolvePath("DATA_DIR", filepath.Join("backend", "data"), "data")
+	monitoring.InitJWTSecret(dataDir)
+	if err := cryptoutil.Init(dataDir); err != nil {
+		logger.Fatalf("init secrets encryption: %v", err)
+	}
+
 	mongoStore, err := monitoring.NewMongoStore(mongoClient, mongoDB, mongoPrefix, cfg.RetentionDays, cfg.Checks, logger)
 	if err != nil {
 		logger.Fatalf("init mongo store: %v", err)
@@ -84,6 +93,12 @@ func main() {
 	logger.Printf("MongoDB persistence initialized")
 
 	service := monitoring.NewService(cfg, store, logger)
+
+	// Set demo mode based on config file name
+	if strings.Contains(configPath, "demo.json") {
+		service.SetDemoMode(true)
+		logger.Printf("Demo mode enabled")
+	}
 
 	// /healthz must fail when MongoDB is unreachable
 	mongoHealthCheck := func(ctx context.Context) error {
@@ -109,15 +124,6 @@ func main() {
 	cfg.Servers = servers
 	service.SetServerRepo(serverRepo)
 	logger.Printf("Server repository: MongoDB (collection %s_servers, %d servers)", mongoPrefix, len(servers))
-
-	// Initialize user store (MongoDB)
-	dataDir := resolvePath("DATA_DIR", filepath.Join("backend", "data"), "data")
-	monitoring.InitJWTSecret(dataDir)
-
-	// Initialize shared secrets encryption key (used by MySQL/SSH credentials)
-	if err := cryptoutil.Init(dataDir); err != nil {
-		logger.Fatalf("init secrets encryption: %v", err)
-	}
 
 	mongoUserRepo, err := repositories.NewMongoUserRepository(mongoClient, mongoDB, mongoPrefix)
 	if err != nil {

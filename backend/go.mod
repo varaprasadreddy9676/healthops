@@ -1,4 +1,4 @@
-module medics-health-check/backend
+module health-ops/backend
 
 go 1.25.0
 

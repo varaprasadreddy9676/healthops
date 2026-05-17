@@ -8,6 +8,7 @@ import {
   Globe2,
   HeartPulse,
   ShieldCheck,
+  Wrench,
   Workflow,
   type LucideIcon,
 } from 'lucide-react'
@@ -87,6 +88,11 @@ export const featureItems: FeatureItem[] = [
     copy: 'Connections, slow queries, process lists, thread pressure, and database health signals.',
   },
   {
+    icon: Wrench,
+    title: 'Auto-Heal',
+    copy: 'Automatic remediation via SSH, shell, or HTTP when checks fail. Verify, retry, escalate — no human needed.',
+  },
+  {
     icon: Globe2,
     title: 'Status pages',
     copy: 'Public status pages translate internal state into clean service health updates.',
@@ -137,6 +143,11 @@ export const replacementItems = [
     examples: 'Small-team MySQL troubleshooting workflows',
     answer: 'MySQL connection, query, thread, and health context alongside incidents.',
   },
+  {
+    category: 'Auto-remediation',
+    examples: 'Rundeck, StackStorm, or PagerDuty auto-actions',
+    answer: 'SSH commands, shell scripts, or HTTP webhooks with verify-after, retry, cooldown, and escalation.',
+  },
 ]
 
 export const scenarioCommands = [
@@ -158,12 +169,14 @@ export const workflowSteps = [
   { step: '01', title: 'Detect', copy: 'A check fails, a heartbeat misses, or a log pattern spikes.' },
   { step: '02', title: 'Open', copy: 'An incident opens, deduped against existing ones, with the failing evidence attached.' },
   { step: '03', title: 'Notify', copy: 'Configured email and webhook channels receive incident notifications.' },
-  { step: '04', title: 'Explain', copy: 'If you configure an AI provider, it drafts a root-cause summary against the evidence.' },
-  { step: '05', title: 'Recover', copy: 'When checks recover, HealthOps resolves the incident and sends recovery updates.' },
+  { step: '04', title: 'Heal', copy: 'Auto-remediation runs the configured action (restart, SSH command, HTTP call), waits, and re-checks.' },
+  { step: '05', title: 'Explain', copy: 'If you configure an AI provider, it drafts a root-cause summary against the evidence.' },
+  { step: '06', title: 'Recover', copy: 'When checks recover, HealthOps resolves the incident and sends recovery updates.' },
 ]
 
 export const ossBadges = [
   'Open source',
   'Self-hosted',
   'BYOK AI',
+  'Auto-Heal',
 ]

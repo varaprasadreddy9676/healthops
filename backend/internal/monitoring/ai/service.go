@@ -10,7 +10,7 @@ import (
 	"text/template"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 // AIService orchestrates AI-powered incident analysis.

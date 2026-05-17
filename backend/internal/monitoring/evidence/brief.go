@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 // BriefGenerator produces AI Incident Briefs using the evidence backbone.

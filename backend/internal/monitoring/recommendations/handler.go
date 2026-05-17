@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 // AIProvider calls the configured AI model.

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
-	"medics-health-check/backend/internal/util/jsonl"
+	"health-ops/backend/internal/monitoring"
+	"health-ops/backend/internal/util/jsonl"
 )
 
 func TestFileAIQueue_EnqueueAndListPending(t *testing.T) {

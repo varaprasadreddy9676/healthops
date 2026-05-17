@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 // Handler serves the automation API.

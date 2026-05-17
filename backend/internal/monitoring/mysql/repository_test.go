@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring"
+	"health-ops/backend/internal/monitoring"
 )
 
 func makeSample(checkID, sampleID string, ts time.Time) monitoring.MySQLSample {

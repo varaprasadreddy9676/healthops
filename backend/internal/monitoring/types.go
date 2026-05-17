@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"medics-health-check/backend/internal/monitoring/cryptoutil"
+	"health-ops/backend/internal/monitoring/cryptoutil"
 )
 
 type Config struct {

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"medics-health-check/backend/internal/util/jsonl"
+	"health-ops/backend/internal/util/jsonl"
 )
 
 // FileReportRepository is a legacy file-backed ReportRepository. Retained for tests; production uses MongoDB.
