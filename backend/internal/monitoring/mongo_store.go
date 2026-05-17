@@ -122,6 +122,16 @@ func NewMongoStore(client *mongo.Client, dbName, prefix string, retentionDays in
 		for i := range state.Checks {
 			if err := prepareCheckSecrets(&state.Checks[i], nil); err != nil {
 				logger.Printf("WARNING: failed to encrypt seed check %q secrets: %v", state.Checks[i].ID, err)
+				// DEBUG: log encryption status for SSH/MySQL checks
+				for i := range state.Checks {
+					c := &state.Checks[i]
+					if c.SSH != nil {
+						logger.Printf("DEBUG: Check %q SSH after prepareCheckSecrets: password=%q passwordEnc=%q", c.ID, c.SSH.Password, c.SSH.PasswordEnc)
+					}
+					if c.MySQL != nil {
+						logger.Printf("DEBUG: Check %q MySQL after prepareCheckSecrets: password=%q passwordEnc=%q", c.ID, c.MySQL.Password, c.MySQL.PasswordEnc)
+					}
+				}
 			}
 		}
 		state.UpdatedAt = time.Now().UTC()

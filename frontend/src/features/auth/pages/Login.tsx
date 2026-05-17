@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom'
 import { AlertCircle, ArrowRight, Heart, KeyRound, Sparkles } from 'lucide-react'
 import { useAuth } from '@/shared/hooks/useAuth'
 
-interface ConfigResponse {
+interface SystemStatusResponse {
   data: {
-    isDemoMode: boolean
+    isDemoMode?: boolean
   }
 }
 
@@ -17,18 +17,18 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [isDemoMode, setIsDemoMode] = useState(false)
 
-  // Fetch config to check if demo mode
+  // Fetch public system status to check if demo mode (no auth required)
   useEffect(() => {
-    const fetchConfig = async () => {
+    const fetchStatus = async () => {
       try {
-        const response = await fetch('/api/v1/config')
-        const result: ConfigResponse = await response.json()
-        setIsDemoMode(result.data.isDemoMode)
+        const response = await fetch('/api/v1/system/status')
+        const result: SystemStatusResponse = await response.json()
+        setIsDemoMode(Boolean(result.data?.isDemoMode))
       } catch {
         setIsDemoMode(false)
       }
     }
-    fetchConfig()
+    fetchStatus()
   }, [])
 
   async function handleSubmit(e: FormEvent) {

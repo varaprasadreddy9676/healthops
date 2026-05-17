@@ -674,11 +674,17 @@ func (s *Service) handleHealthz(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 	if s.degradedMode == nil {
-		WriteAPIResponse(w, http.StatusOK, NewAPIResponse(map[string]bool{"healthy": true}))
+		WriteAPIResponse(w, http.StatusOK, NewAPIResponse(map[string]any{
+			"healthy":    true,
+			"isDemoMode": s.isDemoMode,
+		}))
 		return
 	}
 	status := s.degradedMode.GetStatus()
-	WriteAPIResponse(w, http.StatusOK, NewAPIResponse(status))
+	WriteAPIResponse(w, http.StatusOK, NewAPIResponse(map[string]any{
+		"degraded":   status,
+		"isDemoMode": s.isDemoMode,
+	}))
 }
 
 func (s *Service) handleReadyz(w http.ResponseWriter, r *http.Request) {

@@ -1,73 +1,140 @@
 ---
 slug: ai-overview
 title: AI Overview
-summary: What HealthOps' AI surfaces do, how BYOK works, what gets sent, and the safety boundaries.
-intent: Read this before enabling AI. It explains exactly what AI sees, what it can do, and where it cannot reach.
+summary: What HealthOps' AI surfaces actually do, how BYOK works, exactly what gets sent to the provider, and where the safety boundaries are.
+intent: Read this before enabling AI. It is the only page that explains what AI sees, what it can do, what it cannot do, and where the security trust boundaries sit.
 category: AI
 order: 400
 icon: sparkles
 relatedPaths:
-relatedTopics: root-cause,assistant,ai-results,remediation
+relatedTopics: root-cause,assistant,ai-results,remediation,rca-reports
 ---
 
 # AI Overview
 
-HealthOps' AI surfaces are optional. They are off by default. With no provider configured, every AI page in the UI is hidden — there is no pretending that AI is running.
+HealthOps' AI surfaces are **optional, off by default, and BYOK**. With no provider configured, every AI page in the UI is hidden — there is no pretending that AI is running when it is not.
 
 ## What AI Can Do
 
-| Surface | What it does |
-| ------- | ------------ |
-| **Root Cause** | Reviews the evidence attached to an incident and suggests likely causes. |
-| **Ask AI** | Conversational queries over HealthOps state ("what is unhealthy right now?"). |
-| **AI Results** | Stores past AI outputs so you can audit them. |
-| **Remediation** | Prepares guided action steps for known incident types. **Never** auto-executes without approval. |
-| **AI Categorize** (Log Events) | Assigns categories to log patterns the rule engine could not classify. |
+| Surface | What it does | When it runs |
+| ------- | ------------ | ------------ |
+| **Root Cause** | Reviews incident evidence, suggests likely causes + next actions | Auto on incident open (configurable), on-demand from incident view |
+| **Ask AI** | Conversational query over current HealthOps state ("what is unhealthy right now?") | When you type in the assistant box |
+| **AI Results** | Stores raw outputs of every AI call — auditable history | Automatic |
+| **RCA Reports** | Aggregated view of every RCA across incidents | Reads from AI Results |
+| **Remediation suggestions** | Proposes guided action steps for known patterns | On incident open, only when no built-in playbook matches |
+| **Log categorize** | Assigns categories to log patterns the rule engine could not classify | On log ingest (if enabled) |
 
-## What AI Cannot Do
+## What AI Cannot Do — The Hard Boundaries
 
-- Run commands without explicit approval.
-- Modify configuration silently.
-- Access data that is not in HealthOps (it does not see your code, your raw logs unless ingested, or your cloud account).
-- Override the evidence — operators decide.
+| Action | Allowed? |
+| ------ | -------- |
+| Read incident evidence (already in HealthOps) | yes |
+| Read your source code | no — never sent |
+| Read raw application logs not ingested into HealthOps | no |
+| Access your cloud account, CI, secrets | no |
+| Mutate any HealthOps configuration | no |
+| Execute commands on your infrastructure | no — only operator-approved remediation can run, and AI cannot self-approve |
+| Resolve incidents | no — operators only |
+| See or store API keys, DSNs, credentials | no — DSNs are env-var-only, keys are AES-256-GCM encrypted, never returned by the API |
 
-## BYOK ("Bring Your Own Key")
+## BYOK — Bring Your Own Key
 
-HealthOps does not ship an AI provider or a hosted key. You configure one or more providers:
+HealthOps does not ship an AI provider, a hosted key, or a default model. You configure one or more providers:
 
-- **OpenAI** (GPT-class)
-- **Anthropic** (Claude-class)
-- **Google Gemini**
-- **Ollama** (local)
-- **Custom** (any OpenAI-compatible endpoint)
+| Provider | Models | Best for |
+| -------- | ------ | -------- |
+| OpenAI | GPT-class | General RCA, strong reasoning |
+| Anthropic | Claude-class | Long-context RCA on dense evidence |
+| Google Gemini | Gemini-class | Cost-sensitive RCA |
+| Ollama | local models (Llama, Mistral, etc.) | Air-gapped / offline deployments |
+| Custom | any OpenAI-compatible endpoint | Self-hosted vLLM, LiteLLM proxies, internal gateways |
 
-You bring the API key. HealthOps stores it AES-256-GCM-encrypted at rest in `data/ai_config.json`. The encryption key lives in `data/.ai_enc_key`. API responses always mask keys.
+You bring the API key. HealthOps:
 
-## What Gets Sent to the Provider
+- Stores the key **AES-256-GCM encrypted** at rest in `data/ai_config.json`.
+- Keeps the encryption key in `data/.ai_enc_key` (mode 600, never logged).
+- **Masks the key** in every API response and UI surface — there is no "show key" button.
+- Supports rotating both the API key and the encryption key (see `cmd/rotate-ai-keys`).
 
-A constrained context per request:
+## Exactly What Gets Sent to the Provider
 
-- Incident metadata (id, type, opened-at, severity).
-- The incident's evidence (check results, MySQL snapshot, server metrics, related signals).
-- A configurable prompt template.
+For every AI call, the prompt contains *only* the following:
 
-Nothing else is sent. No raw application source. No credentials. No user PII unless your check messages happen to contain it (in which case, redact at the source).
+```
+[ system prompt — the template you configure ]
+[ incident metadata — id, type, opened_at, severity, monitor name ]
+[ incident evidence — check results, MySQL snapshot, server metrics,
+                      related log lines IF you ingest them ]
+[ user prompt — the question, e.g. "Suggest root cause" ]
+```
 
-## Provider Health and Fallback
+Not sent:
 
-HealthOps health-checks each provider. If your primary is down or rate-limited, configured fallback providers are tried in order. Failures are recorded; the incident still has all its evidence.
+- Your application source code.
+- Any data not already in HealthOps.
+- Other users' incidents.
+- API keys, DSNs, or any secret.
+- Audit log content beyond the incident in scope.
+
+If your check messages or log lines contain PII or secrets, redact at the source — HealthOps will forward whatever evidence the check captured.
+
+## Provider Health, Fallback, and Cost Control
+
+```
+   ┌──────────────┐   request    ┌────────────┐    on failure   ┌────────────┐
+   │  AI service  │ ───────────▶ │ primary AI │ ──────────────▶ │ fallback 1 │
+   │  (worker)    │              │  provider  │                 └─────┬──────┘
+   └──────────────┘              └────────────┘                       │ on failure
+                                                                      ▼
+                                                              ┌────────────┐
+                                                              │ fallback 2 │
+                                                              └────────────┘
+```
+
+- Each provider is health-checked periodically.
+- If your primary is down or rate-limited, configured fallback providers are tried in order.
+- Failures are recorded — the incident still has all its evidence even if no AI call succeeds.
+- Per-provider rate limits and per-day spend caps are configurable.
 
 ## Cost Awareness
 
-Each enabled AI surface costs API calls. Recommendations:
+Every enabled AI surface costs API calls. Sensible defaults:
 
-- Enable Root Cause only for critical-severity incidents.
-- Set the prompt to be brief — long prompts cost more and rarely improve quality.
-- Use a small/cheap model for log categorization, a stronger model for RCA.
+| Lever | Recommendation |
+| ----- | -------------- |
+| RCA trigger severity | Only `critical` (not warning) |
+| Prompt length | Short — long prompts cost more, rarely improve quality |
+| Model choice | Cheap model for log categorization, stronger model for RCA |
+| Fallback | Use a cheaper provider as fallback when primary is rate-limited |
+| Daily cap | Set in Settings → AI; HealthOps stops calling once hit |
 
-## Safety Defaults
+## Safety Defaults Worth Knowing
 
-- Remediation actions require explicit operator approval.
-- AI output is **never** treated as audit-quality truth — operators must validate.
-- AI surfaces stay hidden until a provider is configured and healthy.
-- Logs of AI calls are kept so you can audit what was asked and answered.
+| Default | Why |
+| ------- | --- |
+| Remediation needs operator approval | Prevents AI-driven incidents-on-incidents |
+| AI output is never treated as truth | Operators validate, evidence is canonical |
+| AI surfaces hidden until provider is configured + healthy | No phantom UI |
+| Every AI call logged in `data/ai_results.jsonl` | Full audit trail |
+| Encryption key in `.ai_enc_key` (mode 600) | Standard secret hygiene |
+| Provider key never returned by API | Even admins cannot exfiltrate it via the UI |
+
+## Common Pitfalls
+
+| Symptom | Cause | Fix |
+| ------- | ----- | --- |
+| AI surfaces are hidden in the UI | No provider configured | Settings → AI Providers → add one |
+| RCA never appears on incidents | RCA trigger severity excludes this incident's severity | Settings → AI → RCA trigger |
+| Provider unhealthy in dashboard | Key invalid, rate-limited, or network blocked | Test the key out-of-band; check egress from the HealthOps host |
+| Costs higher than expected | RCA running on warning-severity, or long prompt template | Restrict to `critical`, shorten template |
+| RCA hallucinates values not in evidence | Wrong/weak model or prompt asking for too much | Switch model, ask for explicit "based on evidence" phrasing |
+| Cannot rotate key | Missing perms on `.ai_enc_key` | See `docs/ai-key-rotation.md` |
+
+## Where to Go Next
+
+- **Root Cause** — single-incident RCA view.
+- **RCA Reports** — cross-incident view, exports, quality audit.
+- **Assistant** — conversational queries over HealthOps state.
+- **AI Results** — raw call-by-call audit log.
+- **Remediation** — pair AI suggestions with operator-approved actions.
