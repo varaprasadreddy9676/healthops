@@ -15,8 +15,6 @@
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `CONFIG_PATH` | No | `backend/config/default.json` | Path to configuration file |
-| `STATE_PATH` | No | `backend/data/state.json` | Path to local fallback state file |
-| `STORAGE_BACKEND` | No | `file` | Set to `mongo` to persist incidents, notification outbox, and AI queue in MongoDB (Phase 0 storage migration). Requires `MONGODB_URI`. Service fails to start if Mongo is unreachable when `mongo` is selected. |
 | `MONGODB_URI` | Yes for production | - | MongoDB connection string for primary persistence |
 | `MONGODB_DATABASE` | No | `healthops` | MongoDB database name |
 | `MONGODB_COLLECTION_PREFIX` | No | `healthops` | MongoDB collection prefix |

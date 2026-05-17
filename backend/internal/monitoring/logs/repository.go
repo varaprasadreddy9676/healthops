@@ -25,7 +25,7 @@ type Repository interface {
 	TotalEntries() int
 }
 
-// FileRepository implements Repository with JSONL file backing.
+// FileRepository is a legacy file-backed log Repository. Retained for tests; production uses MongoDB.
 type FileRepository struct {
 	mu        sync.RWMutex
 	dataDir   string
@@ -34,7 +34,7 @@ type FileRepository struct {
 	familyIdx map[string]*ErrorFamily // keyed by family ID
 }
 
-// NewFileRepository creates a new file-backed log repository.
+// NewFileRepository creates a legacy file-backed log repository (test-only).
 func NewFileRepository(dataDir string) (*FileRepository, error) {
 	logsDir := filepath.Join(dataDir, "logs")
 	if err := os.MkdirAll(logsDir, 0o755); err != nil {

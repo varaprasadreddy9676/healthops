@@ -33,7 +33,6 @@ COPY --from=frontend-builder /app/frontend/dist ./frontend/dist/
 RUN mkdir -p data && chown -R app:app /app
 
 ENV CONFIG_PATH=/app/config/default.json
-ENV STATE_PATH=/app/data/state.json
 ENV DATA_DIR=/app/data
 ENV FRONTEND_DIR=/app/frontend/dist
 

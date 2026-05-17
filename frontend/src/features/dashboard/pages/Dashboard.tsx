@@ -347,24 +347,25 @@ export default function Dashboard() {
       )}
 
       {/* Top metrics */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <MetricCard
           label="System Health"
           value={`${healthPct}%`}
           subValue={`${summary.healthy}/${summary.enabledChecks} healthy`}
           icon={<Shield className="h-5 w-5" />}
           className={cn(
-            healthPct === 100 && 'ring-1 ring-emerald-200 dark:ring-emerald-900',
-            healthPct < 100 && healthPct >= 80 && 'ring-1 ring-amber-200 dark:ring-amber-900',
-            healthPct < 80 && 'ring-1 ring-red-200 dark:ring-red-900',
+            healthPct === 100 && 'ring-2 ring-emerald-300 dark:ring-emerald-800',
+            healthPct < 100 && healthPct >= 80 && 'ring-2 ring-amber-300 dark:ring-amber-800',
+            healthPct < 80 && 'ring-2 ring-red-300 dark:ring-red-800',
           )}
         />
         <MetricCard
           label="Open Incidents"
           value={openCount}
           subValue={openCount > 0 ? `${(incidents?.items ?? []).filter(i => i.severity === 'critical').length} critical` : 'All clear'}
+          subValueClassName={openCount > 0 ? 'text-red-600 dark:text-red-400 font-medium' : undefined}
           icon={<AlertTriangle className="h-5 w-5" />}
-          className={cn(openCount > 0 && 'ring-1 ring-red-200 dark:ring-red-900')}
+          className={cn(openCount > 0 && 'ring-2 ring-red-300 dark:ring-red-800')}
         />
         <MetricCard
           label={`Uptime (${period === '24h' ? 'Today' : period})`}
@@ -422,7 +423,7 @@ export default function Dashboard() {
                 ['Warning', summary.warning, 'bg-amber-500'],
                 ['Critical', summary.critical, 'bg-red-500'],
                 ['Unknown', summary.unknown, 'bg-slate-400'],
-              ] as const).map(([label, count, dot]) => (
+              ] as const).filter(([, count]) => count > 0).map(([label, count, dot]) => (
                 <div key={label} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
                   <span className={cn('h-2 w-2 rounded-full', dot)} />
                   {label}: {count}
@@ -462,9 +463,9 @@ export default function Dashboard() {
                 className={cn(
                   'rounded-xl border transition-all',
                   status === 'healthy' ? 'border-emerald-200 dark:border-emerald-900/60' :
-                  status === 'warning' ? 'border-amber-200 dark:border-amber-900/60' :
-                  status === 'critical' ? 'border-red-200 dark:border-red-900/60' :
-                  'border-slate-200 dark:border-slate-800',
+                    status === 'warning' ? 'border-amber-200 dark:border-amber-900/60' :
+                      status === 'critical' ? 'border-red-200 dark:border-red-900/60' :
+                        'border-slate-200 dark:border-slate-800',
                   'bg-white dark:bg-slate-900',
                 )}
               >
@@ -483,9 +484,9 @@ export default function Dashboard() {
                   <div className={cn(
                     'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
                     status === 'healthy' ? 'bg-emerald-100 dark:bg-emerald-900/40' :
-                    status === 'warning' ? 'bg-amber-100 dark:bg-amber-900/40' :
-                    status === 'critical' ? 'bg-red-100 dark:bg-red-900/40' :
-                    'bg-slate-100 dark:bg-slate-800',
+                      status === 'warning' ? 'bg-amber-100 dark:bg-amber-900/40' :
+                        status === 'critical' ? 'bg-red-100 dark:bg-red-900/40' :
+                          'bg-slate-100 dark:bg-slate-800',
                   )}>
                     {linkedRemote ? (
                       <Wifi className={cn('h-4 w-4',
@@ -696,7 +697,7 @@ export default function Dashboard() {
           </div>
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {summary.latest && summary.latest.length > 0 ? (
-              summary.latest.map(result => (
+              summary.latest.slice(0, 10).map(result => (
                 <Link
                   key={result.id}
                   to={`/checks/${result.checkId}`}

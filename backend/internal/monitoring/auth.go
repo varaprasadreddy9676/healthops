@@ -19,7 +19,8 @@ func authMiddleware(cfg AuthConfig, userStore UserStoreBackend, next http.Handle
 		if path == "/healthz" || path == "/readyz" ||
 			path == "/api/v1/system/status" ||
 			path == "/api/v1/auth/login" || strings.HasPrefix(path, "/assets/") ||
-			path == "/" || path == "/favicon.ico" {
+			path == "/" || path == "/favicon.ico" ||
+			strings.HasPrefix(path, "/api/v1/help/") {
 			next.ServeHTTP(w, r)
 			return
 		}

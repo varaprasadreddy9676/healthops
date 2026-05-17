@@ -9,10 +9,11 @@ interface Props {
   onExportJSON?: () => void
   downloadUrl?: string
   filename?: string
+  label?: string
   className?: string
 }
 
-export function ExportButton({ onExportCSV, onExportJSON, downloadUrl, filename = 'healthops-export', className }: Props) {
+export function ExportButton({ onExportCSV, onExportJSON, downloadUrl, filename = 'healthops-export', label, className }: Props) {
   const [downloading, setDownloading] = useState(false)
   const toast = useToast()
 
@@ -37,7 +38,7 @@ export function ExportButton({ onExportCSV, onExportJSON, downloadUrl, filename 
         )}
       >
         <Download className="h-3.5 w-3.5" />
-        {downloading ? 'Exporting…' : 'Export'}
+        {downloading ? 'Exporting…' : label || 'Export'}
       </button>
     )
   }

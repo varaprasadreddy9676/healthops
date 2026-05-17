@@ -448,7 +448,7 @@ AI-native behavior:
 **MongoDB is the primary and only persistence layer for all AI-native operations data.**
 
 - All new collections (`signal_events`, `log_events`, `log_fingerprints`, `correlation_groups`, `incident_events`, `deployments`, `heartbeats`, `slo_*`, `ai_*`, `runbooks`, `remediation_actions`, `telemetry_quality_findings`) are written directly to MongoDB. No file-store fallback for these collections.
-- The legacy `FileStore` / JSONL repositories (`state.json`, MySQL JSONL samples, file AI queue, file notification outbox) are migration inputs only. Phase 0 migrates them into MongoDB and removes runtime use.
+- The legacy file-based repositories have been migrated to MongoDB and removed from runtime. Phase 0 (storage unification) is complete.
 - Reads and writes for AI features assume MongoDB is reachable. The service refuses to start AI features (Incident Brief, log ingestion, correlation) if MongoDB is unavailable. After Phase 0, persisted monitoring also treats MongoDB as required; `/healthz` reports degraded/unready rather than silently writing to files.
 - This supersedes the existing “hybrid store / best-effort mirror” pattern for new features. Captured in [ADR 005](decisions/ADR-005-mongodb-primary-persistence.md).
 
@@ -711,11 +711,7 @@ This section makes the first two phases implementation-ready by specifying mecha
 
 ### MongoDB Consistency Note
 
-The "Storage Decision" section above states that MongoDB is the primary-only persistence layer for all AI-native operations data, with no file fallback. This is the **target state** after Phase 0 completes. Until Phase 0 is finished:
-
-- The backend README, deployment guide, and `main.go` still describe optional/best-effort MongoDB with JSONL fallback — that is the **current runtime behavior**.
-- Phase 0 explicitly migrates away from JSONL and removes the hybrid mode for the listed collections.
-- After Phase 0 ships, the backend README and deployment guide must be updated to reflect "MongoDB required" for AI features. This is tracked as a Phase 0 exit task.
+The "Storage Decision" section above states that MongoDB is the primary-only persistence layer for all AI-native operations data, with no file fallback. Phase 0 (storage unification) is **complete** — all file-backed and JSONL repositories have been migrated to MongoDB and removed from the runtime. MongoDB is now required for production.
 
 ### Phase 0 Migration Mechanics
 
@@ -723,12 +719,12 @@ The Phase 0 description lists *what* to migrate but not the operational details.
 
 | Aspect | Requirement |
 |--------|-------------|
-| **Source-to-target mapping** | `FileMySQLRepository` JSONL → `<prefix>_mysql_samples` + `<prefix>_mysql_deltas` collections; in-memory `IncidentRepository` → `<prefix>_incidents` collection; `FileNotificationOutbox` JSONL → `<prefix>_notification_outbox` collection; `FileAIQueue` JSONL → `<prefix>_ai_queue` collection. Collection prefix is set by `MONGODB_COLLECTION_PREFIX` (default `healthops`). |
+| **Source-to-target mapping** | `MySQLRepository` → `<prefix>_mysql_samples` + `<prefix>_mysql_deltas` collections; `IncidentRepository` → `<prefix>_incidents` collection; `NotificationOutbox` → `<prefix>_notification_outbox` collection; `AIQueue` → `<prefix>_ai_queue` collection. Collection prefix is set by `MONGODB_COLLECTION_PREFIX` (default `healthops`). |
 | **Idempotency** | Migration script uses `BulkWrite` with `ReplaceOne` upserts (matching on deterministic `_id`). Re-running the script on a partially-migrated dataset must not create duplicates. Each document includes a deterministic `_id` derived from its source (e.g. SHA-256 of `checkId + timestamp` for samples). |
-| **Rollback** | Before migration, the script creates a MongoDB backup via `mongodump --archive`. On failure, operator can restore with `mongorestore --archive` and redeploy the previous binary (which still uses `STORAGE_BACKEND=file`). File-based repos remain untouched on disk as a read-only archive. |
+| **Rollback** | Before migration, the script creates a MongoDB backup via `mongodump --archive`. On failure, operator can restore with `mongorestore --archive` and redeploy the previous binary. |
 | **Backup** | The migration script refuses to run unless a fresh backup exists (checks `mongodump` output timestamp < 1 hour old or `--force` flag is passed). |
-| **Cutover sequence** | 1. Take MongoDB backup (`mongodump --archive`). 2. Run migration script for historical data. 3. Run verification queries. 4. Deploy new code with `STORAGE_BACKEND=mongo` (Mongo-only reads and writes; file runtime writes removed in the same release). 5. Smoke-test `/healthz`, `/api/v1/checks`, `/api/v1/incidents`. File repos remain on disk as read-only archive but are not referenced at runtime. |
-| **Verification queries** | `db.<prefix>_incidents.countDocuments()` matches file repo count ±0.1%. `db.<prefix>_mysql_samples.find().sort({timestamp:-1}).limit(1)` timestamp matches latest JSONL entry. Audit log replay: every `incident.created` / `incident.resolved` audit event has a corresponding MongoDB document with matching `status` and timestamps. |
+| **Cutover sequence** | 1. Take MongoDB backup (`mongodump --archive`). 2. Run migration script for historical data. 3. Run verification queries. 4. Deploy new code (Mongo-only reads and writes). 5. Smoke-test `/healthz`, `/api/v1/checks`, `/api/v1/incidents`. |
+| **Verification queries** | `db.<prefix>_incidents.countDocuments()` matches expected count. `db.<prefix>_mysql_samples.find().sort({timestamp:-1}).limit(1)` returns recent data. Audit log replay: every `incident.created` / `incident.resolved` audit event has a corresponding MongoDB document with matching `status` and timestamps. |
 | **Audit log prerequisite** | The exit metric "replaying the audit log" assumes the audit log fully captures incident lifecycle transitions (`created`, `acknowledged`, `resolved`). If audit events are missing for any transition today, Phase 0 must first backfill or fix the audit emission before relying on it for verification. |
 
 ### Phase 1 Incident Brief v1 — Evidence Sources
@@ -780,14 +776,14 @@ Dependencies: Phase 0 → Phase 1 → (Phase 2a → Phase 2b) → Phase 3 → Ph
 
 ### Phase 0: Storage Unification and Migration Backbone
 
-Goal: commit to MongoDB-as-primary and migrate existing file-backed data so Phase 1 builds on solid ground.
+Goal: commit to MongoDB-as-primary and migrate existing data so Phase 1 builds on solid ground.
 
 Build:
 
 1. [ADR 005](decisions/ADR-005-mongodb-primary-persistence.md): “MongoDB is the primary persistence layer for AI-native features.”
-2. Migrate existing `FileMySQLRepository` (JSONL) data into a MongoDB `mysql_samples` / `mysql_deltas` collections. Keep the file repo as a one-time export source.
+2. Migrate existing MySQL repository data into MongoDB `mysql_samples` / `mysql_deltas` collections.
 3. Migrate `IncidentRepository` (in-memory) to MongoDB `incidents` collection.
-4. Migrate `FileNotificationOutbox` and `FileAIQueue` to MongoDB-backed implementations.
+4. Migrate notification outbox and AI queue to MongoDB-backed implementations.
 5. Mongo connection becomes a hard startup dependency for the AI features (with a clear health check and failure mode).
 6. Index baselines from “Storage Decision” applied via migration script.
 
@@ -796,7 +792,7 @@ Exit metrics:
 - 100% of new writes for the listed collections go to MongoDB.
 - Migration script validated on a copy of production data; row counts match within 0.1%.
 - Incidents created during the cutover window are not lost, verified by replaying the audit log and comparing expected incident IDs/transitions against MongoDB.
-- Service refuses to enable AI features when MongoDB ping fails; `/healthz` reports degraded/unready instead of enabling file-backed writes.
+- Service refuses to enable AI features when MongoDB ping fails; `/healthz` reports degraded/unready.
 
 ### Phase 1: Evidence Backbone
 
@@ -996,7 +992,7 @@ This gives users immediate value:
 Minimum implementation checklist:
 
 - ADR-005 written and accepted.
-- Mongo migration scripts for existing file-backed collections.
+- Mongo migration scripts for existing collections.
 - `SignalEvent` repository and API (Mongo).
 - `LogSource` repository and API (Mongo).
 - `LogEvent` repository (Mongo, TTL index).

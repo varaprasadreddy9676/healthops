@@ -12,18 +12,18 @@ import (
 
 // StatusPageAPIHandler handles status page CRUD and public rendering.
 type StatusPageAPIHandler struct {
-	store            *StatusPageStore
+	store            StatusPageRepository
 	checkStore       Store
 	incidentRepo     IncidentRepository
-	maintenanceStore *MaintenanceStore
+	maintenanceStore MaintenanceWindowStore
 }
 
 // NewStatusPageAPIHandler creates the handler.
 func NewStatusPageAPIHandler(
-	store *StatusPageStore,
+	store StatusPageRepository,
 	checkStore Store,
 	incidentRepo IncidentRepository,
-	maintenanceStore *MaintenanceStore,
+	maintenanceStore MaintenanceWindowStore,
 ) *StatusPageAPIHandler {
 	return &StatusPageAPIHandler{
 		store:            store,

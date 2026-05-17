@@ -100,16 +100,16 @@ Validation rules:
 5. `AIQueueItem` and `AIAnalysisResult`
 
 ### 5.3 Persistence strategy
-Use file-backed repositories in `backend/data/` for v1:
-1. `mysql_samples.jsonl`
-2. `mysql_deltas.jsonl`
-3. `incident_snapshots.jsonl`
-4. `notification_outbox.jsonl`
-5. `ai_queue.jsonl`
-6. `ai_results.jsonl`
+Use MongoDB-backed repositories:
+1. `mysql_samples` collection
+2. `mysql_deltas` collection
+3. `incident_snapshots` collection
+4. `notification_outbox` collection
+5. `ai_queue` collection
+6. `ai_results` collection
 
 Rules:
-1. Append-only writes with fsync-safe flush strategy already used by current storage patterns
+1. Append-only writes with MongoDB durability
 2. In-memory index for latest N reads per check
 3. Retention compaction job daily
 
@@ -210,7 +210,7 @@ Mutating (auth required):
   - collection timeout handled cleanly
 
 ### Task M3: Sample + delta repository
-- Implement file-backed sample/delta repository
+- Implement MongoDB-backed sample/delta repository
 - Acceptance:
   - append and latest/recent reads are deterministic
   - delta handles counter reset with `max(0, diff)` behavior

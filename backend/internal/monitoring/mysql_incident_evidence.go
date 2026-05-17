@@ -19,14 +19,14 @@ type IncidentSnapshotRepository interface {
 	PruneBefore(cutoff time.Time) error
 }
 
-// FileSnapshotRepository implements IncidentSnapshotRepository with JSONL backing.
+// FileSnapshotRepository is a legacy file-backed IncidentSnapshotRepository. Retained for tests; production uses MongoDB.
 type FileSnapshotRepository struct {
 	mu   sync.RWMutex
 	path string
 	data []IncidentSnapshot
 }
 
-// NewFileSnapshotRepository creates a file-backed snapshot repository.
+// NewFileSnapshotRepository creates a legacy file-backed snapshot repository (test-only).
 func NewFileSnapshotRepository(path string) (*FileSnapshotRepository, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("create snapshot dir: %w", err)

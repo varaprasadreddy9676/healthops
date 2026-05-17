@@ -110,6 +110,9 @@ type UptimeDayEntry struct {
 	Uptime float64 `json:"uptimePercent"`
 }
 
+// Compile-time check: StatusPageStore implements StatusPageRepository.
+var _ StatusPageRepository = (*StatusPageStore)(nil)
+
 // StatusPageStore manages status page configurations.
 type StatusPageStore struct {
 	mu       sync.RWMutex

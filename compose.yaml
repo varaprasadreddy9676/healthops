@@ -9,7 +9,6 @@ services:
       CONFIG_PATH: /app/config/default.json
       DATA_DIR: /app/data
       FRONTEND_DIR: /app/frontend/dist
-      STORAGE_BACKEND: mongo
       MONGODB_URI: mongodb://mongo:27017
       MONGODB_DATABASE: ${MONGODB_DATABASE:-healthops}
       MONGODB_COLLECTION_PREFIX: ${MONGODB_COLLECTION_PREFIX:-healthops}
@@ -36,7 +35,7 @@ services:
           cpus: "0.25"
           memory: 128M
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/healthz"]
+      test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/healthz" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -56,7 +55,7 @@ services:
           cpus: "0.25"
           memory: 256M
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test: [ "CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok" ]
       interval: 10s
       timeout: 5s
       retries: 3

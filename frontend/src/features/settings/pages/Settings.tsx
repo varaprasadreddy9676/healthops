@@ -100,7 +100,7 @@ function Modal({ open, onClose, title, wide, children }: {
       )}>
         <div className="mb-5 flex items-center justify-between">
           <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+          <button onClick={onClose} aria-label="Close dialog" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -213,7 +213,7 @@ function GeneralSettings() {
       <div className="p-5">
         {!editing ? (
           <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <ConfigCard label="Server Address" value={config.server.addr} />
+            <ConfigCard label="Bind Address" value={config.server.addr} />
             <ConfigCard label="Auth Enabled" value={config.authEnabled ? 'Yes' : 'No'} />
             <ConfigCard label="Retention Days" value={String(config.retentionDays)} />
             <ConfigCard label="Check Interval" value={`${config.checkIntervalSeconds}s`} />
@@ -325,10 +325,12 @@ function UsersSettings() {
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button onClick={() => { setModalUser(u); setShowModal(true) }}
+                    aria-label={`Edit user ${u.username}`}
                     className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800">
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                   <button onClick={async () => { const ok = await confirm({ title: 'Delete User', message: `Delete user "${u.username}"?`, variant: 'danger', confirmLabel: 'Delete' }); if (ok) deleteMutation.mutate(u.id) }}
+                    aria-label={`Delete user ${u.username}`}
                     className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -407,7 +409,7 @@ function UserModal({ user, onClose, onSaved }: { user: User | null; onClose: () 
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
             {isEdit ? 'Edit User' : 'Create User'}
           </h3>
-          <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+          <button onClick={onClose} aria-label="Close dialog" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -433,12 +435,13 @@ function UserModal({ user, onClose, onSaved }: { user: User | null; onClose: () 
             <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Email</label>
             <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
               placeholder="john@example.com" className={inputCls} />
-            <p className="mt-1 text-[11px] text-slate-500">Used for alert notifications and incident reports</p>
+            <p className="mt-1 text-xs text-slate-500">Used for alert notifications and incident reports</p>
           </div>
 
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Role</label>
             <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as 'admin' | 'ops' }))}
+              aria-label="User role"
               className={inputCls}>
               <option value="ops">Ops</option>
               <option value="admin">Admin</option>
@@ -770,13 +773,13 @@ const CHECK_TYPES = ['api', 'tcp', 'process', 'command', 'log', 'mysql', 'ssh'] 
 type CheckType = typeof CHECK_TYPES[number]
 
 const checkTypeInfo: Record<CheckType, { icon: React.ReactNode; label: string; color: string }> = {
-  api:     { icon: <Globe className="h-4 w-4" />,    label: 'API / HTTP',  color: 'text-blue-600 dark:text-blue-400' },
-  tcp:     { icon: <Zap className="h-4 w-4" />,      label: 'TCP Port',    color: 'text-purple-600 dark:text-purple-400' },
-  process: { icon: <Activity className="h-4 w-4" />, label: 'Process',     color: 'text-emerald-600 dark:text-emerald-400' },
-  command: { icon: <Terminal className="h-4 w-4" />,  label: 'Command',     color: 'text-amber-600 dark:text-amber-400' },
-  log:     { icon: <FileText className="h-4 w-4" />,  label: 'Log File',    color: 'text-cyan-600 dark:text-cyan-400' },
-  mysql:   { icon: <Database className="h-4 w-4" />,  label: 'MySQL',       color: 'text-orange-600 dark:text-orange-400' },
-  ssh:     { icon: <Monitor className="h-4 w-4" />,   label: 'SSH Server',  color: 'text-rose-600 dark:text-rose-400' },
+  api: { icon: <Globe className="h-4 w-4" />, label: 'API / HTTP', color: 'text-blue-600 dark:text-blue-400' },
+  tcp: { icon: <Zap className="h-4 w-4" />, label: 'TCP Port', color: 'text-purple-600 dark:text-purple-400' },
+  process: { icon: <Activity className="h-4 w-4" />, label: 'Process', color: 'text-emerald-600 dark:text-emerald-400' },
+  command: { icon: <Terminal className="h-4 w-4" />, label: 'Command', color: 'text-amber-600 dark:text-amber-400' },
+  log: { icon: <FileText className="h-4 w-4" />, label: 'Log File', color: 'text-cyan-600 dark:text-cyan-400' },
+  mysql: { icon: <Database className="h-4 w-4" />, label: 'MySQL', color: 'text-orange-600 dark:text-orange-400' },
+  ssh: { icon: <Monitor className="h-4 w-4" />, label: 'SSH Server', color: 'text-rose-600 dark:text-rose-400' },
 }
 
 function emptyCheck(): Partial<CheckConfig> {
@@ -891,6 +894,7 @@ function ChecksSettings() {
           <input type="text" placeholder="Search checks…" value={search}
             onChange={e => setSearch(e.target.value)} className={cn(inputCls, 'max-w-xs')} />
           <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+            aria-label="Filter by check type"
             className={cn(selectCls, 'max-w-[160px]')}>
             <option value="all">All Types</option>
             {CHECK_TYPES.map(t => <option key={t} value={t}>{checkTypeInfo[t].label}</option>)}
@@ -1665,11 +1669,11 @@ function AlertRuleForm({ initial, isEdit, saving, checks, onSave, onCancel }: {
    ══════════════════════════════════════════════════════════════════ */
 
 const PROVIDER_TYPES: { value: AIProviderType; label: string }[] = [
-  { value: 'openai',    label: 'OpenAI' },
+  { value: 'openai', label: 'OpenAI' },
   { value: 'anthropic', label: 'Anthropic' },
-  { value: 'google',    label: 'Google Gemini' },
-  { value: 'ollama',    label: 'Ollama (Local)' },
-  { value: 'custom',    label: 'Custom (OpenAI-compatible)' },
+  { value: 'google', label: 'Google Gemini' },
+  { value: 'ollama', label: 'Ollama (Local)' },
+  { value: 'custom', label: 'Custom (OpenAI-compatible)' },
 ]
 
 function emptyProvider(): Partial<AIProviderConfig> {
@@ -1879,11 +1883,11 @@ function AISettings() {
 
 function ProviderIcon({ provider }: { provider: string }) {
   switch (provider) {
-    case 'openai':    return <span className="text-lg font-bold text-emerald-600">AI</span>
+    case 'openai': return <span className="text-lg font-bold text-emerald-600">AI</span>
     case 'anthropic': return <span className="text-lg font-bold text-orange-600">A</span>
-    case 'google':    return <span className="text-lg font-bold text-blue-600">G</span>
-    case 'ollama':    return <span className="text-lg font-bold text-purple-600">🦙</span>
-    default:          return <span className="text-lg font-bold text-slate-600">⚡</span>
+    case 'google': return <span className="text-lg font-bold text-blue-600">G</span>
+    case 'ollama': return <span className="text-lg font-bold text-purple-600">🦙</span>
+    default: return <span className="text-lg font-bold text-slate-600">⚡</span>
   }
 }
 
@@ -2031,10 +2035,10 @@ function ExportSettings() {
             </div>
             <div className="flex items-center gap-2">
               {'csv' in e && e.csv && (
-                <ExportButton downloadUrl={e.csv} filename={`${e.label.toLowerCase().replace(/\s+/g, '-')}.csv`} />
+                <ExportButton downloadUrl={e.csv} filename={`${e.label.toLowerCase().replace(/\s+/g, '-')}.csv`} label="CSV" />
               )}
               {'json' in e && e.json && (
-                <ExportButton downloadUrl={e.json} filename={`${e.label.toLowerCase().replace(/\s+/g, '-')}.json`} />
+                <ExportButton downloadUrl={e.json} filename={`${e.label.toLowerCase().replace(/\s+/g, '-')}.json`} label="JSON" />
               )}
             </div>
           </div>

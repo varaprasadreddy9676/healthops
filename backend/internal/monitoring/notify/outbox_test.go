@@ -186,7 +186,7 @@ func TestFileNotificationOutbox_Persistence(t *testing.T) {
 	})
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		t.Fatal("JSONL file not created")
+		t.Fatal("data file not created")
 	}
 
 	outbox2, err := NewFileNotificationOutbox(path)

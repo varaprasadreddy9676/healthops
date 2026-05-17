@@ -2,6 +2,7 @@ package rca
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -140,11 +141,16 @@ func TestCollector_DetectTrend(t *testing.T) {
 
 func TestAnalyzer_Persistence(t *testing.T) {
 	dir := t.TempDir()
+	repoPath := filepath.Join(dir, "rca_reports.jsonl")
 
 	source := &mockSignalSource{}
 	collector := NewCollector(source)
 
-	analyzer, err := NewAnalyzer(collector, nil, dir, nil)
+	repo, err := NewFileReportRepository(repoPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	analyzer, err := NewAnalyzer(collector, nil, repo, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +169,11 @@ func TestAnalyzer_Persistence(t *testing.T) {
 	analyzer.persist(report)
 
 	// Reload from disk
-	analyzer2, err := NewAnalyzer(collector, nil, dir, nil)
+	repo2, err := NewFileReportRepository(repoPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	analyzer2, err := NewAnalyzer(collector, nil, repo2, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

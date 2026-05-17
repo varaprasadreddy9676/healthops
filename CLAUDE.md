@@ -34,9 +34,8 @@ cd backend && go fmt ./...
 - **`internal/monitoring/`** - Core monitoring package:
   - `config.go` - Config loading, validation, defaults.
   - `types.go` - Core types: `Config`, `CheckConfig`, `CheckResult`, `State`, `Summary`, `Store`/`Mirror` interfaces, `Incident`, `AIAnalysisResult`.
-  - `store.go` - `FileStore` implementation (local JSON state file with atomic writes).
-  - `hybrid_store.go` - `HybridStore` wrapping `FileStore` with optional MongoDB mirror.
-  - `mongo.go` - `MongoMirror` implementation.
+  - `store.go` - MongoDB-backed `Store` implementation.
+  - `mongo.go` - MongoDB persistence layer.
   - `runner.go` - `Runner` executes checks in parallel. Supports: `api`, `tcp`, `process`, `command`, `log`, `mysql`.
   - `service.go` - `Service` HTTP handlers and scheduler. Wires MySQL API handler and AI API handler.
   - `incident_manager.go` - Incident lifecycle (create, acknowledge, resolve). Fires `OnIncidentCreated` callback for AI enqueue.
@@ -52,7 +51,7 @@ cd backend && go fmt ./...
 #### MySQL Monitoring (`mysql_*.go`)
   - `mysql_models.go` - `MySQLSample`, `MySQLDelta`, snapshot types.
   - `mysql_collector.go` - `LiveMySQLSampler` collects `SHOW GLOBAL STATUS/VARIABLES`, computes deltas.
-  - `mysql_repository.go` - `FileMySQLRepository` with JSONL-backed sample/delta storage.
+  - `mysql_repository.go` - MongoDB-backed MySQL sample/delta repository.
   - `mysql_rules.go` - `MySQLRuleEngine` with 9 default alert rules (connection utilization, slow queries, locks, etc.).
   - `mysql_incident_evidence.go` - `IncidentSnapshotRepository` for evidence collection.
   - `mysql_api.go` - `MySQLAPIHandler` for samples, deltas, health card, time-series, AI queue, notifications.
@@ -63,10 +62,10 @@ cd backend && go fmt ./...
   - `ai_provider.go` - `AIProvider` interface + implementations: OpenAI, Anthropic, Google Gemini, Ollama, Custom (OpenAI-compatible).
   - `ai_service.go` - `AIService` orchestrator: background worker, queue processing, prompt template rendering, retry with fallback.
   - `ai_api.go` - `AIAPIHandler` for BYOK config, provider CRUD, prompt CRUD, on-demand analysis, health check, results.
-  - `ai_queue.go` - `FileAIQueue` with dedup, claim, complete/fail lifecycle.
+  - `ai_queue.go` - MongoDB-backed AI queue with dedup, claim, complete/fail lifecycle.
 
 #### Supporting Infrastructure
-  - `notification_outbox.go` - `FileNotificationOutbox` for alert delivery tracking.
+  - `notification_outbox.go` - MongoDB-backed notification outbox for alert delivery tracking.
   - `retention_jobs.go` - `RetentionJob` with daily pruning for snapshots, notifications, AI queue.
   - `analytics.go` - General analytics (uptime, response times, status timeline).
   - `frontend_api.go` - Frontend-optimized endpoints (SSE events, config, stats, auth, exports).
@@ -74,11 +73,7 @@ cd backend && go fmt ./...
 
 ### Storage Architecture
 
-The service uses a hybrid storage approach:
-1. **Local file store** (`backend/data/state.json`) - Always works, primary source of truth
-2. **MongoDB mirror** - Optional best-effort sync via `MONGODB_URI` env var
-
-Read operations (especially dashboard endpoints) prefer Mongo if the data is fresh and non-stale. Writes always update the local file first, then attempt to sync to Mongo asynchronously with a 5-second timeout. If Mongo is down, the service continues operating normally.
+MongoDB is the sole persistence layer. All state, checks, incidents, MySQL samples, AI queue, notifications, and audit data are stored in MongoDB. The `MONGODB_URI` environment variable is required for production.
 
 ### Check Types
 
@@ -107,7 +102,7 @@ See `backend/docs/api-reference.md` for the full reference with request/response
 
 ### Configuration
 
-**Config file** (`backend/config/default.json`) — *seed only on first run*; once `data/state.json` exists, it is the single source of truth and config edits are ignored:
+**Config file** (`backend/config/default.json`) — *seed only on first run*; once MongoDB state exists, it is the single source of truth and config edits are ignored:
 ```json
 {
   "server": {
@@ -125,14 +120,12 @@ See `backend/docs/api-reference.md` for the full reference with request/response
 
 **Environment variables:**
 - `CONFIG_PATH` - Override config file location
-- `STATE_PATH` - Override local state file location
-- `DATA_DIR` - Override data directory for JSONL stores
-- `MONGODB_URI` - Enable MongoDB mirroring (optional)
+- `MONGODB_URI` - MongoDB connection string (required for production)
 - `MONGODB_DATABASE` - Mongo database name (default: `healthops`)
 - `MONGODB_COLLECTION_PREFIX` - Mongo collection prefix (default: `healthops`)
 - `{check.mysql.dsnEnv}` - MySQL DSN per check (never logged)
 
-The `backend/config/default.json` provides the initial seed checks for the very first run. After that, all checks (including MySQL, SSH, etc.) are managed exclusively via the API (`/api/v1/checks`) or UI and persisted in `data/state.json` (with optional MongoDB mirror). To add a check at runtime, `POST /api/v1/checks` — do not edit `default.json` (the change will be ignored on restart).
+The `backend/config/default.json` provides the initial seed checks for the very first run. After that, all checks (including MySQL, SSH, etc.) are managed exclusively via the API (`/api/v1/checks`) or UI and persisted in MongoDB. To add a check at runtime, `POST /api/v1/checks` — do not edit `default.json` (the change will be ignored on restart).
 
 ## Development Guidelines
 
@@ -164,8 +157,6 @@ To add a new check type:
 
 ### Important Patterns
 
-**Immutability:** The store uses a clone-on-write pattern. `Update()` accepts a mutator function that receives a copy of the state, and the change is applied atomically via a temp file + rename operation.
-
-**State pruning:** Old results are automatically pruned based on `retentionDays` config. The `pruneResults` function in `store.go` handles this.
+**State pruning:** Old results are automatically pruned based on `retentionDays` config.
 
 **Dashboard read model:** Dashboard endpoints return a `DashboardSnapshot` which includes both raw state and a pre-computed summary. This is optimized for UI rendering.

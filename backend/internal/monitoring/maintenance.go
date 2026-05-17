@@ -171,7 +171,9 @@ type MaintenanceStore struct {
 	filePath string
 }
 
-// NewMaintenanceStore creates a file-backed maintenance store.
+var _ MaintenanceWindowStore = (*MaintenanceStore)(nil)
+
+// NewMaintenanceStore creates a legacy file-backed maintenance store (test-only; production uses MongoDB).
 func NewMaintenanceStore(filePath string) (*MaintenanceStore, error) {
 	store := &MaintenanceStore{
 		filePath: filePath,

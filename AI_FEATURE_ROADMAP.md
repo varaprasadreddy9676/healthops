@@ -1,8 +1,8 @@
 # AI Feature Roadmap
 
-## Phase 0: Data Foundation
+## Phase 0: Data Foundation (Complete)
 - Build the non-AI monitoring core first: checks, logs, metrics, incidents, and server inventory.
-- Keep MongoDB as a best-effort mirror and preserve local file fallback so the app stays up if MongoDB is down.
+- MongoDB is the sole persistence layer — required for production.
 - Normalize signals into one event shape: `server`, `service`, `timestamp`, `severity`, `category`, `message`, `raw_payload`.
 - Add log ingestion with redaction for secrets, tokens, passwords, and connection strings.
 - Show raw health, recent logs, and recent incidents before introducing AI.

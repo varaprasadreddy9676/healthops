@@ -9,7 +9,6 @@ services:
       CONFIG_PATH: /app/config/demo.json
       DATA_DIR: /app/data
       FRONTEND_DIR: /app/frontend/dist
-      STORAGE_BACKEND: mongo
       MONGODB_URI: mongodb://mongo:27017
       MONGODB_DATABASE: ${MONGODB_DATABASE:-healthops}
       MONGODB_COLLECTION_PREFIX: ${MONGODB_COLLECTION_PREFIX:-healthops}
@@ -48,7 +47,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/healthz"]
+      test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/healthz" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -60,7 +59,7 @@ services:
       - mongo_demo_data:/data/db
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test: [ "CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -80,7 +79,7 @@ services:
       - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -90,7 +89,7 @@ services:
     build: ./docker/nginx-demo
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:80/"]
+      test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:80/" ]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -99,14 +98,14 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 3s
       retries: 3
 
   echo-server:
     image: hashicorp/http-echo
-    command: ["-text=healthy", "-listen=:9000"]
+    command: [ "-text=healthy", "-listen=:9000" ]
     restart: unless-stopped
     # NOTE: hashicorp/http-echo is a scratch image with no shell/wget/nc, so
     # an exec-based healthcheck is not possible. The healthops `echo-server`
@@ -118,7 +117,7 @@ services:
       - "127.0.0.1:${DEMO_API_PORT:-19100}:9100"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9100/health', timeout=2).read()"]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9100/health', timeout=2).read()" ]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -130,7 +129,7 @@ services:
       DEMO_AI_MODEL: healthops-demo-ops-model
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9200/health', timeout=2).read()"]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9200/health', timeout=2).read()" ]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -150,7 +149,7 @@ services:
 
   mysql-workload:
     image: mysql:8.0
-    command: ["sh", "/demo/workload.sh"]
+    command: [ "sh", "/demo/workload.sh" ]
     environment:
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
@@ -173,7 +172,7 @@ services:
       HTTP_PORT: 8000
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "pgrep", "-x", "sshd"]
+      test: [ "CMD", "pgrep", "-x", "sshd" ]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -187,7 +186,7 @@ services:
       HTTP_PORT: 9000
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "pgrep", "-x", "sshd"]
+      test: [ "CMD", "pgrep", "-x", "sshd" ]
       interval: 10s
       timeout: 3s
       retries: 3

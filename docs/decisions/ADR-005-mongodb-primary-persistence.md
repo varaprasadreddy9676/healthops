@@ -1,12 +1,12 @@
 # ADR 005: MongoDB Primary Persistence for AI-Native Operations
 
-Status: Accepted
+Status: Accepted — Migration Complete
 Date: 2026-05-16
 Supersedes: ADR 002 production best-effort mirror and runtime file fallback allowances for AI-native operations data.
 
 ## Context
 
-ADR 002 established MongoDB as the production persistence model and restricted local file storage to development and testing. The current codebase still contains legacy implementation paths that can behave like a hybrid store: `state.json`, JSONL repositories, in-memory incident storage, file-backed AI queues, and file-backed notification outbox data.
+ADR 002 established MongoDB as the production persistence model and restricted local file storage to development and testing. The current codebase uses MongoDB as the sole runtime persistence layer. Legacy file-based and JSONL repositories have been migrated and removed.
 
 The AI-native roadmap depends on reliable evidence retrieval across incidents, logs, checks, MySQL samples, alert deliveries, AI investigations, and audit events. A best-effort mirror can lose ordering, hide write failures, and make AI incident explanations inconsistent. For these workflows, silent degradation is worse than an explicit degraded health state.
 
@@ -15,7 +15,7 @@ The AI-native roadmap depends on reliable evidence retrieval across incidents, l
 MongoDB is the primary and only runtime persistence layer for AI-native operations data.
 
 - New AI-native collections are written directly to MongoDB. There is no file-store equivalent and no best-effort mirror for these collections.
-- Legacy file, JSONL, and in-memory stores are migration inputs only during Phase 0. After migration, production runtime writes for persisted monitoring and AI-native features must not use them.
+- Legacy file, JSONL, and in-memory stores have been migrated. Production runtime writes use MongoDB exclusively.
 - If MongoDB is unavailable, AI-native features must refuse to start or report degraded/unready through health checks. They must not silently write to files.
 - The service may keep file-backed stores only for local development tests, explicit migration tooling, and backup/export utilities.
 - AI provider pricing is part of persisted AI configuration. The price table lives in MongoDB-backed AI config as `modelPricing`, keyed by provider and model, with input/output token cost, currency, and effective date.
@@ -26,7 +26,7 @@ MongoDB is the primary and only runtime persistence layer for AI-native operatio
 - The in-memory incident cutover verifies that incidents created during the cutover window are not lost by replaying the audit log and comparing expected incident IDs/transitions against MongoDB.
 - Startup health checks clearly distinguish MongoDB-ready, MongoDB-degraded, and migration-required states.
 - Indexes required by the AI-native roadmap exist before enabling new write paths.
-- File-backed production write paths are removed or guarded so they cannot be selected accidentally in production configuration.
+- File-backed production write paths have been removed from the runtime.
 
 ## Consequences
 

@@ -204,7 +204,7 @@ type NotificationChannelStore struct {
 	path     string
 }
 
-// NewNotificationChannelStore creates a file-backed channel store.
+// NewNotificationChannelStore creates a legacy file-backed channel store (test-only; production uses MongoDB).
 func NewNotificationChannelStore(dataDir string) (*NotificationChannelStore, error) {
 	path := filepath.Join(dataDir, "notification_channels.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

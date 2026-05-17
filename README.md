@@ -549,8 +549,8 @@ Install Docker: [docs.docker.com/get-docker](https://docs.docker.com/get-docker/
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └───┬────┘  │
 │       └──────────────┴─────────────┴─────────────┘       │
 │  ┌───────────────────────────────────────────────────┐   │
-│  │                  Hybrid Store                     │   │
-│  │      (File-based primary + optional MongoDB)      │   │
+│  │                  MongoDB Store                    │   │
+│  │             (Primary persistence)                 │   │
 │  └───────────────────────────────────────────────────┘   │
 │  JWT Auth · Users · Notifications · Alert Rules           │
 │  Audit · Prometheus · AI Queue · Deduplication            │
@@ -595,10 +595,9 @@ healthops/
 |----------|---------|-------------|
 | `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` | — | Admin password for first run |
 | `HEALTHOPS_PUBLIC_URL` | — | Public URL — required for email links |
-| `STORAGE_BACKEND` | `file` | Set to `mongo` for MongoDB persistence |
-| `MONGODB_URI` | — | MongoDB connection string |
+| `MONGODB_URI` | — | MongoDB connection string (required) |
 | `MONGODB_DATABASE` | `healthops` | MongoDB database name |
-| `DATA_DIR` | `data/` | Data directory |
+| `DATA_DIR` | `data/` | Data directory (encryption keys, JWT secrets) |
 | `CORS_ORIGIN` | — | CORS origin for custom domains |
 
 See the [Deployment Guide](docs/deployment-guide.md) for all options.
@@ -635,7 +634,7 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 | Frontend | React 19, TypeScript, Vite 6, Tailwind CSS |
 | Charts | Recharts |
 | State | TanStack React Query |
-| Storage | File-based (primary) + MongoDB (optional) |
+| Storage | MongoDB |
 | Observability | Prometheus client, SSE |
 | Container | Docker multi-stage build |
 

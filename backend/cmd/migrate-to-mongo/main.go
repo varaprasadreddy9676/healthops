@@ -1,6 +1,10 @@
-// Command migrate-to-mongo reads JSONL-backed repositories and bulk-inserts
-// their contents into the corresponding MongoDB collections. It is idempotent:
-// duplicates are skipped via upsert or insert-ignore semantics.
+// Command migrate-to-mongo is a legacy one-time migration tool that reads
+// JSONL-backed repositories and bulk-inserts their contents into the
+// corresponding MongoDB collections. It is idempotent: duplicates are
+// skipped via upsert or insert-ignore semantics.
+//
+// Deprecated: MongoDB is now the sole storage backend. This tool is only
+// needed for migrating historical data from the former JSONL file stores.
 //
 // Usage:
 //

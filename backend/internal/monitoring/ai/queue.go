@@ -21,7 +21,7 @@ type AIQueueRepository interface {
 	PruneBefore(cutoff time.Time) error
 }
 
-// FileAIQueue implements AIQueueRepository with JSONL file backing.
+// FileAIQueue is a legacy file-backed AIQueueRepository. Retained for tests; production uses MongoDB.
 type FileAIQueue struct {
 	mu          sync.RWMutex
 	queuePath   string
@@ -30,7 +30,7 @@ type FileAIQueue struct {
 	results     []monitoring.AIAnalysisResult
 }
 
-// NewFileAIQueue creates a file-backed AI queue.
+// NewFileAIQueue creates a legacy file-backed AI queue (test-only).
 func NewFileAIQueue(dataDir string) (*FileAIQueue, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create ai queue dir: %w", err)

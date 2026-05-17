@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MySQL deep monitoring** — Live SHOW GLOBAL STATUS/VARIABLES, delta metrics, 9 built-in alert rules
 - **SSH remote server monitoring** — Process, command, and connectivity checks over SSH
 - **React dashboard** — Real-time SSE updates, dark mode, charts (Recharts), 8 pages
-- **MongoDB persistence** — Optional mirror with automatic file-based fallback
+- **MongoDB persistence** — Primary storage backend
 - **Prometheus metrics** — Check runs, failures, durations, HTTP requests at `/metrics`
 - **Audit logging** — All mutations tracked with actor and timestamp
 - **JWT authentication** — Role-based access (admin/viewer)

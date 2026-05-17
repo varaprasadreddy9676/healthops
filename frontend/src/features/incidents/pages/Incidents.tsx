@@ -10,7 +10,7 @@ import { ErrorState } from "@/shared/components/ErrorState"
 import { EmptyState } from "@/shared/components/EmptyState"
 import { ExportButton } from "@/shared/components/ExportButton"
 import { MetricCard } from "@/shared/components/MetricCard"
-import { cn, relativeTime, incidentStatusLabel, severityColor, incidentMessageSummary } from "@/shared/lib/utils"
+import { cn, relativeTime, incidentStatusLabel, incidentMessageSummary } from "@/shared/lib/utils"
 import { settingsApi } from "@/features/settings/api/settings"
 import { analyticsApi } from "@/features/analytics/api/analytics"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
@@ -92,6 +92,7 @@ export default function Incidents() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label="Filter by status"
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
         >
           <option value="">All statuses</option>
@@ -102,6 +103,7 @@ export default function Incidents() {
         <select
           value={severityFilter}
           onChange={(e) => setSeverityFilter(e.target.value)}
+          aria-label="Filter by severity"
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
         >
           <option value="">All severities</option>
@@ -118,7 +120,7 @@ export default function Incidents() {
               <Link
                 key={inc.id}
                 to={`/incidents/${inc.id}`}
-                className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-slate-800/50"
               >
                 <div className={cn(
                   'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
@@ -139,7 +141,10 @@ export default function Incidents() {
                     )}>
                       {incidentStatusLabel(inc.status)}
                     </span>
-                    <span className={cn('text-xs font-medium capitalize', severityColor(inc.severity))}>
+                    <span className={cn(
+                      'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase',
+                      inc.severity === 'critical' ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400' : 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400',
+                    )}>
                       {inc.severity}
                     </span>
                   </div>

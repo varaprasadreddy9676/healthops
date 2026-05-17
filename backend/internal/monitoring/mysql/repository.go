@@ -11,7 +11,7 @@ import (
 	"medics-health-check/backend/internal/util/jsonl"
 )
 
-// FileMySQLRepository implements monitoring.MySQLMetricsRepository with JSONL file backing.
+// FileMySQLRepository is a legacy file-backed MySQLMetricsRepository. Retained for tests; production uses MongoDB.
 type FileMySQLRepository struct {
 	mu         sync.RWMutex
 	samplesDir string
@@ -20,7 +20,7 @@ type FileMySQLRepository struct {
 	deltas     []monitoring.MySQLDelta
 }
 
-// NewFileMySQLRepository creates a new file-backed MySQL metrics repository.
+// NewFileMySQLRepository creates a legacy file-backed MySQL metrics repository (test-only).
 func NewFileMySQLRepository(dataDir string) (*FileMySQLRepository, error) {
 	samplesPath := filepath.Join(dataDir, "mysql_samples.jsonl")
 	deltasPath := filepath.Join(dataDir, "mysql_deltas.jsonl")

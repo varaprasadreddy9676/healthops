@@ -43,18 +43,19 @@ type Service struct {
 	snapshotRepo         IncidentSnapshotRepository
 	userStore            UserStoreBackend
 	userAPI              *UserAPIHandler
-	serverMetricsRepo    *ServerMetricsRepository
+	serverMetricsRepo    ServerMetricsStore
 	serverRepo           ServerRepository
 	degradedMode         *DegradedMode
-	mongoHealthCheck     func(ctx context.Context) error // Phase 0: if set, /healthz pings MongoDB
+	mongoHealthCheck     func(ctx context.Context) error // if set, /healthz pings MongoDB
 	heartbeatAPI         *HeartbeatAPIHandler
-	maintenanceStore     *MaintenanceStore
+	helpAPI              *HelpAPIHandler
+	maintenanceStore     MaintenanceWindowStore
 	maintenanceAPI       *MaintenanceAPIHandler
-	dashboardStore       *CustomDashboardStore
+	dashboardStore       CustomDashboardRepository
 	dashboardAPI         *CustomDashboardAPIHandler
-	statusPageStore      *StatusPageStore
+	statusPageStore      StatusPageRepository
 	statusPageAPI        *StatusPageAPIHandler
-	chatStore            *ChatStore
+	chatStore            ChatRepository
 	chatAPI              *AIChatHandler
 	consecutiveTracker   map[string]*consecutiveCount // checkID → consecutive failure/success counts
 	consecutiveMu        sync.Mutex                   // guards consecutiveTracker (scheduler may invoke callback from multiple goroutines)
@@ -333,19 +334,24 @@ func (s *Service) SetHeartbeatAPI(h *HeartbeatAPIHandler) {
 	s.heartbeatAPI = h
 }
 
+// SetHelpAPI sets the embedded help/documentation API handler (public — no auth).
+func (s *Service) SetHelpAPI(h *HelpAPIHandler) {
+	s.helpAPI = h
+}
+
 // SetMaintenanceStore sets the maintenance window store and creates the API handler.
-func (s *Service) SetMaintenanceStore(store *MaintenanceStore) {
+func (s *Service) SetMaintenanceStore(store MaintenanceWindowStore) {
 	s.maintenanceStore = store
 	s.maintenanceAPI = NewMaintenanceAPIHandler(store)
 }
 
 // MaintenanceStore returns the maintenance store for external use (e.g. runner).
-func (s *Service) MaintenanceStore() *MaintenanceStore {
+func (s *Service) MaintenanceStore() MaintenanceWindowStore {
 	return s.maintenanceStore
 }
 
 // SetCustomDashboardStore sets the custom dashboard store and creates its API handler.
-func (s *Service) SetCustomDashboardStore(store *CustomDashboardStore) {
+func (s *Service) SetCustomDashboardStore(store CustomDashboardRepository) {
 	s.dashboardStore = store
 	var incRepo IncidentRepository
 	if s.incidentManager != nil {
@@ -355,7 +361,7 @@ func (s *Service) SetCustomDashboardStore(store *CustomDashboardStore) {
 }
 
 // SetStatusPageStore sets the status page store and creates its API handler.
-func (s *Service) SetStatusPageStore(store *StatusPageStore) {
+func (s *Service) SetStatusPageStore(store StatusPageRepository) {
 	s.statusPageStore = store
 	var incRepo IncidentRepository
 	if s.incidentManager != nil {
@@ -365,7 +371,7 @@ func (s *Service) SetStatusPageStore(store *StatusPageStore) {
 }
 
 // SetAIChatStore sets the AI chat store and creates its API handler.
-func (s *Service) SetAIChatStore(store *ChatStore, aiProvider ChatProvider) {
+func (s *Service) SetAIChatStore(store ChatRepository, aiProvider ChatProvider) {
 	s.chatStore = store
 	var incRepo IncidentRepository
 	if s.incidentManager != nil {
@@ -380,7 +386,7 @@ func (s *Service) SetSnapshotRepo(repo IncidentSnapshotRepository) {
 }
 
 // SetServerMetricsRepo sets the server metrics repository.
-func (s *Service) SetServerMetricsRepo(repo *ServerMetricsRepository) {
+func (s *Service) SetServerMetricsRepo(repo ServerMetricsStore) {
 	s.serverMetricsRepo = repo
 	s.runner.SetServerMetricsRepo(repo)
 }
@@ -391,8 +397,7 @@ func (s *Service) SetServerRepo(repo ServerRepository) {
 }
 
 // SetMongoHealthCheck sets a function that /healthz will call to verify
-// MongoDB connectivity. Used by Phase 0 (STORAGE_BACKEND=mongo) where
-// the service cannot operate without MongoDB.
+// MongoDB connectivity. The service cannot operate without MongoDB.
 func (s *Service) SetMongoHealthCheck(fn func(ctx context.Context) error) {
 	s.mongoHealthCheck = fn
 }
@@ -529,6 +534,11 @@ func (s *Service) Run(ctx context.Context) error {
 	// Register heartbeat ping endpoints (unauthenticated — cron jobs call them)
 	if s.heartbeatAPI != nil {
 		s.heartbeatAPI.RegisterRoutes(mux)
+	}
+
+	// Register embedded help/documentation endpoints (unauthenticated)
+	if s.helpAPI != nil {
+		s.helpAPI.RegisterRoutes(mux)
 	}
 
 	// Register maintenance window CRUD endpoints

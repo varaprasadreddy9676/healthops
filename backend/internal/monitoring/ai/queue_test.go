@@ -176,7 +176,7 @@ func TestFileAIQueue_Persistence(t *testing.T) {
 	// Verify file exists
 	queuePath := filepath.Join(dir, "ai_queue.jsonl")
 	if _, err := os.Stat(queuePath); os.IsNotExist(err) {
-		t.Fatal("queue JSONL file not created")
+		t.Fatal("queue data file not created")
 	}
 
 	// Reload

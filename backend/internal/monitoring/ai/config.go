@@ -309,7 +309,7 @@ func (c *AIServiceConfig) toSafeView() SafeAIConfigView {
 // --- Persistence ---
 
 // AIConfigStoreInterface defines the interface for AI configuration storage.
-// This allows different implementations (file-based, MongoDB, etc.) to be used interchangeably.
+// This allows different implementations (legacy file-backed, MongoDB) to be used interchangeably.
 type AIConfigStoreInterface interface {
 	Get() AIServiceConfig
 	Update(mutator func(*AIServiceConfig) error) error

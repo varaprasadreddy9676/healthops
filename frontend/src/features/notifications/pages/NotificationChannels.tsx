@@ -210,11 +210,10 @@ function LogRow({ log }: { log: NotificationLog }) {
                 <div className="mb-1.5 flex items-center gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Response</span>
                   {log.responseStatus && (
-                    <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${
-                      log.responseStatus < 300
+                    <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${log.responseStatus < 300
                         ? 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400'
                         : 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400'
-                    }`}>
+                      }`}>
                       {log.responseStatus}
                     </span>
                   )}
@@ -257,11 +256,10 @@ function DeliveryLogs({ channels }: { channels: NotificationChannel[] }) {
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                statusFilter === s
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${statusFilter === s
                   ? 'bg-blue-600 text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
-              }`}
+                }`}
             >
               {s === '' ? 'All' : s}
             </button>
@@ -274,11 +272,10 @@ function DeliveryLogs({ channels }: { channels: NotificationChannel[] }) {
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Channel:</span>
             <button
               onClick={() => setChannelFilter('')}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                channelFilter === ''
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${channelFilter === ''
                   ? 'bg-blue-600 text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
-              }`}
+                }`}
             >
               All
             </button>
@@ -286,11 +283,10 @@ function DeliveryLogs({ channels }: { channels: NotificationChannel[] }) {
               <button
                 key={ch.id}
                 onClick={() => setChannelFilter(channelFilter === ch.name ? '' : ch.name)}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  channelFilter === ch.name
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${channelFilter === ch.name
                     ? 'bg-blue-600 text-white'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
-                }`}
+                  }`}
               >
                 {ch.name}
               </button>
@@ -471,21 +467,19 @@ export default function NotificationChannels() {
       <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800">
         <button
           onClick={() => setActiveTab('channels')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'channels'
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'channels'
               ? 'border-blue-600 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-          }`}
+            }`}
         >
           Channels
         </button>
         <button
           onClick={() => setActiveTab('logs')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'logs'
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'logs'
               ? 'border-blue-600 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-          }`}
+            }`}
         >
           Delivery Logs
         </button>
@@ -533,13 +527,13 @@ export default function NotificationChannels() {
                   <div className="sm:col-span-2">
                     <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Webhook URL</label>
                     <input
-                    value={form.webhookUrl || ''}
-                    onChange={e => setForm(f => ({ ...f, webhookUrl: e.target.value }))}
-                    placeholder="https://hooks.slack.com/services/..."
-                    type="url"
-                    required
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                  />
+                      value={form.webhookUrl || ''}
+                      onChange={e => setForm(f => ({ ...f, webhookUrl: e.target.value }))}
+                      placeholder="https://hooks.slack.com/services/..."
+                      type="url"
+                      required
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    />
                   </div>
                 )}
 
@@ -801,7 +795,7 @@ export default function NotificationChannels() {
 
           {/* Channel List */}
           {!channels?.length ? (
-            <EmptyState icon={<Bell className="h-6 w-6" />} title="No channels configured" description="Add a notification channel to receive alerts via email, Slack, webhooks, and more" />
+            <EmptyState icon={<Bell className="h-6 w-6" />} title="No alert delivery channels" description="Alerts are being generated but have no delivery channels configured. Add a channel (email, Slack, webhook) to start receiving alert notifications." />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {channels.map(ch => (

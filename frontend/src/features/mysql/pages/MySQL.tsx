@@ -159,9 +159,9 @@ export default function MySQL() {
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               Top Queries (preview)
             </h2>
-            <a href="/mysql/queries" className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400">
+            <Link to="/mysql/queries" className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400">
               View all →
-            </a>
+            </Link>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -271,9 +271,9 @@ export default function MySQL() {
                 <AlertTriangle className="h-4 w-4 text-red-500" />
                 <h2 className="text-sm font-semibold text-red-900 dark:text-red-200">Queries Needing Attention</h2>
               </div>
-              <a href="/mysql/queries?filter=inefficient" className="text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400">
+              <Link to="/mysql/queries?filter=inefficient" className="text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400">
                 View all →
-              </a>
+              </Link>
             </div>
             <div className="divide-y divide-red-100 dark:divide-red-900/30">
               {inefficient.map((q, i) => {
@@ -310,9 +310,9 @@ export default function MySQL() {
       <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Server Quick Stats</h2>
-          <a href="/mysql/server" className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400">
+          <Link to="/mysql/server" className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400">
             Full details →
-          </a>
+          </Link>
         </div>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 text-sm">
           <QuickStat icon={<Server className="h-4 w-4" />} label="Uptime" value={formatUptime(live?.uptimeSeconds ?? health.uptime)} />
@@ -363,7 +363,7 @@ function DangerStat({ label, value, severity, hint, to }: { label: string; value
         <p className="text-xs font-medium text-slate-600 dark:text-slate-400">{label}</p>
       </div>
       <p className={`mt-1 text-lg font-bold ${colorMap[severity]}`}>{value}</p>
-      {hint && <p className="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">{hint}</p>}
+      {hint && <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">{hint}</p>}
     </Link>
   )
 }

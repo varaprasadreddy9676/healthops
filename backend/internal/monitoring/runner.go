@@ -22,7 +22,7 @@ type Runner struct {
 	incidentManager   *IncidentManager
 	outbox            NotificationOutboxRepository
 	snapshotRepo      IncidentSnapshotRepository
-	serverMetricsRepo *ServerMetricsRepository
+	serverMetricsRepo ServerMetricsStore
 	running           bool
 	mu                sync.Mutex
 }
@@ -259,7 +259,7 @@ func (r *Runner) SetSnapshotRepo(repo IncidentSnapshotRepository) {
 	r.snapshotRepo = repo
 }
 
-func (r *Runner) SetServerMetricsRepo(repo *ServerMetricsRepository) {
+func (r *Runner) SetServerMetricsRepo(repo ServerMetricsStore) {
 	r.serverMetricsRepo = repo
 }
 

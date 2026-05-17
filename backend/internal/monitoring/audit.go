@@ -42,7 +42,7 @@ type AuditRepository interface {
 	ListEvents(filter AuditFilter) ([]AuditEvent, error)
 }
 
-// FileAuditRepository implements audit logging to a file
+// FileAuditRepository is a legacy file-backed audit repository. Retained for tests; production uses MongoDB.
 type FileAuditRepository struct {
 	mu     sync.RWMutex
 	path   string
@@ -51,7 +51,7 @@ type FileAuditRepository struct {
 
 var _ AuditRepository = (*FileAuditRepository)(nil)
 
-// NewFileAuditRepository creates a new file-based audit repository
+// NewFileAuditRepository creates a new legacy file-backed audit repository (test-only).
 func NewFileAuditRepository(path string) (*FileAuditRepository, error) {
 	if path == "" {
 		path = "data/audit.json"

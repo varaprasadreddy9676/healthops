@@ -19,7 +19,7 @@ This is the starting point as of plan creation.
 - Core package: `backend/internal/monitoring/`
 - Supported check types: `api`, `tcp`, `process`, `command`, `log`
 - HTTP endpoints for health, check CRUD, manual run, summary, results, dashboard aliases
-- File-backed state store with optional best-effort Mongo mirror
+- MongoDB-backed state store
 - Good unit test base for current code
 
 ### Major limitations today

@@ -8,7 +8,7 @@ import (
 	"medics-health-check/backend/internal/monitoring/ai"
 )
 
-// AIConfigStoreInterface is the interface that both file-based and MongoDB config stores must implement.
+// AIConfigStoreInterface is the interface that all config stores (legacy file-backed and MongoDB) must implement.
 // This is defined in the ai package, but we reference it here to ensure type compatibility.
 type AIConfigStoreInterface interface {
 	Get() ai.AIServiceConfig

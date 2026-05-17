@@ -110,7 +110,7 @@ func initJWTSecret(dataDir string) {
 	_ = os.WriteFile(keyPath, jwtSecret, 0600)
 }
 
-// InitJWTSecret prepares the JWT secret for non-file-backed user stores.
+// InitJWTSecret prepares the JWT secret for non-file-backed user stores (e.g. MongoDB).
 func InitJWTSecret(dataDir string) {
 	initJWTSecret(dataDir)
 }
@@ -185,7 +185,7 @@ func ExtractJWTClaims(r *http.Request) *JWTClaims {
 }
 
 // ---------------------------------------------------------------------------
-// User Store (file-backed)
+// User Store (legacy file-backed; production uses MongoDB)
 // ---------------------------------------------------------------------------
 
 type UserStore struct {

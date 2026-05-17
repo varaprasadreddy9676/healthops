@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide provides step-by-step instructions for integrating MongoDB repositories into the HealthOps monitoring service. The integration follows a layered architecture with graceful degradation to file-based storage when MongoDB is unavailable.
+This guide provides step-by-step instructions for integrating MongoDB repositories into the HealthOps monitoring service. MongoDB is the sole persistence backend for all runtime data.
 
 ## Architecture Diagram
 
@@ -16,8 +16,8 @@ This guide provides step-by-step instructions for integrating MongoDB repositori
                 │               │               │
                 ▼               ▼               ▼
 ┌──────────────────────┐ ┌─────────────┐ ┌──────────────────┐
-│  Repository Layer    │ │  Service    │ │  Hybrid Store    │
-│  (MongoDB/File)      │ │  Layer      │ │  (Main State)    │
+│  Repository Layer    │ │  Service    │ │  MongoStore      │
+│  (MongoDB)           │ │  Layer      │ │  (Main State)    │
 ├──────────────────────┤ └─────────────┘ └──────────────────┘
 │ • ServerRepository   │
 │ • UserRepository     │        ▲
@@ -26,38 +26,25 @@ This guide provides step-by-step instructions for integrating MongoDB repositori
 │ • AIConfigRepo       │   Repositories
 └──────────────────────┘
                 │
-        ┌───────┴───────┐
-        │               │
-        ▼               ▼
-┌──────────────┐ ┌──────────────┐
-│   MongoDB    │ │  File Store  │
-│  (Primary)   │ │  (Fallback)  │
-└──────────────┘ └──────────────┘
+                ▼
+        ┌──────────────┐
+        │   MongoDB    │
+        │  (Primary)   │
+        └──────────────┘
 ```
 
-## Current State (File-Based Storage)
+## Current State (MongoDB-Only)
 
-The following components currently use file-based storage:
+All components use MongoDB as the sole persistence layer. Legacy file-based repositories exist in the codebase for reference/testing only but are not used at runtime.
 
-| Component | File Location | Interface |
-|-----------|---------------|-----------|
-| Users | `data/users.json` | `UserStore` (custom) |
-| Notification Channels | `data/channels.json` | `NotificationChannelStore` (custom) |
-| Alert Rules | `data/alert_rules.json` | `FileAlertRuleRepository` |
-| AI Config | `data/ai_config.json` | `FileAIConfigStore` |
-| Servers | `config/servers.json` | `ServerRepository` (already supports Mongo) |
-| Main State | `data/state.json` | `HybridStore` (already supports Mongo) |
-
-## Target State (MongoDB + File Fallback)
-
-All repositories will use MongoDB as primary storage with automatic fallback to file-based storage:
-
-| Component | MongoDB Collection | File Fallback |
-|-----------|-------------------|---------------|
-| Users | `healthops_users` | `data/users.json` |
-| Notification Channels | `healthops_notification_channels` | `data/channels.json` |
-| Alert Rules | `healthops_alert_rules` | `data/alert_rules.json` |
-| AI Config | `healthops_ai_config` | `data/ai_config.json` |
+| Component | MongoDB Collection |
+|-----------|-------------------|
+| Users | `healthops_users` |
+| Notification Channels | `healthops_notification_channels` |
+| Alert Rules | `healthops_alert_rules` |
+| AI Config | `healthops_ai_config` |
+| Servers | `healthops_servers` |
+| Main State | `healthops_state` (via `MongoStore`) |
 | Servers | `healthops_servers` | `config/servers.json` |
 | Main State | `healthops_state` | `data/state.json` |
 
@@ -579,7 +566,7 @@ If MongoDB data is corrupted:
 
 - [ ] All repositories initialize successfully
 - [ ] MongoDB repositories are used when available
-- [ ] File-based fallback works when MongoDB is down
+- [x] File-based fallback removed — MongoDB is the sole persistence layer
 - [ ] Incidents are created when MongoDB goes down
 - [ ] Incidents are resolved when MongoDB recovers
 - [ ] User CRUD operations work

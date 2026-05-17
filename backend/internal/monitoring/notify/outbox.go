@@ -23,14 +23,14 @@ type NotificationOutboxRepository interface {
 	PruneBefore(cutoff time.Time) error
 }
 
-// FileNotificationOutbox implements NotificationOutboxRepository with JSONL backing.
+// FileNotificationOutbox is a legacy file-backed NotificationOutboxRepository. Retained for tests; production uses MongoDB.
 type FileNotificationOutbox struct {
 	mu   sync.RWMutex
 	path string
 	data []monitoring.NotificationEvent
 }
 
-// NewFileNotificationOutbox creates a file-backed notification outbox.
+// NewFileNotificationOutbox creates a legacy file-backed notification outbox (test-only).
 func NewFileNotificationOutbox(path string) (*FileNotificationOutbox, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("create outbox dir: %w", err)

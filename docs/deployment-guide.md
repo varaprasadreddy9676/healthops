@@ -202,10 +202,9 @@ sudo systemctl status healthops
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CONFIG_PATH` | `config/default.json` | Path to the checks configuration file |
-| `STATE_PATH` | `data/state.json` | Path to the local JSON state file |
-| `DATA_DIR` | `data/` | Directory for JSONL data files (outbox, queue, snapshots, etc.) |
+| `DATA_DIR` | `data/` | Directory for encryption keys and JWT secrets |
 | `FRONTEND_DIR` | *(not set)* | Path to built frontend `dist/` folder. If unset, no frontend served |
-| `MONGODB_URI` | *(not set)* | MongoDB connection string. If set, enables hybrid storage |
+| `MONGODB_URI` | *(not set)* | MongoDB connection string (required for production) |
 | `MONGODB_DATABASE` | `healthops` | MongoDB database name |
 | `MONGODB_COLLECTION_PREFIX` | `healthops` | Prefix for MongoDB collection names |
 | `CORS_ORIGIN` | *(not set)* | Allowed CORS origin for SSE endpoint. If unset, same-origin only |
@@ -215,19 +214,9 @@ sudo systemctl status healthops
 
 | File | Purpose |
 |------|---------|
-| `state.json` | Primary state: checks config, results, timestamps |
-| `audit.json` | Audit log of all API mutations |
-| `alert_rules.json` | Persisted alert rule configurations |
-| `notification_channels.json` | Notification channel configs |
-| `notification_outbox.jsonl` | Notification delivery history |
-| `incident_snapshots.jsonl` | Evidence snapshots for incidents |
 | `ai_config.json` | BYOK AI provider configs (keys encrypted) |
 | `.ai_enc_key` | AES-256-GCM key for AI config encryption |
 | `.jwt_secret` | Auto-generated JWT signing secret |
-| `users.json` | User accounts and hashed passwords |
-| `mysql_samples.jsonl` | MySQL status snapshots |
-| `mysql_deltas.jsonl` | MySQL computed delta metrics |
-| `ai_queue.jsonl` | AI analysis job queue |
 
 ---
 
@@ -771,14 +760,9 @@ curl -X POST http://localhost:8080/api/v1/ai/providers \
 
 | Path | Content | Critical? |
 |------|---------|-----------|
-| `data/state.json` | Check configs, results | Yes |
-| `data/users.json` | User accounts | Yes |
 | `data/.jwt_secret` | JWT signing key | Yes |
-| `data/alert_rules.json` | Alert configurations | Yes |
-| `data/notification_channels.json` | Channel configs | Yes |
 | `data/ai_config.json` + `.ai_enc_key` | AI provider configs | If using AI |
 | `config/default.json` | Check definitions | Yes |
-| `data/*.jsonl` | Historical data (outbox, snapshots, queue) | Nice to have |
 
 ### Backup Script
 
@@ -965,13 +949,10 @@ sudo journalctl -u healthops -f | grep -i "notif\|dispatch\|channel\|webhook\|sl
 
 7. **Check the notification outbox for errors:**
    ```bash
-   # In Docker
-   docker exec healthops cat /app/data/notification_outbox.jsonl | tail -20
-
-   # Bare metal
-   tail -20 /opt/healthops/data/notification_outbox.jsonl
+   # Query MongoDB for recent notification failures
+   mongosh "$MONGODB_URI" --eval 'db.healthops_notification_outbox.find({error:{$ne:""}}).sort({createdAt:-1}).limit(20).pretty()'
    ```
-   Look for `"error"` fields in the JSONL entries.
+   Look for `error` fields in the notification documents.
 
 8. **Is the check linked to the channel?**
    If the check has `notificationChannelIDs`, only those channels receive alerts. If empty, all matching channels fire.

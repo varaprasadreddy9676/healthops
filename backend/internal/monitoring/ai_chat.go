@@ -64,6 +64,9 @@ type ChatReference struct {
 	URL  string `json:"url,omitempty"`
 }
 
+// Compile-time check: ChatStore implements ChatRepository.
+var _ ChatRepository = (*ChatStore)(nil)
+
 // ChatStore manages persistent conversations.
 type ChatStore struct {
 	mu            sync.RWMutex
@@ -219,7 +222,7 @@ func (s *ChatStore) PruneOld(maxAge time.Duration) int {
 
 // AIChatHandler handles the generic AI chat API.
 type AIChatHandler struct {
-	chatStore    *ChatStore
+	chatStore    ChatRepository
 	checkStore   Store
 	incidentRepo IncidentRepository
 	aiProvider   ChatProvider
@@ -228,7 +231,7 @@ type AIChatHandler struct {
 
 // NewAIChatHandler creates the AI chat handler.
 func NewAIChatHandler(
-	chatStore *ChatStore,
+	chatStore ChatRepository,
 	checkStore Store,
 	incidentRepo IncidentRepository,
 	aiProvider ChatProvider,

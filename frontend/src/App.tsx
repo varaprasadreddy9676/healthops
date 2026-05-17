@@ -7,6 +7,7 @@ import { useAuth } from "@/shared/hooks/useAuth"
 import { useAIAvailability } from "@/features/ai/hooks/useAIAvailability"
 
 const Login = lazy(() => import('@/features/auth/pages/Login'))
+const Landing = lazy(() => import('@/features/landing/pages/Landing'))
 const Dashboard = lazy(() => import('@/features/dashboard/pages/Dashboard'))
 const Servers = lazy(() => import('@/features/servers/pages/Servers'))
 const ServerDetail = lazy(() => import('@/features/servers/pages/ServerDetail'))
@@ -46,8 +47,11 @@ export default function App() {
       <Routes>
         {!isAuthenticated ? (
           <>
+            <Route index element={<Landing />} />
             <Route path="/login" element={<Login />} />
-            <Route path="*" element={<Navigate to="/login" replace />} />
+            <Route path="/help" element={<HelpPage />} />
+            <Route path="/help/:slug" element={<HelpPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </>
         ) : (
           <Route element={<Layout />}>

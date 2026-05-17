@@ -14,8 +14,7 @@ import (
 )
 
 // MongoStore implements Store with MongoDB as the sole persistence layer.
-// No file fallback — all reads and writes go directly to MongoDB.
-// Used when STORAGE_BACKEND=mongo (Phase 0).
+// All reads and writes go directly to MongoDB.
 type MongoStore struct {
 	client        *mongo.Client
 	db            *mongo.Database

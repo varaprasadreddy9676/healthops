@@ -106,7 +106,7 @@ func TestFileSnapshotRepository_Persistence(t *testing.T) {
 
 	// Verify file exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		t.Fatal("JSONL file not created")
+		t.Fatal("data file not created")
 	}
 
 	// Reload

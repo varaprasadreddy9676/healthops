@@ -173,11 +173,11 @@ func (p *MySQLSnapshotProvider) Collect(_ context.Context, incidentID string, _ 
 
 // ServerMetricsProvider collects recent server metric snapshots.
 type ServerMetricsProvider struct {
-	repo  *monitoring.ServerMetricsRepository
+	repo  monitoring.ServerMetricsStore
 	store monitoring.Store
 }
 
-func NewServerMetricsProvider(repo *monitoring.ServerMetricsRepository, store monitoring.Store) *ServerMetricsProvider {
+func NewServerMetricsProvider(repo monitoring.ServerMetricsStore, store monitoring.Store) *ServerMetricsProvider {
 	return &ServerMetricsProvider{repo: repo, store: store}
 }
 

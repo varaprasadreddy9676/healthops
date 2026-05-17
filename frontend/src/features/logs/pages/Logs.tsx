@@ -153,7 +153,7 @@ function CategoryChart({ counts, activeFilter, onToggle }: { counts: Record<stri
         <div>
             <div className="mb-3 flex items-center justify-between gap-3">
                 <h3 className="text-xs font-semibold uppercase text-slate-500">By Category</h3>
-                <span className="text-[11px] font-medium text-slate-400">Patterns, rule-based</span>
+                <span className="text-xs font-medium text-slate-400">Patterns, rule-based</span>
             </div>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                 {sorted.map(([cat, count]) => {
@@ -377,6 +377,7 @@ export default function Logs() {
                     <input
                         type="text"
                         placeholder="Search patterns, sources, servers..."
+                        aria-label="Search log patterns"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:focus:border-blue-700 dark:focus:ring-blue-900"
@@ -386,7 +387,7 @@ export default function Logs() {
                 <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    title="Filter by status"
+                    aria-label="Filter by status"
                     className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
                 >
                     <option value="">All statuses</option>
@@ -397,7 +398,7 @@ export default function Logs() {
                 <select
                     value={severityFilter}
                     onChange={(e) => setSeverityFilter(e.target.value)}
-                    title="Filter by severity"
+                    aria-label="Filter by severity"
                     className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
                 >
                     <option value="">All severities</option>
@@ -411,7 +412,7 @@ export default function Logs() {
                 <select
                     value={categoryFilter}
                     onChange={(e) => setCategoryFilter(e.target.value)}
-                    title="Filter by category"
+                    aria-label="Filter by category"
                     className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
                 >
                     <option value="">All categories</option>
@@ -492,7 +493,7 @@ export default function Logs() {
                                             </p>
                                             {f.category && f.category !== 'unknown' && <CategoryBadge category={f.category} />}
                                             {f.severity && (
-                                                <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase', SEVERITY_COLORS[f.severity] || SEVERITY_COLORS.low)}>
+                                                <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold uppercase leading-tight', SEVERITY_COLORS[f.severity] || SEVERITY_COLORS.low)}>
                                                     {f.severity}
                                                 </span>
                                             )}
@@ -514,7 +515,7 @@ export default function Logs() {
 
                                     {/* Status badge */}
                                     <div className="shrink-0 pt-0.5">
-                                        <span className={cn('rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase', STATUS_COLORS[f.status] || STATUS_COLORS.active)}>
+                                        <span className={cn('rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase leading-tight', STATUS_COLORS[f.status] || STATUS_COLORS.active)}>
                                             {f.status}
                                         </span>
                                     </div>

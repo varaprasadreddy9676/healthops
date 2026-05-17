@@ -88,7 +88,7 @@ function ActionCard({
                             </span>
                         </div>
                         <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{action.description}</p>
-                        <p className="mt-1 text-[11px] text-slate-500">
+                        <p className="mt-1 text-xs text-slate-500">
                             <span className="font-medium">Why:</span> {action.reason}
                         </p>
                     </div>
@@ -110,12 +110,12 @@ function ActionCard({
                                 Suggested Command
                             </div>
                             <code className="mt-1 block text-xs text-green-400 font-mono">{action.command}</code>
-                            <p className="mt-2 text-[10px] text-slate-400">
+                            <p className="mt-2 text-xs text-slate-400">
                                 Run manually only after confirming the host, scope, and rollback path.
                             </p>
                         </div>
                     )}
-                    <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
                         <Clock className="h-3 w-3" />
                         Expires: {new Date(action.expiresAt).toLocaleString()}
                     </div>
@@ -167,8 +167,8 @@ function AuditTable({ entries }: { entries: AuditEntry[] }) {
                             <td className="px-3 py-2 whitespace-nowrap">{new Date(entry.timestamp).toLocaleString()}</td>
                             <td className="px-3 py-2">
                                 <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${entry.event === 'approved' ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
-                                        entry.event === 'rejected' ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400' :
-                                            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                    entry.event === 'rejected' ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400' :
+                                        'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                                     }`}>
                                     {entry.event}
                                 </span>
@@ -317,8 +317,8 @@ export default function Automation() {
                     <button
                         onClick={() => setTab('actions')}
                         className={`flex items-center gap-1.5 border-b-2 pb-1 text-xs font-medium transition-colors ${tab === 'actions'
-                                ? 'border-violet-600 text-violet-600 dark:border-violet-400 dark:text-violet-400'
-                                : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                            ? 'border-violet-600 text-violet-600 dark:border-violet-400 dark:text-violet-400'
+                            : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                             }`}
                     >
                         <Zap className="h-3.5 w-3.5" />
@@ -327,8 +327,8 @@ export default function Automation() {
                     <button
                         onClick={() => setTab('audit')}
                         className={`flex items-center gap-1.5 border-b-2 pb-1 text-xs font-medium transition-colors ${tab === 'audit'
-                                ? 'border-violet-600 text-violet-600 dark:border-violet-400 dark:text-violet-400'
-                                : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                            ? 'border-violet-600 text-violet-600 dark:border-violet-400 dark:text-violet-400'
+                            : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                             }`}
                     >
                         <FileText className="h-3.5 w-3.5" />
@@ -391,8 +391,8 @@ export default function Automation() {
                                     key={f.value}
                                     onClick={() => setStatusFilter(f.value)}
                                     className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${statusFilter === f.value
-                                            ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
-                                            : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                                        ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
+                                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
                                         }`}
                                 >
                                     {f.label}

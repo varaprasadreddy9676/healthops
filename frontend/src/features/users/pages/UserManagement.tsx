@@ -30,7 +30,7 @@ async function fetchUsers(): Promise<User[]> {
 }
 
 export default function UserManagement() {
-  const { isAdmin } = useAuth()
+  const { isAdmin, user: currentUser } = useAuth()
   const toast = useToast()
   const confirm = useConfirm()
   const queryClient = useQueryClient()
@@ -214,11 +214,10 @@ export default function UserManagement() {
                     <div className="text-xs text-slate-500">@{user.username}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                      user.role === 'admin'
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${user.role === 'admin'
                         ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-400'
                         : 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400'
-                    }`}>
+                      }`}>
                       {user.role === 'admin' ? <Shield className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                       {user.role === 'admin' ? 'Admin' : 'Ops'}
                     </span>
@@ -245,21 +244,29 @@ export default function UserManagement() {
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
-                        <button
-                          onClick={async () => {
-                            const ok = await confirm({
-                              title: 'Delete User',
-                              message: `Delete user "${user.username}"?`,
-                              variant: 'danger',
-                              confirmLabel: 'Delete',
-                            })
-                            if (ok) deleteMutation.mutate(user.id)
-                          }}
-                          className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {(() => {
+                          const isSelf = user.username === currentUser?.username
+                          const isLastAdmin = user.role === 'admin' && users.filter(u => u.role === 'admin').length <= 1
+                          const canDelete = !isSelf && !isLastAdmin
+                          return (
+                            <button
+                              onClick={async () => {
+                                const ok = await confirm({
+                                  title: 'Delete User',
+                                  message: `Are you sure you want to delete user "${user.username}"? This action cannot be undone.`,
+                                  variant: 'danger',
+                                  confirmLabel: 'Delete',
+                                })
+                                if (ok) deleteMutation.mutate(user.id)
+                              }}
+                              disabled={!canDelete}
+                              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 dark:hover:bg-red-950/50"
+                              title={isSelf ? 'Cannot delete your own account' : isLastAdmin ? 'Cannot delete the last admin' : 'Delete'}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )
+                        })()}
                       </div>
                     </td>
                   )}

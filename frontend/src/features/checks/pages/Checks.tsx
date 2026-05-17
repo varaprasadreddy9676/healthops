@@ -113,7 +113,8 @@ export default function Checks() {
       case 'status': {
         const sa = latestByCheck.get(a.id)?.status ?? 'unknown'
         const sb = latestByCheck.get(b.id)?.status ?? 'unknown'
-        cmp = sa.localeCompare(sb); break
+        const order: Record<string, number> = { critical: 0, warning: 1, unknown: 2, healthy: 3 }
+        cmp = (order[sa] ?? 4) - (order[sb] ?? 4); break
       }
       case 'durationMs': {
         const da = latestByCheck.get(a.id)?.durationMs ?? 0
@@ -175,6 +176,7 @@ export default function Checks() {
           </span>
           <button
             onClick={() => handleServerFilterChange('all')}
+            aria-label="Clear server filter"
             className="ml-auto rounded-md p-1 text-blue-600 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-blue-900/50"
           >
             <X className="h-4 w-4" />
@@ -197,6 +199,7 @@ export default function Checks() {
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
+          aria-label="Filter by check type"
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
         >
           <option value="all">All types</option>
@@ -205,6 +208,7 @@ export default function Checks() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label="Filter by status"
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
         >
           <option value="all">All statuses</option>
@@ -216,6 +220,7 @@ export default function Checks() {
         <select
           value={serverFilter}
           onChange={(e) => handleServerFilterChange(e.target.value)}
+          aria-label="Filter by server"
           className={cn(
             "rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none",
             serverFilter !== 'all'
@@ -249,47 +254,72 @@ export default function Checks() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filtered.map((check) => {
-                const lr = latestByCheck.get(check.id)
-                return (
-                  <tr key={check.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="px-4 py-3">
-                      <StatusBadge status={lr?.status ?? 'unknown'} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link to={`/checks/${check.id}`} className="font-medium text-slate-900 hover:text-blue-600 dark:text-slate-100 dark:hover:text-blue-400">
-                        {check.name}
-                      </Link>
-                      {check.enabled === false && (
-                        <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 dark:bg-slate-800">
-                          DISABLED
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                        {checkTypeLabel(check.type)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{check.server || '—'}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-400">
-                      {lr ? formatDuration(lr.durationMs) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">
-                      {lr ? relativeTime(lr.finishedAt) : 'Never'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => setEditingCheck(check)}
-                        className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800 dark:hover:text-blue-400"
-                        title="Edit check"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-400">
+                    No checks match your filters. Try adjusting your search or filters.
+                  </td>
+                </tr>
+              ) : (
+                <>
+                  {filtered.map((check) => {
+                    const lr = latestByCheck.get(check.id)
+                    const isCrit = lr?.status === 'critical'
+                    const isWarn = lr?.status === 'warning'
+                    return (
+                      <tr key={check.id} className={cn(
+                        'transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50',
+                        isCrit && 'bg-red-50/50 dark:bg-red-950/10',
+                        isWarn && 'bg-amber-50/50 dark:bg-amber-950/10',
+                      )}>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={lr?.status ?? 'unknown'} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <Link to={`/checks/${check.id}`} className="font-medium text-slate-900 hover:text-blue-600 dark:text-slate-100 dark:hover:text-blue-400">
+                            {check.name}
+                          </Link>
+                          {check.enabled === false && (
+                            <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 dark:bg-slate-800">
+                              DISABLED
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                            {checkTypeLabel(check.type)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{check.server || '—'}</td>
+                        <td className="px-4 py-3 font-mono text-xs">
+                          {lr ? (
+                            <span className={cn(
+                              lr.durationMs >= 2000 ? 'text-red-600 font-medium dark:text-red-400' :
+                                lr.durationMs >= 500 ? 'text-amber-600 font-medium dark:text-amber-400' :
+                                  'text-slate-600 dark:text-slate-400',
+                            )}>
+                              {formatDuration(lr.durationMs)}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-400">
+                          {lr ? relativeTime(lr.finishedAt) : 'Never'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => setEditingCheck(check)}
+                            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800 dark:hover:text-blue-400"
+                            title="Edit check"
+                            aria-label={`Edit ${check.name}`}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </>
+              )}
             </tbody>
           </table>
         </div>

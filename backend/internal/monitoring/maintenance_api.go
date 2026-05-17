@@ -11,11 +11,11 @@ import (
 
 // MaintenanceAPIHandler handles maintenance window CRUD.
 type MaintenanceAPIHandler struct {
-	store *MaintenanceStore
+	store MaintenanceWindowStore
 }
 
 // NewMaintenanceAPIHandler creates a maintenance API handler.
-func NewMaintenanceAPIHandler(store *MaintenanceStore) *MaintenanceAPIHandler {
+func NewMaintenanceAPIHandler(store MaintenanceWindowStore) *MaintenanceAPIHandler {
 	return &MaintenanceAPIHandler{store: store}
 }
 

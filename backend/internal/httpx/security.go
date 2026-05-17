@@ -9,8 +9,8 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		// Tight CSP: same-origin only; API responses are JSON so scripts/styles are irrelevant.
-		h.Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'")
+		// CSP: allow self + Google Fonts for the SPA; keep frame-ancestors locked.
+		h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
 		next.ServeHTTP(w, r)
 	})
 }

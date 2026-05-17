@@ -49,7 +49,7 @@ function RecommendationCard({ rec, onDismiss }: { rec: Recommendation; onDismiss
                         </div>
                         <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{rec.reason}</p>
                         {rec.server && (
-                            <div className="mt-1.5 flex items-center gap-1 text-[11px] text-slate-500">
+                            <div className="mt-1.5 flex items-center gap-1 text-xs text-slate-500">
                                 <Server className="h-3 w-3" />
                                 {rec.server}
                             </div>
@@ -197,8 +197,8 @@ export default function Recommendations() {
                             key={tab.value}
                             onClick={() => setFilter(tab.value)}
                             className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${filter === tab.value
-                                    ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
-                                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                                ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
+                                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
                                 }`}
                         >
                             {tab.label}

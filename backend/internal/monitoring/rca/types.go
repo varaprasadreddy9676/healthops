@@ -54,38 +54,38 @@ type ErrorFamilyRef struct {
 
 // TimelineEvent is a notable event during the incident window.
 type TimelineEvent struct {
-	Timestamp   time.Time `json:"timestamp"`
-	Type        string    `json:"type"` // check_fail, check_recover, incident_open, log_spike, metric_anomaly
-	Description string    `json:"description"`
-	Severity    string    `json:"severity,omitempty"`
-	Source      string    `json:"source,omitempty"`
+	Timestamp   time.Time `json:"timestamp" bson:"timestamp"`
+	Type        string    `json:"type" bson:"type"` // check_fail, check_recover, incident_open, log_spike, metric_anomaly
+	Description string    `json:"description" bson:"description"`
+	Severity    string    `json:"severity,omitempty" bson:"severity,omitempty"`
+	Source      string    `json:"source,omitempty" bson:"source,omitempty"`
 }
 
 // RCAHypothesis is a single ranked root cause hypothesis.
 type RCAHypothesis struct {
-	Rank        int      `json:"rank"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Confidence  float64  `json:"confidence"` // 0.0 to 1.0
-	Category    string   `json:"category"`   // resource, network, application, database, config
-	Evidence    []string `json:"evidence"`   // Supporting signal names/observations
-	Suggestion  string   `json:"suggestion"` // Recommended action
+	Rank        int      `json:"rank" bson:"rank"`
+	Title       string   `json:"title" bson:"title"`
+	Description string   `json:"description" bson:"description"`
+	Confidence  float64  `json:"confidence" bson:"confidence"` // 0.0 to 1.0
+	Category    string   `json:"category" bson:"category"`     // resource, network, application, database, config
+	Evidence    []string `json:"evidence" bson:"evidence"`     // Supporting signal names/observations
+	Suggestion  string   `json:"suggestion" bson:"suggestion"` // Recommended action
 }
 
 // RCAReport is the full root-cause analysis output.
 type RCAReport struct {
-	ID           string          `json:"id"`
-	IncidentID   string          `json:"incidentId"`
-	CreatedAt    time.Time       `json:"createdAt"`
-	Status       string          `json:"status"` // pending, complete, failed
-	Hypotheses   []RCAHypothesis `json:"hypotheses,omitempty"`
-	Summary      string          `json:"summary,omitempty"`
-	Timeline     []TimelineEvent `json:"timeline,omitempty"`
-	SignalCount  int             `json:"signalCount"`
-	WindowStart  time.Time       `json:"windowStart"`
-	WindowEnd    time.Time       `json:"windowEnd"`
-	ProviderUsed string          `json:"providerUsed,omitempty"`
-	Error        string          `json:"error,omitempty"`
+	ID           string          `json:"id" bson:"_id"`
+	IncidentID   string          `json:"incidentId" bson:"incidentId"`
+	CreatedAt    time.Time       `json:"createdAt" bson:"createdAt"`
+	Status       string          `json:"status" bson:"status"` // pending, complete, failed
+	Hypotheses   []RCAHypothesis `json:"hypotheses,omitempty" bson:"hypotheses,omitempty"`
+	Summary      string          `json:"summary,omitempty" bson:"summary,omitempty"`
+	Timeline     []TimelineEvent `json:"timeline,omitempty" bson:"timeline,omitempty"`
+	SignalCount  int             `json:"signalCount" bson:"signalCount"`
+	WindowStart  time.Time       `json:"windowStart" bson:"windowStart"`
+	WindowEnd    time.Time       `json:"windowEnd" bson:"windowEnd"`
+	ProviderUsed string          `json:"providerUsed,omitempty" bson:"providerUsed,omitempty"`
+	Error        string          `json:"error,omitempty" bson:"error,omitempty"`
 }
 
 // AIProvider is the interface for sending prompts to an AI model.

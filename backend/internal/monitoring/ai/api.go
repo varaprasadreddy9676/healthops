@@ -783,10 +783,10 @@ func (h *AIAPIHandler) handleKeyVersions(w http.ResponseWriter, r *http.Request)
 
 	// Check if MongoDB repository is available
 	if h.mongoAIRepo == nil {
-		// Return empty versions for file-based storage
+		// Return empty versions when MongoDB repository is not available
 		monitoring.WriteAPIResponse(w, http.StatusOK, monitoring.NewAPIResponse(map[string]interface{}{
 			"versions": map[int]interface{}{},
-			"message":  "Key versioning not available for file-based storage",
+			"message":  "Key versioning requires MongoDB storage",
 		}))
 		return
 	}

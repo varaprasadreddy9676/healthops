@@ -248,9 +248,7 @@ go test -v ./internal/monitoring/ai/repositories -run TestKeyRotation
 
 ## Migration Guide
 
-### From File-Based Storage
-
-If migrating from file-based AI config (`data/ai_config.json`):
+If migrating from an older version with file-based AI config (`data/ai_config.json`):
 
 1. **Set up MongoDB**:
    ```bash

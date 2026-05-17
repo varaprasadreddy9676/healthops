@@ -7,46 +7,28 @@ import (
 	"log"
 	"os"
 	"strings"
-	"sync"
 	"time"
-
-	"medics-health-check/backend/internal/util/jsonl"
 )
 
 // Analyzer performs AI-powered root cause analysis.
 type Analyzer struct {
-	mu        sync.RWMutex
 	collector *Collector
 	provider  AIProvider
 	logger    *log.Logger
-	dataDir   string
-	reports   []RCAReport
+	repo      ReportRepository
 }
 
 // NewAnalyzer creates a new RCA analyzer.
-func NewAnalyzer(collector *Collector, provider AIProvider, dataDir string, logger *log.Logger) (*Analyzer, error) {
+func NewAnalyzer(collector *Collector, provider AIProvider, repo ReportRepository, logger *log.Logger) (*Analyzer, error) {
 	if logger == nil {
 		logger = log.New(os.Stderr, "rca ", log.LstdFlags)
 	}
-	a := &Analyzer{
+	return &Analyzer{
 		collector: collector,
 		provider:  provider,
 		logger:    logger,
-		dataDir:   dataDir,
-	}
-
-	// Load existing reports
-	reports, err := jsonl.Load[RCAReport](a.reportsPath())
-	if err != nil {
-		return nil, fmt.Errorf("load rca reports: %w", err)
-	}
-	a.reports = reports
-
-	return a, nil
-}
-
-func (a *Analyzer) reportsPath() string {
-	return a.dataDir + "/rca_reports.jsonl"
+		repo:      repo,
+	}, nil
 }
 
 // Analyze performs root-cause analysis for an incident.
@@ -109,66 +91,36 @@ func (a *Analyzer) Analyze(ctx context.Context, incident IncidentRef, logFamilie
 
 // GetReport retrieves an RCA report by ID.
 func (a *Analyzer) GetReport(id string) *RCAReport {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	for i := range a.reports {
-		if a.reports[i].ID == id {
-			return &a.reports[i]
-		}
+	report, err := a.repo.GetReport(id)
+	if err != nil {
+		a.logger.Printf("RCA: failed to get report %s: %v", id, err)
+		return nil
 	}
-	return nil
+	return report
 }
 
 // ReportsForIncident returns all RCA reports for an incident.
 func (a *Analyzer) ReportsForIncident(incidentID string) []RCAReport {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	var result []RCAReport
-	for _, r := range a.reports {
-		if r.IncidentID == incidentID {
-			result = append(result, r)
-		}
+	reports, err := a.repo.ReportsForIncident(incidentID)
+	if err != nil {
+		a.logger.Printf("RCA: failed to get reports for incident %s: %v", incidentID, err)
+		return nil
 	}
-	return result
+	return reports
 }
 
 // AllReports returns all RCA reports.
 func (a *Analyzer) AllReports(limit int) []RCAReport {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if limit <= 0 || limit > len(a.reports) {
-		limit = len(a.reports)
+	reports, err := a.repo.AllReports(limit)
+	if err != nil {
+		a.logger.Printf("RCA: failed to get all reports: %v", err)
+		return nil
 	}
-
-	// Return most recent first
-	result := make([]RCAReport, limit)
-	for i := 0; i < limit; i++ {
-		result[i] = a.reports[len(a.reports)-1-i]
-	}
-	return result
+	return reports
 }
 
 func (a *Analyzer) persist(report RCAReport) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	// Update existing or append
-	found := false
-	for i, r := range a.reports {
-		if r.ID == report.ID {
-			a.reports[i] = report
-			found = true
-			break
-		}
-	}
-	if !found {
-		a.reports = append(a.reports, report)
-	}
-
-	if err := jsonl.Rewrite(a.reportsPath(), a.reports); err != nil {
+	if err := a.repo.Save(report); err != nil {
 		a.logger.Printf("RCA: failed to persist report: %v", err)
 	}
 }

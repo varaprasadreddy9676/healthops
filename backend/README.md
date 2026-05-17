@@ -23,14 +23,13 @@ go fmt ./...             # format before committing
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CONFIG_PATH` | `config/default.json` | JSON config file |
-| `STATE_PATH` | `data/state.json` | Persisted state file |
-| `DATA_DIR` | `data/` | JSONL repositories, AI config |
-| `MONGODB_URI` | — | Optional MongoDB mirror |
+| `DATA_DIR` | `data/` | Encryption keys, JWT secrets |
+| `MONGODB_URI` | — | MongoDB connection string (required for production) |
 | `MONGODB_DATABASE` | `healthops` | MongoDB database name |
 | `MONGODB_COLLECTION_PREFIX` | `healthops` | Collection prefix |
 | `{check.mysql.dsnEnv}` | — | MySQL DSN per check (never logged) |
 
-MongoDB is best-effort only. The backend keeps running with the local file store if MongoDB is unavailable.
+MongoDB is the sole persistence backend. The service requires a MongoDB connection for production use.
 
 ## Key Features
 
@@ -38,7 +37,7 @@ MongoDB is best-effort only. The backend keeps running with the local file store
 - **Server Management**: Add remote servers, SSH-based health checks for process/command/connectivity
 - **MySQL Monitoring**: Collects `SHOW GLOBAL STATUS/VARIABLES`, computes deltas, 9 default alert rules
 - **Incidents**: Auto-created from alert rules, acknowledge/resolve lifecycle, evidence snapshots
-- **Alert Rules**: 5 default rules out of the box. Configurable thresholds, cooldowns, consecutive breaches, per-check or global. File-persisted.
+- **Alert Rules**: 5 default rules out of the box. Configurable thresholds, cooldowns, consecutive breaches, per-check or global.
 - **JWT Authentication**: Token-based auth with admin/viewer roles. Default credentials: `admin` / `admin`
 - **User Management**: Create, update, delete users with role-based access control
 - **Notification Channels**: 6 channel types (email, Slack, Discord, Telegram, webhooks, PagerDuty) with smart filters (severity, check IDs, check types, servers, tags). Professional HTML email templates with incident stats and dashboard links. Incident-level deduplication prevents alert storms.

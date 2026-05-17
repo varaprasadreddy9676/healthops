@@ -10,13 +10,13 @@ import (
 
 // CustomDashboardAPIHandler handles CRUD for custom dashboards.
 type CustomDashboardAPIHandler struct {
-	store        *CustomDashboardStore
+	store        CustomDashboardRepository
 	checkStore   Store
 	incidentRepo IncidentRepository
 }
 
 // NewCustomDashboardAPIHandler creates the handler.
-func NewCustomDashboardAPIHandler(store *CustomDashboardStore, checkStore Store, incidentRepo IncidentRepository) *CustomDashboardAPIHandler {
+func NewCustomDashboardAPIHandler(store CustomDashboardRepository, checkStore Store, incidentRepo IncidentRepository) *CustomDashboardAPIHandler {
 	return &CustomDashboardAPIHandler{
 		store:        store,
 		checkStore:   checkStore,

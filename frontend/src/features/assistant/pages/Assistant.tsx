@@ -46,7 +46,7 @@ function ReferenceChip({ ref }: { ref: AssistantReference }) {
     return (
         <Link
             to={href}
-            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-blue-700 dark:hover:text-blue-400"
+            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-blue-700 dark:hover:text-blue-400"
         >
             <span className="capitalize">{ref.type.replace('_', ' ')}</span>
             <span className="text-slate-400">·</span>
@@ -275,6 +275,7 @@ export default function Assistant() {
                             </select>
                             <button
                                 type="submit"
+                                aria-label="Send message"
                                 disabled={!input.trim() || askMutation.isPending}
                                 className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-600 text-white transition-colors hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed"
                             >

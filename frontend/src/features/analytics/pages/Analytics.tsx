@@ -78,13 +78,14 @@ export default function Analytics() {
           <p className="text-sm text-slate-500">Performance and reliability metrics</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+          <div className="flex overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700" role="group" aria-label="Time period">
             {(['24h', '7d', '30d'] as Period[]).map(p => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
+                aria-pressed={period === p}
                 className={cn(
-                  'px-3 py-1.5 text-xs font-medium transition-colors',
+                  'px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1',
                   period === p
                     ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
                     : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800',
@@ -172,14 +173,14 @@ function StatusTimelineGrid({ entries, period, activeCheckIds, periodLabel }: { 
   const grid = useMemo(() => {
     // Determine bucket size based on period
     const bucketMs = period === '24h' ? 60 * 60 * 1000 : // 1 hour buckets
-                     period === '7d'  ? 6 * 60 * 60 * 1000 : // 6 hour buckets
-                                        24 * 60 * 60 * 1000   // 1 day buckets
+      period === '7d' ? 6 * 60 * 60 * 1000 : // 6 hour buckets
+        24 * 60 * 60 * 1000   // 1 day buckets
 
     // Calculate time range
     const now = Date.now()
     const periodMs = period === '24h' ? 24 * 60 * 60 * 1000 :
-                     period === '7d'  ? 7 * 24 * 60 * 60 * 1000 :
-                                        30 * 24 * 60 * 60 * 1000
+      period === '7d' ? 7 * 24 * 60 * 60 * 1000 :
+        30 * 24 * 60 * 60 * 1000
     const periodStart = now - periodMs
 
     // Filter to only active checks
@@ -235,8 +236,8 @@ function StatusTimelineGrid({ entries, period, activeCheckIds, periodLabel }: { 
         const t = new Date(start + i * bucketMs)
         labels.push(
           period === '24h' ? format(t, 'HH:mm') :
-          period === '7d'  ? format(t, 'EEE HH:mm') :
-                             format(t, 'MMM d')
+            period === '7d' ? format(t, 'EEE HH:mm') :
+              format(t, 'MMM d')
         )
       } else {
         labels.push('')
@@ -258,7 +259,7 @@ function StatusTimelineGrid({ entries, period, activeCheckIds, periodLabel }: { 
           {/* Time labels row */}
           <div className="flex items-end mb-1 ml-[140px]">
             {grid.labels.map((label, i) => (
-              <div key={i} className="text-[9px] text-slate-400 tabular-nums" style={{ width: `${100 / grid.bucketCount}%` }}>
+              <div key={i} className="text-[10px] sm:text-xs text-slate-400 tabular-nums" style={{ width: `${100 / grid.bucketCount}%` }}>
                 {label}
               </div>
             ))}
@@ -268,7 +269,7 @@ function StatusTimelineGrid({ entries, period, activeCheckIds, periodLabel }: { 
           <div className="space-y-0.5">
             {grid.rows.map(row => (
               <div key={row.checkId} className="flex items-center gap-2">
-                <span className="w-[132px] shrink-0 truncate text-right text-[11px] text-slate-600 dark:text-slate-400" title={row.name}>
+                <span className="w-[132px] shrink-0 truncate text-right text-xs text-slate-600 dark:text-slate-400" title={row.name}>
                   {row.name}
                 </span>
                 <div className="flex flex-1 gap-px">

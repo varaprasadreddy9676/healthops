@@ -309,7 +309,7 @@ export default function LogFamilyDetail() {
                         </button>
                     )}
                     {(family.category === 'unknown' || !family.category) && (
-                        <p className="mt-1 text-[10px] text-slate-400">Rule-based classifier could not identify this pattern.</p>
+                        <p className="mt-1 text-xs text-slate-400">Rule-based classifier could not identify this pattern.</p>
                     )}
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">

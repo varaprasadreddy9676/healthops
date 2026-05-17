@@ -165,23 +165,23 @@ export default function Servers() {
                   <div className={cn(
                     'flex h-10 w-10 items-center justify-center rounded-lg',
                     status === 'healthy' ? 'bg-emerald-100 dark:bg-emerald-900/40' :
-                    status === 'warning' ? 'bg-amber-100 dark:bg-amber-900/40' :
-                    status === 'critical' ? 'bg-red-100 dark:bg-red-900/40' :
-                    'bg-slate-100 dark:bg-slate-800',
+                      status === 'warning' ? 'bg-amber-100 dark:bg-amber-900/40' :
+                        status === 'critical' ? 'bg-red-100 dark:bg-red-900/40' :
+                          'bg-slate-100 dark:bg-slate-800',
                   )}>
                     {linkedRemote ? (
                       <Wifi className={cn('h-5 w-5',
                         status === 'healthy' ? 'text-emerald-600 dark:text-emerald-400' :
-                        status === 'warning' ? 'text-amber-600 dark:text-amber-400' :
-                        status === 'critical' ? 'text-red-600 dark:text-red-400' :
-                        'text-slate-500'
+                          status === 'warning' ? 'text-amber-600 dark:text-amber-400' :
+                            status === 'critical' ? 'text-red-600 dark:text-red-400' :
+                              'text-slate-500'
                       )} />
                     ) : (
                       <Monitor className={cn('h-5 w-5',
                         status === 'healthy' ? 'text-emerald-600 dark:text-emerald-400' :
-                        status === 'warning' ? 'text-amber-600 dark:text-amber-400' :
-                        status === 'critical' ? 'text-red-600 dark:text-red-400' :
-                        'text-slate-500'
+                          status === 'warning' ? 'text-amber-600 dark:text-amber-400' :
+                            status === 'critical' ? 'text-red-600 dark:text-red-400' :
+                              'text-slate-500'
                       )} />
                     )}
                   </div>
@@ -201,8 +201,8 @@ export default function Servers() {
                   <span className={cn(
                     'rounded-full px-2.5 py-1 text-xs font-bold',
                     healthyPct === 100 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' :
-                    healthyPct >= 50 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' :
-                    'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400',
+                      healthyPct >= 50 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' :
+                        'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400',
                   )}>
                     {healthyPct}%
                   </span>
@@ -211,7 +211,7 @@ export default function Servers() {
               </div>
 
               {/* Health bar */}
-              <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+              <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700" role="meter" aria-label={`${healthyPct}% healthy`} aria-valuenow={healthyPct} aria-valuemin={0} aria-valuemax={100}>
                 {counts.healthy > 0 && <div className="bg-emerald-500 transition-all" style={{ width: `${(counts.healthy / counts.total) * 100}%` }} />}
                 {counts.warning > 0 && <div className="bg-amber-500 transition-all" style={{ width: `${(counts.warning / counts.total) * 100}%` }} />}
                 {counts.critical > 0 && <div className="bg-red-500 transition-all" style={{ width: `${(counts.critical / counts.total) * 100}%` }} />}
@@ -235,11 +235,11 @@ export default function Servers() {
                     <Link
                       key={check.id}
                       to={`/checks/${check.id}`}
-                      className="flex items-center gap-3 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70"
+                      className="flex items-center gap-3 px-3.5 py-2 text-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:hover:bg-slate-800/70"
                     >
                       {statusIcon(lr?.status || 'unknown')}
                       <span className="flex-1 truncate text-slate-700 dark:text-slate-300">{check.name}</span>
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-500 dark:bg-slate-800">
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-mono text-slate-500 dark:bg-slate-800">
                         {checkTypeLabel(check.type)}
                       </span>
                       {lr && (
@@ -275,6 +275,8 @@ export default function Servers() {
                     <button
                       onClick={() => testMutation.mutate(linkedRemote.id)}
                       disabled={testMutation.isPending}
+                      aria-label={`Test SSH connection for ${serverName}`}
+                      aria-busy={testMutation.isPending}
                       className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                     >
                       {testMutation.isPending ? (

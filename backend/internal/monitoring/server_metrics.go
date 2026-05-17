@@ -27,7 +27,7 @@ type ServerSnapshot struct {
 	TopProcesses       []ProcessInfo `json:"topProcesses,omitempty"`
 }
 
-// ServerMetricsRepository stores server metric snapshots in JSONL files.
+// ServerMetricsRepository is a legacy file-backed server metrics store. Retained for tests; production uses MongoDB.
 type ServerMetricsRepository struct {
 	dir string
 	mu  sync.RWMutex

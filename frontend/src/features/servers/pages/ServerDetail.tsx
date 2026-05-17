@@ -13,7 +13,6 @@ import { format } from 'date-fns'
 import { serversApi } from "@/features/servers/api/servers"
 import { MetricCard } from "@/shared/components/MetricCard"
 import { LoadingState } from "@/shared/components/LoadingState"
-import { ErrorState } from "@/shared/components/ErrorState"
 import { LiveIndicator } from "@/shared/components/LiveIndicator"
 import { Sparkline } from "@/shared/charts/Sparkline"
 import { cn } from "@/shared/lib/utils"
@@ -59,23 +58,11 @@ export default function ServerDetail() {
     enabled: !!id,
   })
 
-  const { snapshot: liveSnap, history: liveHistory, connected: liveConnected } = useServerLive(id, !metricsLoading && !metricsError)
+  const { snapshot: liveSnap, history: liveHistory, connected: liveConnected } = useServerLive(id, !metricsLoading)
 
-  if (serverLoading || metricsLoading) return <LoadingState />
-  if (metricsError) {
-    return (
-      <div className="space-y-6 animate-fade-in">
-        <BackLink />
-        <ErrorState
-          message={metricsError instanceof Error ? metricsError.message : 'Failed to load metrics'}
-          retry={() => refetch()}
-        />
-        <p className="text-center text-sm text-slate-500">
-          Metrics will appear once the SSH health check has run at least once.
-        </p>
-      </div>
-    )
-  }
+  if (serverLoading) return <LoadingState />
+
+  const metricsUnavailable = !!metricsError || metricsLoading
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
@@ -138,6 +125,16 @@ export default function ServerDetail() {
           </button>
         </div>
       </div>
+
+      {/* Metrics unavailable notice */}
+      {metricsUnavailable && !metricsLoading && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Server metrics not available yet</p>
+          <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+            Metrics will appear once the SSH health check has run at least once.
+          </p>
+        </div>
+      )}
 
       {/* System metrics cards */}
       {s && (

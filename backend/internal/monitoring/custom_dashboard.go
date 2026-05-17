@@ -66,6 +66,9 @@ type DashboardData struct {
 	GeneratedAt time.Time                `json:"generatedAt"`
 }
 
+// Compile-time check: CustomDashboardStore implements CustomDashboardRepository.
+var _ CustomDashboardRepository = (*CustomDashboardStore)(nil)
+
 // CustomDashboardStore manages persisted custom dashboards.
 type CustomDashboardStore struct {
 	mu         sync.RWMutex

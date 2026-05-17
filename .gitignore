@@ -27,6 +27,7 @@ backend/data/
 *.jpg
 *.jpeg
 !docs/screenshots/*.png
+!frontend/public/landing/*.png
 
 # Playwright
 .playwright-mcp/

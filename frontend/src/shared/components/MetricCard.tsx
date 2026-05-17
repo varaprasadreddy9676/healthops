@@ -5,12 +5,13 @@ interface Props {
   label: string
   value: string | number
   subValue?: string
+  subValueClassName?: string
   icon?: ReactNode
   trend?: 'up' | 'down' | 'flat'
   className?: string
 }
 
-export function MetricCard({ label, value, subValue, icon, className }: Props) {
+export function MetricCard({ label, value, subValue, subValueClassName, icon, className }: Props) {
   return (
     <div className={cn(
       'rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900',
@@ -23,7 +24,7 @@ export function MetricCard({ label, value, subValue, icon, className }: Props) {
             {value}
           </p>
           {subValue && (
-            <p className="text-xs text-slate-400 dark:text-slate-500">{subValue}</p>
+            <p className={cn('text-xs text-slate-400 dark:text-slate-500', subValueClassName)}>{subValue}</p>
           )}
         </div>
         {icon && (

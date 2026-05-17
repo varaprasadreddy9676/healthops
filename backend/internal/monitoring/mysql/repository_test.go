@@ -236,10 +236,10 @@ func TestFileMySQLRepository_Persistence(t *testing.T) {
 	s := makeSample("mysql-1", "persist-test", time.Now().UTC())
 	_, _ = repo1.AppendSample(s)
 
-	// Verify JSONL file exists
+	// Verify data file exists
 	samplesPath := filepath.Join(dir, "mysql_samples.jsonl")
 	if _, err := os.Stat(samplesPath); os.IsNotExist(err) {
-		t.Fatal("samples JSONL file not created")
+		t.Fatal("samples data file not created")
 	}
 
 	// Reload from disk
