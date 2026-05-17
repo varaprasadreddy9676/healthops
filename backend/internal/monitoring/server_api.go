@@ -12,7 +12,11 @@ import (
 
 // sanitizeServerForAPI masks sensitive fields before returning to API clients.
 func sanitizeServerForAPI(s RemoteServer) RemoteServer {
-	if s.Password != "" {
+	hasPw := s.Password != "" || s.PasswordEnc != ""
+	s.Password = ""
+	s.PasswordEnc = ""
+	s.HasPassword = hasPw
+	if hasPw {
 		s.Password = "********"
 	}
 	return s
@@ -126,6 +130,10 @@ func (s *Service) handleServers(w http.ResponseWriter, r *http.Request) {
 		srv.applyDefaults()
 		if srv.ID == "" {
 			WriteAPIError(w, http.StatusBadRequest, fmt.Errorf("id is required"))
+			return
+		}
+		if err := prepareServerSecrets(&srv, nil); err != nil {
+			WriteAPIError(w, http.StatusBadRequest, err)
 			return
 		}
 		if err := srv.validate(); err != nil {
@@ -270,8 +278,9 @@ func (s *Service) handleServerByID(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		if srv.Password == "********" {
-			srv.Password = existing.Password
+		if err := prepareServerSecrets(&srv, &existing); err != nil {
+			WriteAPIError(w, http.StatusBadRequest, err)
+			return
 		}
 		if err := srv.validate(); err != nil {
 			WriteAPIError(w, http.StatusBadRequest, err)
@@ -427,6 +436,7 @@ func (s *Service) buildAutoSSHCheck(srv RemoteServer) CheckConfig {
 			KeyPath:     srv.KeyPath,
 			KeyEnv:      srv.KeyEnv,
 			Password:    srv.Password,
+			PasswordEnc: srv.PasswordEnc,
 			PasswordEnv: srv.PasswordEnv,
 			Metrics:     []string{}, // empty = collect all metrics
 		},

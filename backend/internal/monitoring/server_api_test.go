@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"medics-health-check/backend/internal/monitoring/cryptoutil"
 )
 
 type fakeServerRepository struct {
@@ -202,6 +204,12 @@ func TestHandleServersPostPersistsRepositoryAndSyncsCache(t *testing.T) {
 	if repo.lastCreated.ID != "srv-1" {
 		t.Fatalf("expected created server to be persisted, got %+v", repo.lastCreated)
 	}
+	if repo.lastCreated.Password != "" {
+		t.Fatalf("expected plaintext password to be stripped after encryption, got %q", repo.lastCreated.Password)
+	}
+	if repo.lastCreated.PasswordEnc == "" {
+		t.Fatalf("expected encrypted password to be set, got empty")
+	}
 	if len(service.cfg.Servers) != 1 || service.cfg.Servers[0].ID != "srv-1" {
 		t.Fatalf("expected cfg.Servers cache to sync, got %+v", service.cfg.Servers)
 	}
@@ -235,14 +243,22 @@ func TestHandleServerByIDPutPersistsRepositoryAndPreservesMaskedPassword(t *test
 	if repo.updateCalls != 1 {
 		t.Fatalf("expected repository update to be called once, got %d", repo.updateCalls)
 	}
-	if repo.lastUpdated.Password != "secret" {
-		t.Fatalf("expected masked password to preserve stored secret, got %q", repo.lastUpdated.Password)
+	// Legacy plaintext gets lazy-migrated to PasswordEnc on first edit.
+	if repo.lastUpdated.Password != "" {
+		t.Fatalf("expected plaintext password to be stripped after sentinel update, got %q", repo.lastUpdated.Password)
+	}
+	if repo.lastUpdated.PasswordEnc == "" {
+		t.Fatalf("expected password to be preserved (encrypted) when sentinel sent, got empty")
+	}
+	decrypted, decErr := cryptoutil.Decrypt(repo.lastUpdated.PasswordEnc)
+	if decErr != nil || decrypted != "secret" {
+		t.Fatalf("expected decrypted password to equal original 'secret', got %q (err=%v)", decrypted, decErr)
 	}
 	if len(service.cfg.Servers) != 1 || service.cfg.Servers[0].Name != "Validation Updated" {
 		t.Fatalf("expected cfg.Servers cache to sync, got %+v", service.cfg.Servers)
 	}
-	if service.cfg.Servers[0].Password != "secret" {
-		t.Fatalf("expected cache to keep stored password, got %q", service.cfg.Servers[0].Password)
+	if service.cfg.Servers[0].PasswordEnc == "" {
+		t.Fatalf("expected cache to keep encrypted password, got empty")
 	}
 }
 

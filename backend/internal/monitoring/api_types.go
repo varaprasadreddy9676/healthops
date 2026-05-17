@@ -95,16 +95,28 @@ func toCheckListItems(checks []CheckConfig) []CheckListItem {
 func sanitizeCheckForResponse(check CheckConfig) CheckConfig {
 	safe := check
 	safe.Metadata = nil
-	// Mask MySQL password
-	if safe.MySQL != nil && safe.MySQL.Password != "" {
+	// Mask MySQL password — expose only HasPassword + Password sentinel when stored
+	if safe.MySQL != nil {
 		cp := *safe.MySQL
-		cp.Password = "********"
+		hasPw := cp.Password != "" || cp.PasswordEnc != ""
+		cp.Password = ""
+		cp.PasswordEnc = ""
+		cp.HasPassword = hasPw
+		if hasPw {
+			cp.Password = "********"
+		}
 		safe.MySQL = &cp
 	}
-	// Mask SSH password (already masked on server objects, but also mask in checks)
-	if safe.SSH != nil && safe.SSH.Password != "" {
+	// Mask SSH password — same treatment
+	if safe.SSH != nil {
 		cp := *safe.SSH
-		cp.Password = "********"
+		hasPw := cp.Password != "" || cp.PasswordEnc != ""
+		cp.Password = ""
+		cp.PasswordEnc = ""
+		cp.HasPassword = hasPw
+		if hasPw {
+			cp.Password = "********"
+		}
 		safe.SSH = &cp
 	}
 	// Heartbeat tokens authenticate unauthenticated ping endpoints, so they must

@@ -16,24 +16,34 @@ export interface KillQueryResponse {
 }
 
 export const mysqlApi = {
-  health: () => api.get<MySQLHealthCard>('/mysql/health'),
-  samples: (params?: { limit?: number }) => {
-    const qs = params?.limit ? `?limit=${params.limit}` : ''
-    return api.get<unknown[]>(`/mysql/samples${qs}`)
+  health: (checkId?: string) => {
+    const qs = checkId ? `?checkId=${encodeURIComponent(checkId)}` : ''
+    return api.get<MySQLHealthCard>(`/mysql/health${qs}`)
   },
-  deltas: (params?: { limit?: number }) => {
-    const qs = params?.limit ? `?limit=${params.limit}` : ''
-    return api.get<unknown[]>(`/mysql/deltas${qs}`)
+  samples: (params?: { limit?: number; checkId?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.limit) qs.set('limit', String(params.limit))
+    if (params?.checkId) qs.set('checkId', params.checkId)
+    const q = qs.toString()
+    return api.get<unknown[]>(`/mysql/samples${q ? `?${q}` : ''}`)
   },
-  timeseries: (params?: { metric?: string; period?: string }) => {
+  deltas: (params?: { limit?: number; checkId?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.limit) qs.set('limit', String(params.limit))
+    if (params?.checkId) qs.set('checkId', params.checkId)
+    const q = qs.toString()
+    return api.get<unknown[]>(`/mysql/deltas${q ? `?${q}` : ''}`)
+  },
+  timeseries: (params?: { metric?: string; period?: string; checkId?: string }) => {
     const qs = new URLSearchParams()
     if (params?.metric) qs.set('metric', params.metric)
     if (params?.period) qs.set('period', params.period)
+    if (params?.checkId) qs.set('checkId', params.checkId)
     const q = qs.toString()
     return api.get<unknown[]>(`/mysql/timeseries${q ? `?${q}` : ''}`)
   },
   killQuery: (processId: number, checkId?: string) =>
     api.post<KillQueryResponse>('/mysql/kill', { processId, checkId: checkId || '' }),
-  aiAsk: (question?: string, providerId?: string) =>
-    api.post<MySQLAIResponse>('/mysql/ai/ask', { question: question || '', providerId: providerId || '' }),
+  aiAsk: (question?: string, providerId?: string, checkId?: string) =>
+    api.post<MySQLAIResponse>('/mysql/ai/ask', { question: question || '', providerId: providerId || '', checkId: checkId || '' }),
 }

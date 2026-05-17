@@ -646,9 +646,17 @@ func (h *AIAPIHandler) handleMySQLAIAsk(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Find first MySQL check
+	// Resolve target MySQL check: explicit checkId from request wins, else first enabled.
 	var checkID string
-	if h.cfg != nil {
+	if strings.TrimSpace(req.CheckID) != "" && h.cfg != nil {
+		for _, c := range h.cfg.Checks {
+			if c.Type == "mysql" && c.ID == req.CheckID && (c.Enabled == nil || *c.Enabled) {
+				checkID = c.ID
+				break
+			}
+		}
+	}
+	if checkID == "" && h.cfg != nil {
 		for _, c := range h.cfg.Checks {
 			if c.Type == "mysql" && (c.Enabled == nil || *c.Enabled) {
 				checkID = c.ID

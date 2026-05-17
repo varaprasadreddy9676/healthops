@@ -13,15 +13,17 @@ import { ErrorState } from "@/shared/components/ErrorState"
 import { cn } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import { useMySQLLive } from "@/features/mysql/hooks/useMySQLLive"
+import { MySQLInstancePicker, useMySQLCheckSelection } from "@/features/mysql/components/MySQLInstancePicker"
 
 export default function MySQLConnections() {
+  const { selected, mysqlChecks, setSelected } = useMySQLCheckSelection()
   const { data: health, isLoading, error, refetch } = useQuery({
-    queryKey: ['mysql', 'health'],
-    queryFn: mysqlApi.health,
+    queryKey: ['mysql', 'health', selected],
+    queryFn: () => mysqlApi.health(selected),
     refetchInterval: REFETCH_INTERVAL,
   })
 
-  const { snapshot: live, history, connected: liveConnected } = useMySQLLive(!isLoading && !error)
+  const { snapshot: live, history, connected: liveConnected } = useMySQLLive(!isLoading && !error, 3, selected)
 
   const [searchParams] = useSearchParams()
   const highlightRefused = searchParams.get('highlight') === 'refused'
@@ -51,7 +53,13 @@ export default function MySQLConnections() {
   const maxUsedConnections = live?.maxUsedConnections ?? health.maxUsedConnections
 
   return (
-    <DetailPageLayout backTo="/mysql" backLabel="Back to MySQL" title="Connections" subtitle={`${currentConnections} of ${health.maxConnections} connections used`}>
+    <DetailPageLayout
+      backTo={selected ? `/mysql?checkId=${encodeURIComponent(selected)}` : "/mysql"}
+      backLabel="Back to MySQL"
+      title="Connections"
+      subtitle={`${currentConnections} of ${health.maxConnections} connections used`}
+      actions={<MySQLInstancePicker selected={selected} options={mysqlChecks} onChange={setSelected} />}
+    >
       {/* Utilization + summary */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-2">

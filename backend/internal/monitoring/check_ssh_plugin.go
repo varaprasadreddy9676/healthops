@@ -28,7 +28,7 @@ func (e *sshCheckExecutor) Validate(c *CheckConfig, cfg *Config) error {
 		return fmt.Errorf("ssh.user is required for ssh checks")
 	}
 	hasKey := c.SSH.KeyPath != "" || c.SSH.KeyEnv != ""
-	hasPassword := c.SSH.Password != "" || c.SSH.PasswordEnv != ""
+	hasPassword := c.SSH.Password != "" || c.SSH.PasswordEnc != "" || c.SSH.PasswordEnv != ""
 	if !hasKey && !hasPassword {
 		return fmt.Errorf("ssh auth required: set keyPath/keyEnv or password/passwordEnv")
 	}

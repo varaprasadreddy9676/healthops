@@ -11,22 +11,24 @@ import { ErrorState } from "@/shared/components/ErrorState"
 import { cn, relativeTime } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import { useMySQLLive } from "@/features/mysql/hooks/useMySQLLive"
+import { MySQLInstancePicker, useMySQLCheckSelection } from "@/features/mysql/components/MySQLInstancePicker"
 import { Server, Zap, Clock, Activity, Lock, Shield, HardDrive, Database, AlertTriangle } from 'lucide-react'
 
 export default function MySQLServer() {
+  const { selected, mysqlChecks, setSelected } = useMySQLCheckSelection()
   const { data: health, isLoading, error, refetch } = useQuery({
-    queryKey: ['mysql', 'health'],
-    queryFn: mysqlApi.health,
+    queryKey: ['mysql', 'health', selected],
+    queryFn: () => mysqlApi.health(selected),
     refetchInterval: REFETCH_INTERVAL,
   })
 
   const { data: deltas } = useQuery({
-    queryKey: ['mysql', 'deltas'],
-    queryFn: () => mysqlApi.deltas({ limit: 30 }),
+    queryKey: ['mysql', 'deltas', selected],
+    queryFn: () => mysqlApi.deltas({ limit: 30, checkId: selected }),
     refetchInterval: REFETCH_INTERVAL,
   })
 
-  const { snapshot: live, history, connected: liveConnected } = useMySQLLive(!isLoading && !error)
+  const { snapshot: live, history, connected: liveConnected } = useMySQLLive(!isLoading && !error, 3, selected)
   const qpsHistory = history.map(s => s.queriesPerSec)
   const threadsHistory = history.map(s => s.threadsRunning)
 
@@ -45,7 +47,13 @@ export default function MySQLServer() {
   if (!health) return null
 
   return (
-    <DetailPageLayout backTo="/mysql" backLabel="Back to MySQL" title="Server Overview" subtitle={`Uptime: ${formatUptime(live?.uptimeSeconds ?? health.uptime)} · Status: ${live?.status ?? health.status}`}>
+    <DetailPageLayout
+      backTo={selected ? `/mysql?checkId=${encodeURIComponent(selected)}` : "/mysql"}
+      backLabel="Back to MySQL"
+      title="Server Overview"
+      subtitle={`Uptime: ${formatUptime(live?.uptimeSeconds ?? health.uptime)} · Status: ${live?.status ?? health.status}`}
+      actions={<MySQLInstancePicker selected={selected} options={mysqlChecks} onChange={setSelected} />}
+    >
       {/* Live sparklines row */}
       {(qpsHistory.length > 3 || threadsHistory.length > 3) && (
         <div className="grid gap-4 lg:grid-cols-2">

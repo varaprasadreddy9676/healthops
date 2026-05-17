@@ -380,6 +380,7 @@ type mongoServerDocument struct {
 	KeyPath     string   `bson:"keyPath,omitempty"`
 	KeyEnv      string   `bson:"keyEnv,omitempty"`
 	Password    string   `bson:"password,omitempty"`
+	PasswordEnc string   `bson:"passwordEnc,omitempty"`
 	PasswordEnv string   `bson:"passwordEnv,omitempty"`
 	Tags        []string `bson:"tags,omitempty"`
 	Enabled     *bool    `bson:"enabled,omitempty"`
@@ -396,6 +397,7 @@ func mongoServerDocumentFromRemoteServer(server RemoteServer) mongoServerDocumen
 		KeyPath:     server.KeyPath,
 		KeyEnv:      server.KeyEnv,
 		Password:    server.Password,
+		PasswordEnc: server.PasswordEnc,
 		PasswordEnv: server.PasswordEnv,
 		Tags:        cloneStringSlice(server.Tags),
 		Enabled:     cloneBoolPtr(server.Enabled),
@@ -412,6 +414,7 @@ func (d mongoServerDocument) toRemoteServer() RemoteServer {
 		KeyPath:     d.KeyPath,
 		KeyEnv:      d.KeyEnv,
 		Password:    d.Password,
+		PasswordEnc: d.PasswordEnc,
 		PasswordEnv: d.PasswordEnv,
 		Tags:        cloneStringSlice(d.Tags),
 		Enabled:     cloneBoolPtr(d.Enabled),

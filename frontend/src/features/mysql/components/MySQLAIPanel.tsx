@@ -27,7 +27,7 @@ const QUICK_QUESTIONS = [
   'Analyze my query performance',
 ]
 
-export function MySQLAIPanel() {
+export function MySQLAIPanel({ checkId }: { checkId?: string } = {}) {
   const [isOpen, setIsOpen] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
   const [input, setInput] = useState('')
@@ -37,7 +37,7 @@ export function MySQLAIPanel() {
   const { isAIAvailable } = useAIAvailability()
 
   const askMutation = useMutation({
-    mutationFn: (question: string) => mysqlApi.aiAsk(question),
+    mutationFn: (question: string) => mysqlApi.aiAsk(question, undefined, checkId),
     onSuccess: (data: MySQLAIResponse) => {
       setMessages(prev => prev.map(m =>
         m.loading ? {

@@ -1,6 +1,9 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Wrench } from 'lucide-react'
 import { checksApi } from "@/features/checks/api/checks"
+import { serversApi } from "@/features/servers/api/servers"
 import { checkTypeLabel, cn } from "@/shared/lib/utils"
 import { CHECK_TYPES } from "@/shared/lib/constants"
 import type { CheckConfig, CheckType } from "@/shared/types"
@@ -114,18 +117,40 @@ function buildCheckPayload(input: {
   name: string
   type: CheckType
   server: string
+  serverId: string
   target: string
   enabled: boolean
   sshUser: string
+  mysqlMode: 'inline' | 'env'
+  mysqlInline: { host: string; port: string; username: string; password: string; database: string }
+  remediation?: { actionRef: string; maxAttempts: string; cooldownSeconds: string; risk: '' | 'low' | 'medium' | 'high' }
 }): Partial<CheckConfig> {
   const name = input.name.trim()
   const server = input.server.trim()
+  const serverId = input.serverId.trim()
   const target = input.target.trim()
   const base: Partial<CheckConfig> = {
     name,
     type: input.type,
     server: server || undefined,
+    serverId: serverId || undefined,
     enabled: input.enabled,
+  }
+
+  // Attach optional remediation (only when serverId is set + at least one remediation field provided)
+  if (serverId && input.remediation) {
+    const r = input.remediation
+    const actionRef = r.actionRef.trim()
+    const maxAttemptsNum = r.maxAttempts.trim() ? Number(r.maxAttempts) : undefined
+    const cooldownNum = r.cooldownSeconds.trim() ? Number(r.cooldownSeconds) : undefined
+    if (actionRef || maxAttemptsNum || cooldownNum || r.risk) {
+      const remediation: NonNullable<CheckConfig['remediation']> = {}
+      if (actionRef) remediation.actionRef = actionRef
+      if (maxAttemptsNum && Number.isInteger(maxAttemptsNum) && maxAttemptsNum > 0) remediation.maxAttempts = maxAttemptsNum
+      if (cooldownNum && Number.isFinite(cooldownNum) && cooldownNum >= 0) remediation.cooldownSeconds = cooldownNum
+      if (r.risk) remediation.risk = r.risk
+      base.remediation = remediation
+    }
   }
 
   switch (input.type) {
@@ -140,8 +165,21 @@ function buildCheckPayload(input: {
       return { ...base, command: target }
     case 'log':
       return { ...base, path: target }
-    case 'mysql':
-      return { ...base, mysql: { dsnEnv: target } }
+    case 'mysql': {
+      if (input.mysqlMode === 'env') {
+        return { ...base, mysql: { dsnEnv: target } }
+      }
+      const inline = input.mysqlInline
+      const portNum = inline.port.trim() ? Number(inline.port) : undefined
+      const mysql: NonNullable<CheckConfig['mysql']> = {
+        host: inline.host.trim(),
+        username: inline.username.trim(),
+      }
+      if (portNum && Number.isInteger(portNum) && portNum > 0) mysql.port = portNum
+      if (inline.database.trim()) mysql.database = inline.database.trim()
+      if (inline.password) mysql.password = inline.password
+      return { ...base, mysql }
+    }
     case 'ssh': {
       const { host, port } = splitHostPort(target, 22)
       return { ...base, ssh: { host, port, user: input.sshUser.trim() } }
@@ -164,9 +202,20 @@ function validatePayload(input: {
   type: CheckType
   target: string
   sshUser: string
+  mysqlMode: 'inline' | 'env'
+  mysqlInline: { host: string; username: string }
 }) {
   if (!input.name.trim()) return 'Check name is required'
-  if (!input.target.trim()) return `${TARGET_META[input.type].label} is required`
+  if (input.type === 'mysql') {
+    if (input.mysqlMode === 'env') {
+      if (!input.target.trim()) return 'DSN environment variable name is required'
+    } else {
+      if (!input.mysqlInline.host.trim()) return 'MySQL host is required'
+      if (!input.mysqlInline.username.trim()) return 'MySQL username is required'
+    }
+  } else if (!input.target.trim()) {
+    return `${TARGET_META[input.type].label} is required`
+  }
   if (input.type === 'tcp') {
     const { host, port } = splitHostPort(input.target)
     if (!host || !port) return 'TCP target must be host:port'
@@ -185,11 +234,13 @@ function validatePayload(input: {
 
 export function AddCheckModal({
   defaultServer,
+  defaultType,
   initialData,
   onClose,
   onCreated,
 }: {
   defaultServer?: string
+  defaultType?: CheckType
   initialData?: CheckConfig
   onClose: () => void
   onCreated: () => void
@@ -198,13 +249,53 @@ export function AddCheckModal({
   const isEditing = initialData != null
 
   const [name, setName] = useState(initialData?.name ?? '')
-  const [type, setType] = useState<CheckType>(initialData?.type ?? 'api')
+  const [type, setType] = useState<CheckType>(initialData?.type ?? defaultType ?? 'api')
   const [server, setServer] = useState(initialData?.server ?? defaultServer ?? '')
+  const [serverId, setServerId] = useState(initialData?.serverId ?? '')
   const [target, setTarget] = useState(initialData ? deriveTarget(initialData) : '')
   const [sshUser, setSshUser] = useState(initialData?.ssh?.user ?? 'root')
   const [enabled, setEnabled] = useState(initialData?.enabled ?? true)
+  // MySQL credential mode: 'inline' (UI form, encrypted at rest) vs 'env' (env var DSN, advanced)
+  const initialMysqlMode: 'inline' | 'env' = initialData?.mysql?.dsnEnv ? 'env' : 'inline'
+  const [mysqlMode, setMysqlMode] = useState<'inline' | 'env'>(initialMysqlMode)
+  const [mysqlHost, setMysqlHost] = useState(initialData?.mysql?.host ?? '')
+  const [mysqlPort, setMysqlPort] = useState(initialData?.mysql?.port ? String(initialData.mysql.port) : '3306')
+  const [mysqlUsername, setMysqlUsername] = useState(initialData?.mysql?.username ?? '')
+  const [mysqlPassword, setMysqlPassword] = useState(initialData?.mysql?.password ?? '')
+  const [mysqlDatabase, setMysqlDatabase] = useState(initialData?.mysql?.database ?? '')
+  // Remediation overrides (visible when a server is selected). Edits use the full editor page.
+  const [remediationActionRef, setRemediationActionRef] = useState(initialData?.remediation?.actionRef ?? '')
+  const [remediationMaxAttempts, setRemediationMaxAttempts] = useState(
+    initialData?.remediation?.maxAttempts ? String(initialData.remediation.maxAttempts) : ''
+  )
+  const [remediationCooldown, setRemediationCooldown] = useState(
+    initialData?.remediation?.cooldownSeconds ? String(initialData.remediation.cooldownSeconds) : ''
+  )
+  const [remediationRisk, setRemediationRisk] = useState<'' | 'low' | 'medium' | 'high'>(
+    initialData?.remediation?.risk ?? ''
+  )
   const [validationError, setValidationError] = useState<string | null>(null)
   const [createdHeartbeat, setCreatedHeartbeat] = useState<CheckConfig | null>(null)
+
+  const { data: servers = [] } = useQuery({
+    queryKey: ['servers'],
+    queryFn: () => serversApi.list(),
+    staleTime: 30_000,
+  })
+
+  const handleServerChange = (value: string) => {
+    // value is either a server.id (when picked from registry) or '' for None.
+    if (!value) {
+      setServerId('')
+      setServer('')
+      return
+    }
+    const match = servers.find(s => s.id === value)
+    if (match) {
+      setServerId(match.id)
+      setServer(match.name)
+    }
+  }
 
   const mutation = useMutation({
     mutationFn: (check: Partial<CheckConfig>) =>
@@ -223,7 +314,15 @@ export function AddCheckModal({
     e.preventDefault()
     setValidationError(null)
 
-    const error = validatePayload({ name, type, target, sshUser })
+    const mysqlInline = {
+      host: mysqlHost,
+      port: mysqlPort,
+      username: mysqlUsername,
+      password: mysqlPassword,
+      database: mysqlDatabase,
+    }
+
+    const error = validatePayload({ name, type, target, sshUser, mysqlMode, mysqlInline })
     if (error) {
       setValidationError(error)
       return
@@ -233,9 +332,18 @@ export function AddCheckModal({
       name,
       type,
       server,
+      serverId,
       target,
       sshUser,
       enabled,
+      mysqlMode,
+      mysqlInline,
+      remediation: {
+        actionRef: remediationActionRef,
+        maxAttempts: remediationMaxAttempts,
+        cooldownSeconds: remediationCooldown,
+        risk: remediationRisk,
+      },
     }))
   }
 
@@ -314,29 +422,88 @@ export function AddCheckModal({
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Server</label>
-            <input
-              type="text"
-              value={server}
-              onChange={(e) => setServer(e.target.value)}
-              placeholder="server name"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder:text-slate-500"
-            />
+            <div className="mb-1 flex items-center justify-between">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Server</label>
+              <Link
+                to="/servers"
+                onClick={onClose}
+                className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
+              >
+                + Add server
+              </Link>
+            </div>
+            {servers.length > 0 ? (
+              <>
+                <select
+                  value={serverId}
+                  onChange={(e) => handleServerChange(e.target.value)}
+                  aria-label="Server"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white"
+                >
+                  <option value="">— None —</option>
+                  {servers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.host}{s.port && s.port !== 22 ? `:${s.port}` : ''})
+                    </option>
+                  ))}
+                  {!serverId && server && (
+                    // Legacy free-text label that doesn't match a registered server
+                    <option value="" disabled>— Legacy label: {server} —</option>
+                  )}
+                </select>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Pick a registered server so auto-remediation can SSH into it. Manage servers under Servers.
+                </p>
+              </>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  value={server}
+                  onChange={(e) => { setServer(e.target.value); setServerId('') }}
+                  placeholder="server name"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder:text-slate-500"
+                />
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  No servers registered yet. Add one under Servers to enable SSH-based remediation.
+                </p>
+              </>
+            )}
           </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{targetMeta.label}</label>
-            <input
-              type={type === 'heartbeat' ? 'number' : 'text'}
-              required
-              min={type === 'heartbeat' ? 1 : undefined}
-              value={target}
-              onChange={(e) => setTarget(e.target.value)}
-              placeholder={targetMeta.placeholder}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder:text-slate-500"
+          {type === 'mysql' ? (
+            <MySQLCredentialsSection
+              mode={mysqlMode}
+              setMode={setMysqlMode}
+              host={mysqlHost}
+              setHost={setMysqlHost}
+              port={mysqlPort}
+              setPort={setMysqlPort}
+              username={mysqlUsername}
+              setUsername={setMysqlUsername}
+              password={mysqlPassword}
+              setPassword={setMysqlPassword}
+              hasStoredPassword={Boolean(initialData?.mysql?.hasPassword)}
+              database={mysqlDatabase}
+              setDatabase={setMysqlDatabase}
+              dsnEnv={target}
+              setDsnEnv={setTarget}
             />
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{targetMeta.hint}</p>
-          </div>
+          ) : (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{targetMeta.label}</label>
+              <input
+                type={type === 'heartbeat' ? 'number' : 'text'}
+                required
+                min={type === 'heartbeat' ? 1 : undefined}
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                placeholder={targetMeta.placeholder}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder:text-slate-500"
+              />
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{targetMeta.hint}</p>
+            </div>
+          )}
 
           {type === 'ssh' && (
             <div>
@@ -371,10 +538,38 @@ export function AddCheckModal({
             <span className="text-sm text-slate-700 dark:text-slate-300">Enabled</span>
           </div>
 
+          {serverId && (
+            <RemediationQuickSection
+              actionRef={remediationActionRef}
+              setActionRef={setRemediationActionRef}
+              maxAttempts={remediationMaxAttempts}
+              setMaxAttempts={setRemediationMaxAttempts}
+              cooldownSeconds={remediationCooldown}
+              setCooldownSeconds={setRemediationCooldown}
+              risk={remediationRisk}
+              setRisk={setRemediationRisk}
+              isEditing={isEditing}
+            />
+          )}
+
           {(validationError || mutation.isError) && (
             <p className="text-sm text-red-600 dark:text-red-400">
               {validationError || (mutation.error instanceof Error ? mutation.error.message : isEditing ? 'Failed to update check' : 'Failed to create check')}
             </p>
+          )}
+
+          {isEditing && (
+            <Link
+              to={`/checks/${initialData!.id}?edit=1`}
+              onClick={onClose}
+              className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-600 dark:bg-slate-900/40 dark:text-slate-300 dark:hover:border-blue-500 dark:hover:bg-blue-950/40 dark:hover:text-blue-300"
+            >
+              <span className="flex items-center gap-2">
+                <Wrench className="h-4 w-4" />
+                Auto-remediation, alert rules &amp; channels
+              </span>
+              <span className="text-xs font-medium">Open full editor →</span>
+            </Link>
           )}
 
           <div className="flex justify-end gap-3 pt-2">
@@ -395,6 +590,196 @@ export function AddCheckModal({
           </div>
         </form>
       </div>
+    </div>
+  )
+}
+
+// --- Inline subcomponents ---
+
+const inputCls =
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder:text-slate-500'
+
+function MySQLCredentialsSection(props: {
+  mode: 'inline' | 'env'
+  setMode: (m: 'inline' | 'env') => void
+  host: string
+  setHost: (v: string) => void
+  port: string
+  setPort: (v: string) => void
+  username: string
+  setUsername: (v: string) => void
+  password: string
+  setPassword: (v: string) => void
+  hasStoredPassword: boolean
+  database: string
+  setDatabase: (v: string) => void
+  dsnEnv: string
+  setDsnEnv: (v: string) => void
+}) {
+  const {
+    mode, setMode,
+    host, setHost, port, setPort, username, setUsername,
+    password, setPassword, hasStoredPassword,
+    database, setDatabase,
+    dsnEnv, setDsnEnv,
+  } = props
+  return (
+    <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+      <div className="flex items-center justify-between gap-2">
+        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">MySQL connection</label>
+        <div className="inline-flex rounded-md border border-slate-300 bg-white p-0.5 text-xs dark:border-slate-600 dark:bg-slate-800">
+          <button
+            type="button"
+            onClick={() => setMode('inline')}
+            className={cn(
+              'rounded px-2 py-1 font-medium',
+              mode === 'inline' ? 'bg-blue-600 text-white' : 'text-slate-600 dark:text-slate-300'
+            )}
+          >
+            Inline (recommended)
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('env')}
+            className={cn(
+              'rounded px-2 py-1 font-medium',
+              mode === 'env' ? 'bg-blue-600 text-white' : 'text-slate-600 dark:text-slate-300'
+            )}
+          >
+            Env variable
+          </button>
+        </div>
+      </div>
+
+      {mode === 'inline' ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Host</label>
+            <input type="text" required value={host} onChange={(e) => setHost(e.target.value)} placeholder="mysql.example.com" className={inputCls} />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Port</label>
+            <input type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} placeholder="3306" className={inputCls} />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Database <span className="text-slate-400">(optional)</span></label>
+            <input type="text" value={database} onChange={(e) => setDatabase(e.target.value)} placeholder="appdb" className={inputCls} />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Username</label>
+            <input type="text" required value={username} onChange={(e) => setUsername(e.target.value)} placeholder="monitor" className={inputCls} />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={hasStoredPassword ? '******** (leave blank to keep)' : 'password'}
+              autoComplete="new-password"
+              className={inputCls}
+            />
+            {hasStoredPassword && !password && (
+              <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">✓ Password stored — encrypted at rest</p>
+            )}
+          </div>
+          <p className="sm:col-span-2 text-[11px] text-slate-500 dark:text-slate-400">
+            Credentials are encrypted at rest using AES-256-GCM and never returned in plaintext via the API.
+          </p>
+        </div>
+      ) : (
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">DSN environment variable name</label>
+          <input
+            type="text"
+            required
+            value={dsnEnv}
+            onChange={(e) => setDsnEnv(e.target.value)}
+            placeholder="MYSQL_DSN"
+            className={inputCls}
+          />
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+            The backend reads the DSN from the named environment variable. Use this when secrets are managed by your orchestrator.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RemediationQuickSection(props: {
+  actionRef: string
+  setActionRef: (v: string) => void
+  maxAttempts: string
+  setMaxAttempts: (v: string) => void
+  cooldownSeconds: string
+  setCooldownSeconds: (v: string) => void
+  risk: '' | 'low' | 'medium' | 'high'
+  setRisk: (v: '' | 'low' | 'medium' | 'high') => void
+  isEditing: boolean
+}) {
+  const { actionRef, setActionRef, maxAttempts, setMaxAttempts, cooldownSeconds, setCooldownSeconds, risk, setRisk, isEditing } = props
+  return (
+    <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+      <div className="flex items-center justify-between gap-2">
+        <label className="text-sm font-medium text-amber-900 dark:text-amber-200">Auto-remediation <span className="text-xs font-normal">(optional)</span></label>
+        <span className="text-[11px] text-amber-700 dark:text-amber-300">Runs over the selected server's SSH</span>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Action reference</label>
+          <input
+            type="text"
+            value={actionRef}
+            onChange={(e) => setActionRef(e.target.value)}
+            placeholder="restart-nginx"
+            className={inputCls}
+          />
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+            Name of a registered remediation action. Leave blank to skip auto-remediation for now.
+          </p>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Max attempts</label>
+          <input
+            type="number"
+            min={1}
+            value={maxAttempts}
+            onChange={(e) => setMaxAttempts(e.target.value)}
+            placeholder="1"
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Cooldown (seconds)</label>
+          <input
+            type="number"
+            min={0}
+            value={cooldownSeconds}
+            onChange={(e) => setCooldownSeconds(e.target.value)}
+            placeholder="300"
+            className={inputCls}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Risk level</label>
+          <select
+            value={risk}
+            onChange={(e) => setRisk(e.target.value as '' | 'low' | 'medium' | 'high')}
+            className={inputCls}
+          >
+            <option value="">— Not set —</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+      </div>
+      <p className="text-[11px] text-amber-700 dark:text-amber-300">
+        {isEditing
+          ? 'For inline commands, HTTP webhooks, escalation policies and verification timing use the full editor below.'
+          : 'For inline commands, HTTP webhooks, escalation policies and verification timing open the check after creation.'}
+      </p>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Search, ArrowUpDown, Server, X, Plus, Pencil } from 'lucide-react'
 import { checksApi } from "@/features/checks/api/checks"
 import { StatusBadge } from "@/shared/components/StatusBadge"
@@ -16,7 +16,7 @@ import { useLiveSummary } from "@/features/dashboard/hooks/useLiveSummary"
 import { LiveIndicator } from "@/shared/components/LiveIndicator"
 import { AddCheckModal } from "@/features/checks/components/AddCheckModal"
 import { useExport } from "@/shared/hooks/useExport"
-import type { CheckConfig, CheckResult } from "@/shared/types"
+import type { CheckConfig, CheckResult, CheckType } from "@/shared/types"
 
 type SortKey = 'name' | 'type' | 'status' | 'durationMs'
 
@@ -31,7 +31,21 @@ export default function Checks() {
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [sortAsc, setSortAsc] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [addModalType, setAddModalType] = useState<CheckType | undefined>(undefined)
   const [editingCheck, setEditingCheck] = useState<CheckConfig | null>(null)
+
+  // Support deep-link ?add=<type> to auto-open the add modal preset to that type.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const addType = params.get('add')
+    if (addType) {
+      setAddModalType(addType as CheckType)
+      setShowAddModal(true)
+      params.delete('add')
+      const next = params.toString()
+      navigate(next ? `/checks?${next}` : '/checks', { replace: true })
+    }
+  }, [location.search, navigate])
 
   // Derive server filter from URL param
   const serverFilter = useMemo(() => {
@@ -328,9 +342,11 @@ export default function Checks() {
       {showAddModal && (
         <AddCheckModal
           defaultServer={serverFilter !== 'all' ? serverFilter : undefined}
-          onClose={() => setShowAddModal(false)}
+          defaultType={addModalType}
+          onClose={() => { setShowAddModal(false); setAddModalType(undefined) }}
           onCreated={() => {
             setShowAddModal(false)
+            setAddModalType(undefined)
             queryClient.invalidateQueries({ queryKey: ['checks'] })
             toast.success('Check created')
           }}

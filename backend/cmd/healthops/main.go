@@ -15,6 +15,7 @@ import (
 	airepositories "medics-health-check/backend/internal/monitoring/ai/repositories"
 	"medics-health-check/backend/internal/monitoring/assistant"
 	"medics-health-check/backend/internal/monitoring/automation"
+	"medics-health-check/backend/internal/monitoring/cryptoutil"
 	"medics-health-check/backend/internal/monitoring/evidence"
 	"medics-health-check/backend/internal/monitoring/logs"
 	"medics-health-check/backend/internal/monitoring/mysql"
@@ -112,6 +113,11 @@ func main() {
 	// Initialize user store (MongoDB)
 	dataDir := resolvePath("DATA_DIR", filepath.Join("backend", "data"), "data")
 	monitoring.InitJWTSecret(dataDir)
+
+	// Initialize shared secrets encryption key (used by MySQL/SSH credentials)
+	if err := cryptoutil.Init(dataDir); err != nil {
+		logger.Fatalf("init secrets encryption: %v", err)
+	}
 
 	mongoUserRepo, err := repositories.NewMongoUserRepository(mongoClient, mongoDB, mongoPrefix)
 	if err != nil {
@@ -612,11 +618,18 @@ func main() {
 								KeyPath:            c.SSH.KeyPath,
 								KeyEnv:             c.SSH.KeyEnv,
 								Password:           c.SSH.Password,
+								PasswordEnc:        c.SSH.PasswordEnc,
 								PasswordEnv:        c.SSH.PasswordEnv,
 								HostKeyFingerprint: c.SSH.HostKeyFingerprint,
 							}
 						}
 						if c.Remediation != nil {
+							// Remediation-specific SSH target overrides the check's own SSH
+							// (used when a non-SSH check needs to restart a service on a
+							// remote server).
+							if c.Remediation.SSH != nil && c.Remediation.SSH.Host != "" {
+								info.SSH = sshConfigFromMonitoring(c.Remediation.SSH)
+							}
 							info.Ref = remediation.RemediationRef{
 								ActionRef:                   c.Remediation.ActionRef,
 								MaxAttempts:                 c.Remediation.MaxAttempts,
@@ -772,15 +785,40 @@ func triggerRemediation(engine *remediation.Engine, store monitoring.Store, inci
 				KeyPath:            c.SSH.KeyPath,
 				KeyEnv:             c.SSH.KeyEnv,
 				Password:           c.SSH.Password,
+				PasswordEnc:        c.SSH.PasswordEnc,
 				PasswordEnv:        c.SSH.PasswordEnv,
 				HostKeyFingerprint: c.SSH.HostKeyFingerprint,
 			}
+		}
+		// Remediation-specific SSH target overrides the check's own SSH (used
+		// when a non-SSH check needs to restart a service on a remote server).
+		if c.Remediation != nil && c.Remediation.SSH != nil && c.Remediation.SSH.Host != "" {
+			info.SSH = sshConfigFromMonitoring(c.Remediation.SSH)
 		}
 
 		engine.TryRemediate(info)
 		return
 	}
 	logger.Printf("[remediation] check %s not found in store — skipping", incident.CheckID)
+}
+
+// sshConfigFromMonitoring converts a monitoring.SSHCheckConfig into the
+// engine-facing remediation.SSHConfig (1:1 field copy).
+func sshConfigFromMonitoring(s *monitoring.SSHCheckConfig) *remediation.SSHConfig {
+	if s == nil {
+		return nil
+	}
+	return &remediation.SSHConfig{
+		Host:               s.Host,
+		Port:               s.Port,
+		User:               s.User,
+		KeyPath:            s.KeyPath,
+		KeyEnv:             s.KeyEnv,
+		Password:           s.Password,
+		PasswordEnc:        s.PasswordEnc,
+		PasswordEnv:        s.PasswordEnv,
+		HostKeyFingerprint: s.HostKeyFingerprint,
+	}
 }
 
 // buildInlineAction constructs an AllowedAction from a check's inline

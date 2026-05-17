@@ -4,7 +4,7 @@ import { API_BASE, SSE_RECONNECT_DELAY } from "@/shared/lib/constants"
 
 const MAX_HISTORY = 60 // Keep last 60 snapshots for sparklines (~3 min at 3s interval)
 
-export function useMySQLLive(enabled = true, interval = 3) {
+export function useMySQLLive(enabled = true, interval = 3, checkId?: string) {
   const [snapshot, setSnapshot] = useState<MySQLLiveSnapshot | null>(null)
   const [history, setHistory] = useState<MySQLLiveSnapshot[]>([])
   const [connected, setConnected] = useState(false)
@@ -17,6 +17,7 @@ export function useMySQLLive(enabled = true, interval = 3) {
 
     const token = localStorage.getItem('healthops_token')
     let url = `${API_BASE}/mysql/live?interval=${interval}`
+    if (checkId) url += `&checkId=${encodeURIComponent(checkId)}`
     if (token) url += `&token=${encodeURIComponent(token)}`
 
     const es = new EventSource(url)
@@ -49,7 +50,7 @@ export function useMySQLLive(enabled = true, interval = 3) {
       es.close()
       setTimeout(connect, SSE_RECONNECT_DELAY)
     }
-  }, [enabled, interval])
+  }, [enabled, interval, checkId])
 
   useEffect(() => {
     if (enabled) {

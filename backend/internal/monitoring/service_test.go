@@ -397,8 +397,16 @@ func TestChecksUpdateEndpointPreservesOmittedFields(t *testing.T) {
 	if updated.Type != "heartbeat" || updated.Heartbeat == nil {
 		t.Fatalf("heartbeat config was not preserved: %+v", updated)
 	}
-	if updated.Heartbeat.Token != "heartbeat-token-secret" || updated.Heartbeat.ExpectedIntervalSeconds != 300 || updated.Heartbeat.GraceSeconds != 120 {
+	if updated.Heartbeat.Token == "" || updated.Heartbeat.ExpectedIntervalSeconds != 300 || updated.Heartbeat.GraceSeconds != 120 {
 		t.Fatalf("heartbeat fields changed unexpectedly: %+v", updated.Heartbeat)
+	}
+	// Token must be masked in API responses (not equal to raw secret).
+	if updated.Heartbeat.Token == "heartbeat-token-secret" {
+		t.Fatalf("expected heartbeat token to be masked in API response, got raw secret")
+	}
+	// Verify stored value is unchanged.
+	if stored := store.snapshot.Checks[0].Heartbeat; stored == nil || stored.Token != "heartbeat-token-secret" {
+		t.Fatalf("expected stored heartbeat token to be preserved, got %+v", stored)
 	}
 	if updated.Server != "batch-1" || len(updated.Tags) != 2 {
 		t.Fatalf("omitted common fields were not preserved: %+v", updated)

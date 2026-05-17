@@ -620,6 +620,7 @@ func (s *AIService) CheckProviderHealth(ctx context.Context) []ProviderHealth {
 type MySQLAskRequest struct {
 	Question   string `json:"question"`   // user's question, or empty for auto-analysis
 	ProviderID string `json:"providerId"` // optional specific provider
+	CheckID    string `json:"checkId"`    // optional specific MySQL check; falls back to first when empty
 }
 
 // MySQLAskResponse is the response from ad-hoc MySQL AI analysis.

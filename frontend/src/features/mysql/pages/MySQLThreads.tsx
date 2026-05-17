@@ -12,6 +12,7 @@ import { useToast } from "@/shared/components/Toast"
 import { cn } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import { useMySQLLive } from "@/features/mysql/hooks/useMySQLLive"
+import { MySQLInstancePicker, useMySQLCheckSelection } from "@/features/mysql/components/MySQLInstancePicker"
 import type { MySQLProcess } from "@/shared/types"
 
 const KILLABLE_QUERY_SECONDS = 5
@@ -26,13 +27,14 @@ function isKillableProcess(p: MySQLProcess) {
 export default function MySQLThreads() {
   const confirm = useConfirm()
   const toast = useToast()
+  const { selected, mysqlChecks, setSelected } = useMySQLCheckSelection()
   const { data: health, isLoading, error, refetch } = useQuery({
-    queryKey: ['mysql', 'health'],
-    queryFn: mysqlApi.health,
+    queryKey: ['mysql', 'health', selected],
+    queryFn: () => mysqlApi.health(selected),
     refetchInterval: REFETCH_INTERVAL,
   })
 
-  const { snapshot: live, history, connected: liveConnected } = useMySQLLive(!isLoading && !error)
+  const { snapshot: live, history, connected: liveConnected } = useMySQLLive(!isLoading && !error, 3, selected)
   const [killingId, setKillingId] = useState<number | null>(null)
   const [killedIds, setKilledIds] = useState<Set<number>>(new Set())
 
@@ -61,7 +63,7 @@ export default function MySQLThreads() {
     if (!ok) return
     setKillingId(process.id)
     try {
-      await mysqlApi.killQuery(process.id)
+      await mysqlApi.killQuery(process.id, selected)
       setKilledIds(prev => new Set(prev).add(process.id))
       toast.success(`Kill requested for process ${process.id}`)
       setTimeout(() => setKilledIds(prev => { const n = new Set(prev); n.delete(process.id); return n }), 5000)
@@ -83,7 +85,13 @@ export default function MySQLThreads() {
   }
 
   return (
-    <DetailPageLayout backTo="/mysql" backLabel="Back to MySQL" title="Threads & Processes" subtitle={`${activeThreads.length} active · ${sleepingThreads.length} sleeping · ${processList.length} total`}>
+    <DetailPageLayout
+      backTo={selected ? `/mysql?checkId=${encodeURIComponent(selected)}` : "/mysql"}
+      backLabel="Back to MySQL"
+      title="Threads & Processes"
+      subtitle={`${activeThreads.length} active · ${sleepingThreads.length} sleeping · ${processList.length} total`}
+      actions={<MySQLInstancePicker selected={selected} options={mysqlChecks} onChange={setSelected} />}
+    >
       {/* Long-running query alerts */}
       {longRunning.length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950/40">

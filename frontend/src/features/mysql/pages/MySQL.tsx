@@ -12,20 +12,25 @@ import { ErrorState } from "@/shared/components/ErrorState"
 import { EmptyState } from "@/shared/components/EmptyState"
 import { ExportButton } from "@/shared/components/ExportButton"
 import { MySQLAIPanel } from "@/features/mysql/components/MySQLAIPanel"
+import { MySQLInstancePicker, useMySQLCheckSelection } from "@/features/mysql/components/MySQLInstancePicker"
 import { relativeTime } from "@/shared/lib/utils"
 import { settingsApi } from "@/features/settings/api/settings"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import { useMySQLLive } from "@/features/mysql/hooks/useMySQLLive"
 
 export default function MySQL() {
+  const { selected, mysqlChecks, setSelected } = useMySQLCheckSelection()
   const { data: health, isLoading, error, refetch } = useQuery({
-    queryKey: ['mysql', 'health'],
-    queryFn: mysqlApi.health,
+    queryKey: ['mysql', 'health', selected],
+    queryFn: () => mysqlApi.health(selected),
     refetchInterval: REFETCH_INTERVAL,
     retry: 1,
   })
 
-  const { snapshot: live, history, connected: liveConnected } = useMySQLLive(!isLoading && !error)
+  const { snapshot: live, history, connected: liveConnected } = useMySQLLive(!isLoading && !error, 3, selected)
+
+  // Preserve checkId when linking to sub-pages.
+  const withCheckId = (path: string) => selected ? `${path}${path.includes('?') ? '&' : '?'}checkId=${encodeURIComponent(selected)}` : path
 
   // Sparkline data from live history
   const qpsHistory = history.map(s => s.queriesPerSec)
@@ -58,7 +63,7 @@ export default function MySQL() {
             <span className="text-sm font-medium text-red-700 dark:text-red-400">
               {live.longRunningCount} long-running {live.longRunningCount === 1 ? 'query' : 'queries'} detected (&gt;5s)
             </span>
-            <Link to="/mysql/threads" className="ml-auto text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400">
+            <Link to={withCheckId('/mysql/threads')} className="ml-auto text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400">
               View details →
             </Link>
           </div>
@@ -73,9 +78,10 @@ export default function MySQL() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">MySQL Monitoring</h1>
             <LiveIndicator connected={liveConnected} />
+            <MySQLInstancePicker selected={selected} options={mysqlChecks} onChange={setSelected} />
           </div>
           <p className="text-sm text-slate-500">
             {health.lastSampleAt ? `Last sample ${relativeTime(health.lastSampleAt)}` : 'No samples yet'}
@@ -88,7 +94,7 @@ export default function MySQL() {
       {/* Clickable metric cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <ClickableMetricCard
-          to="/mysql/server"
+          to={withCheckId('/mysql/server')}
           label="Status"
           value={currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1)}
           subValue={`Uptime: ${formatUptime(live?.uptimeSeconds ?? health.uptime)}`}
@@ -96,7 +102,7 @@ export default function MySQL() {
           status={statusMap[currentStatus] || 'neutral'}
         />
         <ClickableMetricCard
-          to="/mysql/connections"
+          to={withCheckId('/mysql/connections')}
           label="Connections"
           value={`${live?.connections ?? health.connections}/${health.maxConnections}`}
           subValue={`${(live?.connectionUtilPct ?? connPct).toFixed(1)}% utilized`}
@@ -105,7 +111,7 @@ export default function MySQL() {
           footer={connHistory.length > 3 ? <Sparkline data={connHistory} color="#6366f1" height={24} /> : undefined}
         />
         <ClickableMetricCard
-          to="/mysql/queries"
+          to={withCheckId('/mysql/queries')}
           label="Queries/sec"
           value={(live?.queriesPerSec ?? health.queriesPerSec).toFixed(1)}
           subValue={`${formatNumber(health.questions)} total`}
@@ -113,7 +119,7 @@ export default function MySQL() {
           footer={qpsHistory.length > 3 ? <Sparkline data={qpsHistory} color="#3b82f6" height={24} /> : undefined}
         />
         <ClickableMetricCard
-          to="/mysql/queries?filter=slow"
+          to={withCheckId('/mysql/queries?filter=slow')}
           label="Slow Queries"
           value={live?.slowQueries ?? health.totalSlowQueries}
           subValue={health.slowQueries > 0 ? `${health.slowQueries.toFixed(2)}/sec` : 'None recent'}
@@ -121,7 +127,7 @@ export default function MySQL() {
           status={(live?.slowQueries ?? health.totalSlowQueries) > 0 ? 'warning' : 'neutral'}
         />
         <ClickableMetricCard
-          to="/mysql/threads"
+          to={withCheckId('/mysql/threads')}
           label="Active Threads"
           value={live?.activeQueries ?? (health.processList || []).filter((p: { command: string }) => p.command !== 'Sleep' && p.command !== 'Daemon').length}
           subValue={`${live?.threadsRunning ?? health.threadsRunning} running`}
@@ -159,7 +165,7 @@ export default function MySQL() {
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               Top Queries (preview)
             </h2>
-            <Link to="/mysql/queries" className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400">
+            <Link to={withCheckId('/mysql/queries')} className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400">
               View all →
             </Link>
           </div>
@@ -198,56 +204,56 @@ export default function MySQL() {
         </div>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 text-sm">
           <DangerStat
-            to="/mysql/server?section=query-efficiency"
+            to={withCheckId('/mysql/server?section=query-efficiency')}
             label="Buffer Pool Hit Rate"
             value={`${(live?.bufferPoolHitRate ?? health.bufferPoolHitRate ?? 0).toFixed(2)}%`}
             severity={(live?.bufferPoolHitRate ?? health.bufferPoolHitRate ?? 100) < 95 ? 'critical' : (live?.bufferPoolHitRate ?? health.bufferPoolHitRate ?? 100) < 99 ? 'warning' : 'ok'}
             hint={(live?.bufferPoolHitRate ?? health.bufferPoolHitRate ?? 100) < 99 ? 'Reads going to disk instead of buffer' : 'Good — mostly served from memory'}
           />
           <DangerStat
-            to="/mysql/queries?highlight=full-scans"
+            to={withCheckId('/mysql/queries?highlight=full-scans')}
             label="Full Table Scans"
             value={formatNumber(health.selectScan ?? 0)}
             severity={(health.selectScan ?? 0) > 10000 ? 'critical' : (health.selectScan ?? 0) > 1000 ? 'warning' : 'ok'}
             hint="SELECT operations doing full scans"
           />
           <DangerStat
-            to="/mysql/queries?highlight=full-joins"
+            to={withCheckId('/mysql/queries?highlight=full-joins')}
             label="Full Joins (no index)"
             value={formatNumber(health.selectFullJoin ?? 0)}
             severity={(health.selectFullJoin ?? 0) > 0 ? 'critical' : 'ok'}
             hint="JOINs with no index — very expensive"
           />
           <DangerStat
-            to="/mysql/queries?highlight=sort-merge"
+            to={withCheckId('/mysql/queries?highlight=sort-merge')}
             label="Sort Merge Passes"
             value={formatNumber(health.sortMergePasses ?? 0)}
             severity={(health.sortMergePasses ?? 0) > 100 ? 'critical' : (health.sortMergePasses ?? 0) > 10 ? 'warning' : 'ok'}
             hint="Sorts spilling to disk"
           />
           <DangerStat
-            to="/mysql/server?section=resources"
+            to={withCheckId('/mysql/server?section=resources')}
             label="Table Lock Waits"
             value={formatNumber(live?.tableLocksWaited ?? health.tableLocksWaited ?? 0)}
             severity={(live?.tableLocksWaited ?? health.tableLocksWaited ?? 0) > 100 ? 'critical' : (live?.tableLocksWaited ?? health.tableLocksWaited ?? 0) > 0 ? 'warning' : 'ok'}
             hint={`${formatNumber(health.tableLocksImmediate ?? 0)} immediate locks`}
           />
           <DangerStat
-            to="/mysql/connections?highlight=refused"
+            to={withCheckId('/mysql/connections?highlight=refused')}
             label="Connections Refused"
             value={formatNumber(live?.connectionsRefused ?? health.connectionsRefused ?? 0)}
             severity={(live?.connectionsRefused ?? health.connectionsRefused ?? 0) > 0 ? 'critical' : 'ok'}
             hint="Rejected due to max_connections"
           />
           <DangerStat
-            to="/mysql/server?section=resources"
+            to={withCheckId('/mysql/server?section=resources')}
             label="Open Files"
             value={`${health.openFiles ?? 0}/${health.openFilesLimit ?? 0}`}
             severity={(health.openFilesLimit ?? 0) > 0 && (health.openFiles ?? 0) / (health.openFilesLimit ?? 1) > 0.9 ? 'critical' : (health.openFilesLimit ?? 0) > 0 && (health.openFiles ?? 0) / (health.openFilesLimit ?? 1) > 0.7 ? 'warning' : 'ok'}
             hint="Open files vs system limit"
           />
           <DangerStat
-            to="/mysql/server?section=resources"
+            to={withCheckId('/mysql/server?section=resources')}
             label="Table Cache"
             value={`${health.openTables ?? 0}/${health.tableOpenCache ?? 0}`}
             severity={(health.tableOpenCache ?? 0) > 0 && (health.openTables ?? 0) / (health.tableOpenCache ?? 1) > 0.9 ? 'warning' : 'ok'}
@@ -271,7 +277,7 @@ export default function MySQL() {
                 <AlertTriangle className="h-4 w-4 text-red-500" />
                 <h2 className="text-sm font-semibold text-red-900 dark:text-red-200">Queries Needing Attention</h2>
               </div>
-              <Link to="/mysql/queries?filter=inefficient" className="text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400">
+              <Link to={withCheckId('/mysql/queries?filter=inefficient')} className="text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400">
                 View all →
               </Link>
             </div>
@@ -310,7 +316,7 @@ export default function MySQL() {
       <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Server Quick Stats</h2>
-          <Link to="/mysql/server" className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400">
+          <Link to={withCheckId('/mysql/server')} className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400">
             Full details →
           </Link>
         </div>
@@ -323,7 +329,7 @@ export default function MySQL() {
       </div>
 
       {/* AI Assistant */}
-      <MySQLAIPanel />
+      <MySQLAIPanel checkId={selected} />
     </div>
   )
 }

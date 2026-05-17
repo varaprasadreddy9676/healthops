@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"medics-health-check/backend/internal/monitoring/cryptoutil"
 )
 
 // SSHConfig holds credentials needed to SSH into a remote server.
@@ -30,6 +32,7 @@ type SSHConfig struct {
 	KeyPath            string
 	KeyEnv             string
 	Password           string
+	PasswordEnc        string // AES-256-GCM ciphertext (decrypted via cryptoutil at use time)
 	PasswordEnv        string
 	HostKeyFingerprint string
 }
@@ -578,8 +581,15 @@ func buildSSHAuth(cfg *SSHConfig) ([]ssh.AuthMethod, error) {
 		methods = append(methods, ssh.PublicKeys(signer))
 	}
 
-	// Try password auth
+	// Try password auth: inline plaintext > encrypted-at-rest > env
 	password := cfg.Password
+	if password == "" && cfg.PasswordEnc != "" {
+		decrypted, err := cryptoutil.Decrypt(cfg.PasswordEnc)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt ssh password: %w", err)
+		}
+		password = decrypted
+	}
 	if password == "" && cfg.PasswordEnv != "" {
 		password = os.Getenv(cfg.PasswordEnv)
 	}
@@ -588,7 +598,7 @@ func buildSSHAuth(cfg *SSHConfig) ([]ssh.AuthMethod, error) {
 	}
 
 	if len(methods) == 0 {
-		return nil, fmt.Errorf("no SSH auth method configured (need keyPath/keyEnv or password/passwordEnv)")
+		return nil, fmt.Errorf("no SSH auth method configured (need keyPath/keyEnv or password/passwordEnc/passwordEnv)")
 	}
 	return methods, nil
 }

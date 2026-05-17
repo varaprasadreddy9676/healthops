@@ -728,10 +728,15 @@ function ServerForm({ initial, isEdit, saving, onSave, onCancel }: {
             <input value={form.keyEnv ?? ''} onChange={e => setForm(f => ({ ...f, keyEnv: e.target.value }))}
               placeholder="SSH_KEY_PATH" className={inputCls} />
           </Field>
-          <Field label="Password" hint="SSH password">
+          <Field label="Password" hint={initial.hasPassword ? 'Leave blank to keep stored password' : 'SSH password'}>
             <input type="password" value={form.password ?? ''}
               onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-              placeholder="••••••••" className={inputCls} />
+              autoComplete="new-password"
+              placeholder={initial.hasPassword ? '******** (stored, encrypted)' : '••••••••'}
+              className={inputCls} />
+            {initial.hasPassword && !form.password && (
+              <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">✓ Password stored — encrypted at rest (AES-256-GCM)</p>
+            )}
           </Field>
           <Field label="Password Env Variable" hint="Env var holding password">
             <input value={form.passwordEnv ?? ''} onChange={e => setForm(f => ({ ...f, passwordEnv: e.target.value }))}

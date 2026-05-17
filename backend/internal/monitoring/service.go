@@ -726,6 +726,10 @@ func (s *Service) handleChecks(w http.ResponseWriter, r *http.Request) {
 			WriteAPIError(w, http.StatusBadRequest, err)
 			return
 		}
+		if err := prepareCheckSecrets(&check, nil); err != nil {
+			WriteAPIError(w, http.StatusBadRequest, err)
+			return
+		}
 		if err := s.store.UpsertCheck(check); err != nil {
 			WriteAPIError(w, http.StatusInternalServerError, err)
 			return
@@ -741,7 +745,7 @@ func (s *Service) handleChecks(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
-		WriteAPIResponse(w, http.StatusCreated, NewAPIResponse(check))
+		WriteAPIResponse(w, http.StatusCreated, NewAPIResponse(sanitizeCheckForResponse(check)))
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -787,6 +791,10 @@ func (s *Service) handleCheckByID(w http.ResponseWriter, r *http.Request) {
 			WriteAPIError(w, http.StatusBadRequest, err)
 			return
 		}
+		if err := prepareCheckSecrets(&check, &existing); err != nil {
+			WriteAPIError(w, http.StatusBadRequest, err)
+			return
+		}
 		if err := s.store.UpsertCheck(check); err != nil {
 			WriteAPIError(w, http.StatusInternalServerError, err)
 			return
@@ -802,7 +810,7 @@ func (s *Service) handleCheckByID(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
-		WriteAPIResponse(w, http.StatusOK, NewAPIResponse(check))
+		WriteAPIResponse(w, http.StatusOK, NewAPIResponse(sanitizeCheckForResponse(check)))
 	case http.MethodDelete:
 		if !IsRequestAuthorized(s.cfg.Auth, r) {
 			RequestAuth(w)

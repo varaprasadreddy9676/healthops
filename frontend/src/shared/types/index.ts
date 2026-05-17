@@ -97,6 +97,8 @@ export interface MySQLCheckConfig {
   port?: number
   username?: string
   password?: string
+  /** True when an encrypted password is stored on the backend. Outbound-only. */
+  hasPassword?: boolean
   database?: string
   connectTimeoutSeconds?: number
   queryTimeoutSeconds?: number
@@ -478,6 +480,8 @@ export interface RemoteServer {
   keyEnv?: string
   password?: string
   passwordEnv?: string
+  /** True when an encrypted password is stored on the backend. Outbound-only. */
+  hasPassword?: boolean
   tags?: string[]
   enabled: boolean
 }

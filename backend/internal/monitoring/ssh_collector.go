@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"medics-health-check/backend/internal/monitoring/cryptoutil"
 )
 
 // makeHostKeyCallback returns a HostKeyCallback that either verifies the server's
@@ -36,8 +38,10 @@ type SSHCheckConfig struct {
 	User               string   `json:"user" bson:"user"`
 	KeyPath            string   `json:"keyPath,omitempty" bson:"keyPath,omitempty"`                       // path to private key file
 	KeyEnv             string   `json:"keyEnv,omitempty" bson:"keyEnv,omitempty"`                         // env var with path to key file
-	Password           string   `json:"password,omitempty" bson:"password,omitempty"`                     // password for password auth
+	Password           string   `json:"password,omitempty" bson:"-"`                                      // inbound only; never persisted plaintext
+	PasswordEnc        string   `json:"-" bson:"passwordEnc,omitempty"`                                   // AES-256-GCM ciphertext at rest
 	PasswordEnv        string   `json:"passwordEnv,omitempty" bson:"passwordEnv,omitempty"`               // env var holding the password
+	HasPassword        bool     `json:"hasPassword,omitempty" bson:"-"`                                   // outbound only; true when PasswordEnc present
 	HostKeyFingerprint string   `json:"hostKeyFingerprint,omitempty" bson:"hostKeyFingerprint,omitempty"` // SHA-256 fingerprint, e.g. "SHA256:abc123..."
 	Metrics            []string `json:"metrics,omitempty" bson:"metrics,omitempty"`                       // cpu, memory, disk, load (empty = all)
 }
@@ -125,8 +129,15 @@ func buildSSHAuth(cfg *SSHCheckConfig) ([]ssh.AuthMethod, error) {
 		methods = append(methods, ssh.PublicKeys(signer))
 	}
 
-	// Try password auth
+	// Try password auth: inline plaintext > encrypted-at-rest > env
 	password := cfg.Password
+	if password == "" && cfg.PasswordEnc != "" {
+		decrypted, err := cryptoutil.Decrypt(cfg.PasswordEnc)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt ssh password: %w", err)
+		}
+		password = decrypted
+	}
 	if password == "" && cfg.PasswordEnv != "" {
 		password = os.Getenv(cfg.PasswordEnv)
 	}
@@ -135,7 +146,7 @@ func buildSSHAuth(cfg *SSHCheckConfig) ([]ssh.AuthMethod, error) {
 	}
 
 	if len(methods) == 0 {
-		return nil, fmt.Errorf("no SSH auth configured: set keyPath/keyEnv or password/passwordEnv")
+		return nil, fmt.Errorf("no SSH auth configured: set keyPath/keyEnv or password/passwordEnc/passwordEnv")
 	}
 	return methods, nil
 }

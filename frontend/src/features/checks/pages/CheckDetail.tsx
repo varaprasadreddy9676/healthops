@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useParams, Link } from 'react-router-dom'
-import { useState } from 'react'
+import { useParams, Link, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { ArrowLeft, Server, Tag, Pencil, X, Save, Bell, BarChart2, List, Wrench } from 'lucide-react'
 import {
   ComposedChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -8,6 +8,7 @@ import {
 } from 'recharts'
 import { checksApi } from "@/features/checks/api/checks"
 import { analyticsApi } from "@/features/analytics/api/analytics"
+import { serversApi } from "@/features/servers/api/servers"
 import { StatusBadge } from "@/shared/components/StatusBadge"
 import { MetricCard } from "@/shared/components/MetricCard"
 import { LoadingState } from "@/shared/components/LoadingState"
@@ -168,6 +169,7 @@ async function fetchChannels(): Promise<NotificationChannel[]> {
 
 export default function CheckDetail() {
   const { id } = useParams<{ id: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<Partial<CheckConfig>>({})
@@ -191,6 +193,12 @@ export default function CheckDetail() {
     queryFn: fetchChannels,
   })
 
+  const { data: servers = [] } = useQuery({
+    queryKey: ['servers'],
+    queryFn: () => serversApi.list(),
+    staleTime: 30_000,
+  })
+
   const updateMutation = useMutation({
     mutationFn: (data: Partial<CheckConfig>) => checksApi.update(id!, data),
     onSuccess: () => {
@@ -208,6 +216,7 @@ export default function CheckDetail() {
       type: c.type,
       target: c.target,
       server: c.server,
+      serverId: c.serverId,
       application: c.application,
       host: c.host,
       port: c.port,
@@ -233,6 +242,19 @@ export default function CheckDetail() {
     })
     setEditing(true)
   }
+
+  // Auto-open the edit modal when ?edit=1 is in the URL (e.g. linked from the
+  // quick-edit modal on the Checks list). We strip the param after opening so
+  // closing+reopening behaves normally.
+  useEffect(() => {
+    if (searchParams.get('edit') !== '1') return
+    if (!detail || editing) return
+    openEdit()
+    const next = new URLSearchParams(searchParams)
+    next.delete('edit')
+    setSearchParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail, searchParams])
 
   const handleSave = () => {
     updateMutation.mutate(form)
@@ -576,12 +598,48 @@ export default function CheckDetail() {
                 )}
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Server</label>
-                  <input
-                    value={form.server || ''}
-                    onChange={e => setForm(f => ({ ...f, server: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                  />
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">Server</label>
+                    <Link to="/servers" className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400">+ Add server</Link>
+                  </div>
+                  {servers.length > 0 ? (
+                    <>
+                      <select
+                        value={form.serverId || ''}
+                        onChange={e => {
+                          const id = e.target.value
+                          if (!id) {
+                            setForm(f => ({ ...f, serverId: undefined, server: undefined }))
+                            return
+                          }
+                          const match = servers.find(s => s.id === id)
+                          if (match) setForm(f => ({ ...f, serverId: match.id, server: match.name }))
+                        }}
+                        aria-label="Server"
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      >
+                        <option value="">— None —</option>
+                        {servers.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} ({s.host}{s.port && s.port !== 22 ? `:${s.port}` : ''})
+                          </option>
+                        ))}
+                      </select>
+                      {!form.serverId && form.server && (
+                        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                          Legacy label: “{form.server}” — pick a registered server to enable SSH remediation.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <input
+                      value={form.server || ''}
+                      onChange={e => setForm(f => ({ ...f, server: e.target.value, serverId: undefined }))}
+                      placeholder="server name"
+                      aria-label="Server"
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    />
+                  )}
                 </div>
               </div>
 

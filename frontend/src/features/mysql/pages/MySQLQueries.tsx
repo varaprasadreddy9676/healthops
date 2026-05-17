@@ -10,17 +10,19 @@ import { ErrorState } from "@/shared/components/ErrorState"
 import { cn } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import { useMySQLLive } from "@/features/mysql/hooks/useMySQLLive"
+import { MySQLInstancePicker, useMySQLCheckSelection } from "@/features/mysql/components/MySQLInstancePicker"
 import type { MySQLDigestStat } from "@/shared/types"
 import { AlertTriangle, Search, XCircle, Filter } from 'lucide-react'
 
 export default function MySQLQueries() {
+  const { selected, mysqlChecks, setSelected } = useMySQLCheckSelection()
   const { data: health, isLoading, error, refetch } = useQuery({
-    queryKey: ['mysql', 'health'],
-    queryFn: mysqlApi.health,
+    queryKey: ['mysql', 'health', selected],
+    queryFn: () => mysqlApi.health(selected),
     refetchInterval: REFETCH_INTERVAL,
   })
 
-  const { snapshot: live, history, connected: liveConnected } = useMySQLLive(!isLoading && !error)
+  const { snapshot: live, history, connected: liveConnected } = useMySQLLive(!isLoading && !error, 3, selected)
 
   const [searchParams] = useSearchParams()
   const highlight = searchParams.get('highlight')
@@ -75,7 +77,13 @@ export default function MySQLQueries() {
   }
 
   return (
-    <DetailPageLayout backTo="/mysql" backLabel="Back to MySQL" title="Slow Queries & Digests" subtitle={`${slowTotal} total slow queries · ${qps.toFixed(1)} queries/sec`}>
+    <DetailPageLayout
+      backTo={selected ? `/mysql?checkId=${encodeURIComponent(selected)}` : "/mysql"}
+      backLabel="Back to MySQL"
+      title="Slow Queries & Digests"
+      subtitle={`${slowTotal} total slow queries · ${qps.toFixed(1)} queries/sec`}
+      actions={<MySQLInstancePicker selected={selected} options={mysqlChecks} onChange={setSelected} />}
+    >
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
         <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -244,33 +252,33 @@ export default function MySQLQueries() {
                   const isInefficient = examSentRatio > 100
                   return (
                     <tr key={i} className={cn(isInefficient && 'bg-amber-50/50 dark:bg-amber-900/10', q.avgTimerWait > 1 && !isInefficient && 'bg-red-50/30 dark:bg-red-900/10')}>
-                    <td className="px-4 py-2.5 font-mono text-xs text-slate-400">{i + 1}</td>
-                    <td className="px-4 py-2.5 max-w-lg">
-                      <code className="block whitespace-pre-wrap break-all rounded bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                        {q.digestText}
-                      </code>
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-xs">{formatNumber(q.countStar)}</td>
-                    <td className={cn('px-4 py-2.5 text-right font-mono text-xs', q.sumTimerWait > 10 ? 'text-red-600 font-semibold' : q.sumTimerWait > 1 ? 'text-amber-600' : '')}>
-                      {q.sumTimerWait.toFixed(4)}s
-                    </td>
-                    <td className={cn('px-4 py-2.5 text-right font-mono text-xs', q.avgTimerWait > 1 ? 'text-red-600 font-semibold' : q.avgTimerWait > 0.1 ? 'text-amber-600' : '')}>
-                      {q.avgTimerWait.toFixed(4)}s
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-xs">{formatNumber(q.sumRowsSent)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-xs">{formatNumber(q.sumRowsExam)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-xs">
-                      {examSentRatio > 0 ? (
-                        <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold', isInefficient ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' : 'text-slate-400')}>
-                          {examSentRatio > 0 ? `${examSentRatio}:1` : '—'}
-                        </span>
-                      ) : '—'}
-                    </td>
-                    <td className={cn('px-4 py-2.5 text-right font-mono text-xs', (q.sumErrors ?? 0) > 0 && 'text-red-600 font-semibold')}>
-                      {(q.sumErrors ?? 0) > 0 ? formatNumber(q.sumErrors) : '—'}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-xs text-slate-500">{q.lastSeen ? new Date(q.lastSeen).toLocaleTimeString() : '—'}</td>
-                  </tr>
+                      <td className="px-4 py-2.5 font-mono text-xs text-slate-400">{i + 1}</td>
+                      <td className="px-4 py-2.5 max-w-lg">
+                        <code className="block whitespace-pre-wrap break-all rounded bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                          {q.digestText}
+                        </code>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-xs">{formatNumber(q.countStar)}</td>
+                      <td className={cn('px-4 py-2.5 text-right font-mono text-xs', q.sumTimerWait > 10 ? 'text-red-600 font-semibold' : q.sumTimerWait > 1 ? 'text-amber-600' : '')}>
+                        {q.sumTimerWait.toFixed(4)}s
+                      </td>
+                      <td className={cn('px-4 py-2.5 text-right font-mono text-xs', q.avgTimerWait > 1 ? 'text-red-600 font-semibold' : q.avgTimerWait > 0.1 ? 'text-amber-600' : '')}>
+                        {q.avgTimerWait.toFixed(4)}s
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-xs">{formatNumber(q.sumRowsSent)}</td>
+                      <td className="px-4 py-2.5 text-right font-mono text-xs">{formatNumber(q.sumRowsExam)}</td>
+                      <td className="px-4 py-2.5 text-right font-mono text-xs">
+                        {examSentRatio > 0 ? (
+                          <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold', isInefficient ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' : 'text-slate-400')}>
+                            {examSentRatio > 0 ? `${examSentRatio}:1` : '—'}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td className={cn('px-4 py-2.5 text-right font-mono text-xs', (q.sumErrors ?? 0) > 0 && 'text-red-600 font-semibold')}>
+                        {(q.sumErrors ?? 0) > 0 ? formatNumber(q.sumErrors) : '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-xs text-slate-500">{q.lastSeen ? new Date(q.lastSeen).toLocaleTimeString() : '—'}</td>
+                    </tr>
                   )
                 })}
               </tbody>

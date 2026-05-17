@@ -79,7 +79,7 @@ func (s *RemoteServer) validate() error {
 		return fmt.Errorf("user is required")
 	}
 	hasKey := s.KeyPath != "" || s.KeyEnv != ""
-	hasPassword := s.Password != "" || s.PasswordEnv != ""
+	hasPassword := s.Password != "" || s.PasswordEnc != "" || s.PasswordEnv != ""
 	if !hasKey && !hasPassword {
 		return fmt.Errorf("auth required: set keyPath/keyEnv or password/passwordEnv")
 	}

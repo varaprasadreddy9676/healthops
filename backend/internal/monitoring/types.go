@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"medics-health-check/backend/internal/monitoring/cryptoutil"
 )
 
 type Config struct {
@@ -28,8 +30,10 @@ type RemoteServer struct {
 	User        string   `json:"user" bson:"user"`
 	KeyPath     string   `json:"keyPath,omitempty" bson:"keyPath,omitempty"`
 	KeyEnv      string   `json:"keyEnv,omitempty" bson:"keyEnv,omitempty"`
-	Password    string   `json:"password,omitempty" bson:"password,omitempty"`
+	Password    string   `json:"password,omitempty" bson:"-"`    // inbound only; never persisted plaintext
+	PasswordEnc string   `json:"-" bson:"passwordEnc,omitempty"` // AES-256-GCM ciphertext at rest
 	PasswordEnv string   `json:"passwordEnv,omitempty" bson:"passwordEnv,omitempty"`
+	HasPassword bool     `json:"hasPassword,omitempty" bson:"-"` // outbound only; true when PasswordEnc present
 	Tags        []string `json:"tags,omitempty" bson:"tags,omitempty"`
 	Enabled     *bool    `json:"enabled,omitempty" bson:"enabled,omitempty"`
 }
@@ -48,6 +52,7 @@ func (s *RemoteServer) ToSSHConfig() *SSHCheckConfig {
 		KeyPath:     s.KeyPath,
 		KeyEnv:      s.KeyEnv,
 		Password:    s.Password,
+		PasswordEnc: s.PasswordEnc,
 		PasswordEnv: s.PasswordEnv,
 	}
 }
@@ -128,6 +133,12 @@ type CheckRemediationConfig struct {
 	TimeoutSeconds int               `json:"timeoutSeconds,omitempty" bson:"timeoutSeconds,omitempty"` // action exec timeout
 	Risk           string            `json:"risk,omitempty" bson:"risk,omitempty"`                     // low | medium | high
 	Description    string            `json:"description,omitempty" bson:"description,omitempty"`
+
+	// SSH target for ssh_command remediation. When nil, the engine falls back
+	// to the check's own SSH config (useful for SSH-type checks). When set,
+	// this overrides it so e.g. an API check can restart a service on a
+	// dedicated remote server.
+	SSH *SSHCheckConfig `json:"ssh,omitempty" bson:"ssh,omitempty"`
 
 	// Registry reference (set automatically from inline fields on save, or
 	// manually for shared actions)
@@ -300,17 +311,18 @@ type AlertState struct {
 }
 
 // MySQLCheckConfig holds MySQL-specific check configuration.
-// Supports two modes:
+// Supports three modes (priority order):
 //   - Direct: set Host, Port, Username, Password, Database fields
+//   - Encrypted-at-rest: set Host/Username/etc + PasswordEnc (AES-256-GCM hex)
 //   - Environment: set DSNEnv to the name of an env var containing the full DSN
-//
-// Direct config takes priority. If both are empty, validation fails.
 type MySQLCheckConfig struct {
 	DSNEnv                string `json:"dsnEnv,omitempty" bson:"dsnEnv,omitempty"`
 	Host                  string `json:"host,omitempty" bson:"host,omitempty"`
 	Port                  int    `json:"port,omitempty" bson:"port,omitempty"`
 	Username              string `json:"username,omitempty" bson:"username,omitempty"`
-	Password              string `json:"password,omitempty" bson:"password,omitempty"`
+	Password              string `json:"password,omitempty" bson:"-"`    // inbound only; never persisted plaintext
+	PasswordEnc           string `json:"-" bson:"passwordEnc,omitempty"` // AES-256-GCM ciphertext at rest
+	HasPassword           bool   `json:"hasPassword,omitempty" bson:"-"` // outbound only; true when PasswordEnc present
 	Database              string `json:"database,omitempty" bson:"database,omitempty"`
 	ConnectTimeoutSeconds int    `json:"connectTimeoutSeconds,omitempty" bson:"connectTimeoutSeconds,omitempty"`
 	QueryTimeoutSeconds   int    `json:"queryTimeoutSeconds,omitempty" bson:"queryTimeoutSeconds,omitempty"`
@@ -319,11 +331,18 @@ type MySQLCheckConfig struct {
 	HostUserLimit         int    `json:"hostUserLimit,omitempty" bson:"hostUserLimit,omitempty"`
 }
 
-// BuildDSN returns the MySQL DSN. Uses direct config fields first, then falls
-// back to the environment variable named in DSNEnv.
+// BuildDSN returns the MySQL DSN. Tries inline plaintext Password first, then
+// PasswordEnc (decrypted), then falls back to the env var named in DSNEnv.
 func (c *MySQLCheckConfig) BuildDSN() (string, error) {
-	// Direct config takes priority
 	if c.Host != "" && c.Username != "" {
+		password := c.Password
+		if password == "" && c.PasswordEnc != "" {
+			decrypted, err := cryptoutil.Decrypt(c.PasswordEnc)
+			if err != nil {
+				return "", fmt.Errorf("decrypt mysql password: %w", err)
+			}
+			password = decrypted
+		}
 		port := c.Port
 		if port <= 0 {
 			port = 3306
@@ -332,7 +351,7 @@ func (c *MySQLCheckConfig) BuildDSN() (string, error) {
 		if db == "" {
 			db = "mysql"
 		}
-		return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", c.Username, c.Password, c.Host, port, db), nil
+		return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", c.Username, password, c.Host, port, db), nil
 	}
 	// Fall back to environment variable
 	if c.DSNEnv != "" {
