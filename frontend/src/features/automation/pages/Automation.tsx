@@ -20,6 +20,7 @@ import { useConfirm } from '@/shared/components/ConfirmDialog'
 import { useToast } from '@/shared/components/Toast'
 import { useAuth } from '@/shared/hooks/useAuth'
 import { APIError } from '@/shared/api/client'
+import { useAIAvailability } from '@/features/ai/hooks/useAIAvailability'
 
 const RISK_STYLES: Record<string, { bg: string; text: string; label: string }> = {
     low: { bg: 'bg-green-50 dark:bg-green-950/30', text: 'text-green-700 dark:text-green-400', label: 'Low Risk' },
@@ -41,6 +42,12 @@ const STATUS_STYLES: Record<string, string> = {
     rejected: 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950/30',
     expired: 'text-slate-500 bg-slate-50 dark:text-slate-400 dark:bg-slate-800',
 }
+
+const AUTOMATION_STEPS = [
+    { icon: Sparkles, title: 'Generate', text: 'AI reads current incidents, checks, and any context you add.' },
+    { icon: Shield, title: 'Review', text: 'Each suggestion is labeled by risk and shows the exact command, if one exists.' },
+    { icon: FileText, title: 'Record', text: 'Approve or reject stores an audit decision. HealthOps does not run commands.' },
+]
 
 function ActionCard({
     action,
@@ -75,6 +82,10 @@ function ActionCard({
                                 <StatusIcon className="h-2.5 w-2.5" />
                                 {action.status}
                             </span>
+                            <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                                <FileText className="h-2.5 w-2.5" />
+                                Review only
+                            </span>
                         </div>
                         <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{action.description}</p>
                         <p className="mt-1 text-[11px] text-slate-500">
@@ -99,6 +110,9 @@ function ActionCard({
                                 Suggested Command
                             </div>
                             <code className="mt-1 block text-xs text-green-400 font-mono">{action.command}</code>
+                            <p className="mt-2 text-[10px] text-slate-400">
+                                Run manually only after confirming the host, scope, and rollback path.
+                            </p>
                         </div>
                     )}
                     <div className="flex items-center gap-2 text-[11px] text-slate-500">
@@ -116,7 +130,7 @@ function ActionCard({
                         className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <Play className="h-3 w-3" />
-                        Approve only
+                        Mark approved
                     </button>
                     <button
                         onClick={() => onReject(action)}
@@ -177,6 +191,7 @@ export default function Automation() {
     const confirm = useConfirm()
     const toast = useToast()
     const { user } = useAuth()
+    const { isAIAvailable } = useAIAvailability()
 
     const { data: status } = useQuery({
         queryKey: ['automation', 'status'],
@@ -196,12 +211,16 @@ export default function Automation() {
 
     const suggestMutation = useMutation({
         mutationFn: () => automationApi.suggest(undefined, undefined, suggestContext),
-        onSuccess: () => {
+        onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: ['automation'] })
+            if ((result.actions ?? []).length === 0) {
+                toast.info('No remediation suggestions were generated. Add more context or open an incident first.')
+                return
+            }
             setSuggestContext('')
-            toast.success('Automation suggestions generated')
+            toast.success(`Generated ${result.actions.length} remediation ${result.actions.length === 1 ? 'suggestion' : 'suggestions'}`)
         },
-        onError: (err: Error) => toast.error(err.message || 'Failed to generate automation suggestions'),
+        onError: (err: Error) => toast.error(err.message || 'Failed to generate remediation suggestions'),
     })
 
     const approveMutation = useMutation({
@@ -240,6 +259,8 @@ export default function Automation() {
     const isAvailable = status?.enabled ?? false
     const isActionMutating = approveMutation.isPending || rejectMutation.isPending
 
+    if (!isAIAvailable) return null
+
     const handleSuggest = () => {
         if (suggestMutation.isPending) return
         suggestMutation.mutate()
@@ -247,16 +268,16 @@ export default function Automation() {
 
     const handleApprove = async (action: AutomationAction) => {
         const ok = await confirm({
-            title: 'Approve automation suggestion?',
+            title: 'Approve remediation suggestion?',
             message: `Approve "${action.title}" as a reviewed recommendation only. HealthOps will not execute the command automatically.`,
-            confirmLabel: 'Approve only',
+            confirmLabel: 'Mark approved',
         })
         if (ok) approveMutation.mutate(action.id)
     }
 
     const handleReject = async (action: AutomationAction) => {
         const ok = await confirm({
-            title: 'Reject automation suggestion?',
+            title: 'Reject remediation suggestion?',
             message: `Reject "${action.title}" and keep the decision in the audit log.`,
             confirmLabel: 'Reject',
             variant: 'danger',
@@ -274,13 +295,19 @@ export default function Automation() {
                             <Zap className="h-5 w-5" />
                         </div>
                         <div>
-                            <h1 className="text-lg font-bold text-slate-800 dark:text-white">Assisted Automation</h1>
-                            <p className="text-xs text-slate-500">AI-suggested actions with human approval. Approval records intent; commands are not executed automatically.</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h1 className="text-lg font-bold text-slate-800 dark:text-white">Remediation Suggestions</h1>
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                    <Shield className="h-3 w-3" />
+                                    Manual execution
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-500">AI drafts operator actions from monitoring context; approvals are audit records, not automatic infrastructure changes.</p>
                         </div>
                     </div>
                     {!isAvailable && (
                         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500 dark:bg-slate-800">
-                            AI Unavailable
+                            Suggestions unavailable
                         </span>
                     )}
                 </div>
@@ -321,7 +348,7 @@ export default function Automation() {
                                     type="text"
                                     value={suggestContext}
                                     onChange={(e) => setSuggestContext(e.target.value)}
-                                    placeholder="Describe the issue for AI suggestions..."
+                                    placeholder="Optional context, e.g. checkout is slow after the Mongo restart"
                                     className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
                                 />
                                 <button
@@ -330,12 +357,26 @@ export default function Automation() {
                                     className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {suggestMutation.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                                    {suggestMutation.isPending ? 'Generating...' : 'Suggest'}
+                                    {suggestMutation.isPending ? 'Generating...' : 'Generate Suggestions'}
                                 </button>
                             </div>
                         )}
+                        <div className="grid gap-3 md:grid-cols-3">
+                            {AUTOMATION_STEPS.map((step) => {
+                                const Icon = step.icon
+                                return (
+                                    <div key={step.title} className="rounded-lg border border-slate-200 bg-white px-3 py-3 dark:border-slate-700 dark:bg-slate-800">
+                                        <div className="flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-slate-100">
+                                            <Icon className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                                            {step.title}
+                                        </div>
+                                        <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{step.text}</p>
+                                    </div>
+                                )
+                            })}
+                        </div>
                         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
-                            Approval is an audit decision only. Review commands manually before running anything on infrastructure.
+                            Treat suggestions like runbook drafts. Verify the target, blast radius, and rollback path before running commands outside HealthOps.
                         </div>
 
                         {/* Filter */}
@@ -375,8 +416,10 @@ export default function Automation() {
                                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 dark:bg-slate-800">
                                     <Zap className="h-6 w-6 text-slate-400" />
                                 </div>
-                                <p className="mt-3 text-sm font-medium text-slate-700 dark:text-slate-300">No actions yet</p>
-                                <p className="mt-1 text-xs text-slate-500">Use the Suggest button to get AI-powered remediation suggestions.</p>
+                                <p className="mt-3 text-sm font-medium text-slate-700 dark:text-slate-300">No remediation suggestions yet</p>
+                                <p className="mt-1 max-w-md text-xs leading-5 text-slate-500">
+                                    Generate suggestions after an incident opens, or add context about the symptom you are investigating.
+                                </p>
                             </div>
                         ) : (
                             <div className="space-y-3">

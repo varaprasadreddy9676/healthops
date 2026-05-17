@@ -87,6 +87,18 @@ func (e *AlertRuleEngine) persist() {
 
 // Evaluate processes check results and returns triggered alerts.
 func (e *AlertRuleEngine) Evaluate(results []CheckResult) []Alert {
+	return e.evaluate(results, true, true)
+}
+
+// EvaluateForIncidents returns matching alerts without applying notification
+// cooldown or sending alert channels. Incident lifecycle thresholds are enforced
+// by Service after consecutive result tracking, so cooldown must not hide
+// repeated failed runs from incident creation.
+func (e *AlertRuleEngine) EvaluateForIncidents(results []CheckResult) []Alert {
+	return e.evaluate(results, false, false)
+}
+
+func (e *AlertRuleEngine) evaluate(results []CheckResult, applyCooldown bool, send bool) []Alert {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -105,12 +117,16 @@ func (e *AlertRuleEngine) Evaluate(results []CheckResult) []Alert {
 				continue
 			}
 
-			// Check cooldown
+			// Check cooldown for notification-style evaluation. Incident
+			// evaluation intentionally ignores cooldown so consecutive failure
+			// thresholds can still observe every failed run.
 			cooldownKey := fmt.Sprintf("%s:%s", rule.ID, result.CheckID)
-			if lastTriggered, ok := e.lastTriggered[cooldownKey]; ok {
-				cooldownDuration := time.Duration(rule.CooldownMinutes) * time.Minute
-				if now.Sub(lastTriggered) < cooldownDuration {
-					continue // still in cooldown
+			if applyCooldown {
+				if lastTriggered, ok := e.lastTriggered[cooldownKey]; ok {
+					cooldownDuration := time.Duration(rule.CooldownMinutes) * time.Minute
+					if now.Sub(lastTriggered) < cooldownDuration {
+						continue // still in cooldown
+					}
 				}
 			}
 
@@ -118,8 +134,12 @@ func (e *AlertRuleEngine) Evaluate(results []CheckResult) []Alert {
 			if e.evaluateConditions(result, rule.Conditions) {
 				alert := e.buildAlert(rule, result, now)
 				alerts = append(alerts, alert)
-				e.lastTriggered[cooldownKey] = now
-				e.sendAlert(alert, rule.Channels)
+				if applyCooldown {
+					e.lastTriggered[cooldownKey] = now
+				}
+				if send {
+					e.sendAlert(alert, rule.Channels)
+				}
 			}
 		}
 	}

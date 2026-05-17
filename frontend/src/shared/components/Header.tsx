@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { cn } from "@/shared/lib/utils"
 import { useSSE } from "@/shared/hooks/useSSE"
 import type { SSEPayload } from "@/shared/types"
+import { FeatureHelpButton } from "@/features/help/components/FeatureHelpButton"
 
 interface Props {
   onMenuClick: () => void
@@ -44,6 +45,8 @@ export function Header({ onMenuClick }: Props) {
       </button>
 
       <div className="flex-1" />
+
+      <FeatureHelpButton />
 
       {/* Live indicator */}
       <div className={cn(

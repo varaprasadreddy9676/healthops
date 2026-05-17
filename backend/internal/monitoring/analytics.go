@@ -610,7 +610,7 @@ func (s *Service) handleGetCheck(w http.ResponseWriter, r *http.Request, checkID
 	})
 
 	detail := CheckDetail{
-		Config:        *found,
+		Config:        sanitizeCheckForResponse(*found),
 		RecentResults: []CheckResult{},
 		OpenIncidents: []Incident{},
 	}

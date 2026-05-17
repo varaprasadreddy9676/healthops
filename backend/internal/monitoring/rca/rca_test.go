@@ -192,14 +192,14 @@ func TestParseRCAResponse(t *testing.T) {
 		wantErr        bool
 	}{
 		{
-			name: "valid JSON",
-			input: `{"summary":"DB connection pool exhausted","hypotheses":[{"rank":1,"title":"Connection leak","description":"App not closing connections","confidence":0.9,"category":"database","evidence":["connection count rising"],"suggestion":"Fix connection pooling"}]}`,
+			name:           "valid JSON",
+			input:          `{"summary":"DB connection pool exhausted","hypotheses":[{"rank":1,"title":"Connection leak","description":"App not closing connections","confidence":0.9,"category":"database","evidence":["connection count rising"],"suggestion":"Fix connection pooling"}]}`,
 			wantSummary:    "DB connection pool exhausted",
 			wantHypotheses: 1,
 		},
 		{
-			name: "JSON in code block",
-			input: "Here's my analysis:\n```json\n{\"summary\":\"Network timeout\",\"hypotheses\":[{\"rank\":1,\"title\":\"DNS failure\",\"description\":\"DNS not resolving\",\"confidence\":0.7,\"category\":\"network\",\"evidence\":[\"timeout spike\"],\"suggestion\":\"Check DNS\"}]}\n```",
+			name:           "JSON in code block",
+			input:          "Here's my analysis:\n```json\n{\"summary\":\"Network timeout\",\"hypotheses\":[{\"rank\":1,\"title\":\"DNS failure\",\"description\":\"DNS not resolving\",\"confidence\":0.7,\"category\":\"network\",\"evidence\":[\"timeout spike\"],\"suggestion\":\"Check DNS\"}]}\n```",
 			wantSummary:    "Network timeout",
 			wantHypotheses: 1,
 		},

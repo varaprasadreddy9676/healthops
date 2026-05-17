@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -212,6 +213,88 @@ func TestChecksListEndpoint(t *testing.T) {
 	}
 }
 
+func TestChecksListEndpointMasksNestedSecrets(t *testing.T) {
+	rawToken := "heartbeat-token-secret"
+	state := State{
+		Checks: []CheckConfig{
+			{
+				ID:   "hb-1",
+				Name: "Heartbeat",
+				Type: "heartbeat",
+				Heartbeat: &HeartbeatCheckConfig{
+					Token:                   rawToken,
+					ExpectedIntervalSeconds: 60,
+				},
+				MySQL: &MySQLCheckConfig{Password: "mysql-secret"},
+				SSH:   &SSHCheckConfig{Password: "ssh-secret"},
+			},
+		},
+	}
+	store := &fakeStore{snapshot: state}
+	service := NewService(&Config{}, store, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/checks", nil)
+	rec := httptest.NewRecorder()
+
+	service.handleChecks(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	for _, secret := range []string{rawToken, "mysql-secret", "ssh-secret"} {
+		if strings.Contains(body, secret) {
+			t.Fatalf("response leaked secret %q: %s", secret, body)
+		}
+	}
+}
+
+func TestAlertCallbackFailuresToOpenIgnoresAlertCooldown(t *testing.T) {
+	check := CheckConfig{
+		ID:             "api-1",
+		Name:           "API 1",
+		Type:           "api",
+		FailuresToOpen: 2,
+	}
+	store := &fakeStore{snapshot: State{Checks: []CheckConfig{check}}}
+	service := NewService(&Config{RetentionDays: 7}, store, newTestLogger())
+	service.SetAlertEngine(NewAlertRuleEngine([]AlertRule{
+		{
+			ID:              "down",
+			Name:            "Down",
+			Enabled:         true,
+			Severity:        "critical",
+			CooldownMinutes: 60,
+			Conditions: []AlertCondition{
+				{Field: "healthy", Operator: OperatorEquals, Value: false},
+			},
+		},
+	}, newTestLogger()))
+	incidentRepo := NewMemoryIncidentRepository()
+	service.SetIncidentManager(NewIncidentManager(incidentRepo, newTestLogger()))
+
+	result := CheckResult{
+		CheckID:   "api-1",
+		Name:      "API 1",
+		Type:      "api",
+		Status:    "critical",
+		Healthy:   false,
+		Message:   "down",
+		StartedAt: time.Now().UTC(),
+	}
+
+	service.scheduler.alertCallback([]CheckResult{result})
+	if inc, _ := incidentRepo.FindOpenIncident("api-1"); inc.ID != "" {
+		t.Fatalf("incident opened after first failure: %+v", inc)
+	}
+
+	service.scheduler.alertCallback([]CheckResult{result})
+	if inc, _ := incidentRepo.FindOpenIncident("api-1"); inc.ID == "" {
+		t.Fatal("expected incident to open after second consecutive failure despite alert cooldown")
+	}
+}
+
 func TestChecksCreateEndpoint(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(&Config{}, store, nil)
@@ -273,6 +356,58 @@ func TestChecksCreateEndpointValidates(t *testing.T) {
 	}
 	if resp.Error == nil || resp.Error.Message == "" {
 		t.Fatal("expected error message")
+	}
+}
+
+func TestChecksUpdateEndpointPreservesOmittedFields(t *testing.T) {
+	existing := CheckConfig{
+		ID:     "hb-1",
+		Name:   "Cron heartbeat",
+		Type:   "heartbeat",
+		Server: "batch-1",
+		Tags:   []string{"batch", "critical"},
+		Heartbeat: &HeartbeatCheckConfig{
+			Token:                   "heartbeat-token-secret",
+			ExpectedIntervalSeconds: 300,
+			GraceSeconds:            120,
+		},
+		FailuresToOpen:     3,
+		SuccessesToResolve: 2,
+		Enabled:            boolPtr(true),
+	}
+	store := &fakeStore{snapshot: State{Checks: []CheckConfig{existing}}}
+	service := NewService(&Config{}, store, nil)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/checks/hb-1", strings.NewReader(`{"name":"Nightly cron","enabled":false}`))
+	rec := httptest.NewRecorder()
+
+	service.handleCheckByID(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var updated CheckConfig
+	if err := decodeAPIResponseData(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if updated.Name != "Nightly cron" {
+		t.Fatalf("name = %q; want Nightly cron", updated.Name)
+	}
+	if updated.Type != "heartbeat" || updated.Heartbeat == nil {
+		t.Fatalf("heartbeat config was not preserved: %+v", updated)
+	}
+	if updated.Heartbeat.Token != "heartbeat-token-secret" || updated.Heartbeat.ExpectedIntervalSeconds != 300 || updated.Heartbeat.GraceSeconds != 120 {
+		t.Fatalf("heartbeat fields changed unexpectedly: %+v", updated.Heartbeat)
+	}
+	if updated.Server != "batch-1" || len(updated.Tags) != 2 {
+		t.Fatalf("omitted common fields were not preserved: %+v", updated)
+	}
+	if updated.FailuresToOpen != 3 || updated.SuccessesToResolve != 2 {
+		t.Fatalf("reliability controls were not preserved: %+v", updated)
+	}
+	if updated.Enabled == nil || *updated.Enabled {
+		t.Fatalf("explicit enabled=false was not applied: %+v", updated.Enabled)
 	}
 }
 

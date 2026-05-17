@@ -1,15 +1,10 @@
 package monitoring
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log"
-	"net"
 	"net/http"
-	"os"
-	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
@@ -180,27 +175,12 @@ func (r *Runner) executeCheck(ctx context.Context, check CheckConfig) CheckResul
 		Metrics:     map[string]float64{},
 	}
 
-	var err error
-	switch check.Type {
-	case "api":
-		err = r.runAPI(checkCtx, check, &result)
-	case "tcp":
-		err = r.runTCP(checkCtx, check, &result)
-	case "process":
-		err = r.runProcess(checkCtx, check, &result)
-	case "command":
-		err = r.runCommand(checkCtx, check, &result)
-	case "log":
-		err = r.runLogFreshness(checkCtx, check, &result)
-	case "mysql":
-		err = r.runMySQL(checkCtx, check, &result)
-	case "ssh":
-		err = r.runSSH(checkCtx, check, &result)
-	default:
-		err = fmt.Errorf("unsupported check type %q", check.Type)
-	}
-
-	if err != nil {
+	exec, ok := LookupCheckExecutor(check.Type)
+	if !ok {
+		result.Status = "critical"
+		result.Healthy = false
+		result.Message = fmt.Sprintf("unsupported check type %q", check.Type)
+	} else if err := exec.Execute(checkCtx, r, check, &result); err != nil {
 		result.Status = "critical"
 		result.Healthy = false
 		result.Message = err.Error()
@@ -221,169 +201,6 @@ func (r *Runner) executeCheck(ctx context.Context, check CheckConfig) CheckResul
 	}
 
 	return result
-}
-
-func (r *Runner) runAPI(ctx context.Context, check CheckConfig, result *CheckResult) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, check.Target, nil)
-	if err != nil {
-		return err
-	}
-
-	start := time.Now()
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
-	result.Metrics["statusCode"] = float64(resp.StatusCode)
-	result.Metrics["bodyBytes"] = float64(len(body))
-	result.Metrics["latencyMs"] = float64(time.Since(start).Milliseconds())
-
-	if resp.StatusCode != check.ExpectedStatus {
-		return fmt.Errorf("unexpected status code %d", resp.StatusCode)
-	}
-	if check.ExpectedContains != "" && !bytes.Contains(body, []byte(check.ExpectedContains)) {
-		return fmt.Errorf("expected response to contain %q", check.ExpectedContains)
-	}
-	if check.WarningThresholdMs > 0 && result.Metrics["latencyMs"] > float64(check.WarningThresholdMs) {
-		result.Status = "warning"
-		result.Healthy = false
-		result.Message = fmt.Sprintf("slow api response: %.0fms", result.Metrics["latencyMs"])
-	}
-	return nil
-}
-
-func (r *Runner) runTCP(ctx context.Context, check CheckConfig, result *CheckResult) error {
-	addr := resolveTCPAddress(check)
-	start := time.Now()
-	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", addr)
-	if err != nil {
-		return err
-	}
-	_ = conn.Close()
-	result.Metrics["latencyMs"] = float64(time.Since(start).Milliseconds())
-	result.Metrics["port"] = float64(check.Port)
-	if check.WarningThresholdMs > 0 && result.Metrics["latencyMs"] > float64(check.WarningThresholdMs) {
-		result.Status = "warning"
-		result.Healthy = false
-		result.Message = fmt.Sprintf("slow tcp connect: %.0fms", result.Metrics["latencyMs"])
-	}
-	return nil
-}
-
-func (r *Runner) runProcess(ctx context.Context, check CheckConfig, result *CheckResult) error {
-	var output []byte
-	var err error
-
-	if srv := r.resolveServer(check.ServerId); srv != nil {
-		// Remote: run ps via SSH on the target server
-		timeout := time.Duration(check.TimeoutSeconds) * time.Second
-		if timeout <= 0 {
-			timeout = 5 * time.Second
-		}
-		output, err = sshDialAndRun(srv.ToSSHConfig(), "ps -eo pid=,args=", timeout)
-		if err != nil {
-			return fmt.Errorf("remote process check on %s: %w", srv.Host, err)
-		}
-	} else {
-		// Local
-		binary, args := processListCommand()
-		cmd := exec.CommandContext(ctx, binary, args...)
-		output, err = cmd.Output()
-		if err != nil {
-			return err
-		}
-	}
-
-	matched := 0
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if strings.Contains(line, check.Target) {
-			matched++
-		}
-	}
-
-	result.Metrics["matchedProcesses"] = float64(matched)
-	if matched == 0 {
-		return fmt.Errorf("process %q not found", check.Target)
-	}
-	return nil
-}
-
-// runCommand executes a shell command check.
-// SECURITY: This function executes arbitrary shell commands from the config.
-// Command checks are only allowed when Config.AllowCommandChecks is explicitly true.
-// This function should only be called after validation confirms command checks are enabled.
-// The command is executed via 'sh -c' which allows shell operators (pipes, redirects, etc.).
-// NEVER pass user input directly into check.Command - config files must be tightly controlled.
-func (r *Runner) runCommand(ctx context.Context, check CheckConfig, result *CheckResult) error {
-	var output []byte
-	var err error
-
-	if srv := r.resolveServer(check.ServerId); srv != nil {
-		// Remote: run command via SSH on the target server
-		timeout := time.Duration(check.TimeoutSeconds) * time.Second
-		if timeout <= 0 {
-			timeout = 5 * time.Second
-		}
-		output, err = sshDialAndRun(srv.ToSSHConfig(), check.Command, timeout)
-		if err != nil {
-			return fmt.Errorf("remote command on %s failed: %w: %s", srv.Host, err, strings.TrimSpace(string(output)))
-		}
-	} else {
-		// Local
-		cmd := exec.CommandContext(ctx, "sh", "-c", check.Command)
-		output, err = cmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("command failed: %w: %s", err, strings.TrimSpace(string(output)))
-		}
-	}
-
-	result.Metrics["outputBytes"] = float64(len(output))
-	if check.ExpectedContains != "" && !bytes.Contains(output, []byte(check.ExpectedContains)) {
-		return fmt.Errorf("expected command output to contain %q", check.ExpectedContains)
-	}
-	return nil
-}
-
-func (r *Runner) runLogFreshness(ctx context.Context, check CheckConfig, result *CheckResult) error {
-	if srv := r.resolveServer(check.ServerId); srv != nil {
-		// Remote: check file age via SSH using stat
-		timeout := time.Duration(check.TimeoutSeconds) * time.Second
-		if timeout <= 0 {
-			timeout = 5 * time.Second
-		}
-		// Use stat to get modification time, compute age in seconds
-		cmd := fmt.Sprintf("stat -c %%Y %q 2>/dev/null || stat -f %%m %q 2>/dev/null", check.Path, check.Path)
-		output, err := sshDialAndRun(srv.ToSSHConfig(), cmd, timeout)
-		if err != nil {
-			return fmt.Errorf("remote log check on %s: %w", srv.Host, err)
-		}
-		var mtime int64
-		if _, err := fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &mtime); err != nil {
-			return fmt.Errorf("failed to parse remote file mtime: %s", strings.TrimSpace(string(output)))
-		}
-		age := time.Since(time.Unix(mtime, 0))
-		result.Metrics["ageSeconds"] = age.Seconds()
-		if check.FreshnessSeconds > 0 && age > time.Duration(check.FreshnessSeconds)*time.Second {
-			return fmt.Errorf("log heartbeat stale: last update %.0fs ago", age.Seconds())
-		}
-		return nil
-	}
-
-	// Local
-	info, err := os.Stat(check.Path)
-	if err != nil {
-		return err
-	}
-	age := time.Since(info.ModTime())
-	result.Metrics["ageSeconds"] = age.Seconds()
-	if check.FreshnessSeconds > 0 && age > time.Duration(check.FreshnessSeconds)*time.Second {
-		return fmt.Errorf("log heartbeat stale: last update %.0fs ago", age.Seconds())
-	}
-	return nil
 }
 
 func enabledChecks(checks []CheckConfig) []CheckConfig {

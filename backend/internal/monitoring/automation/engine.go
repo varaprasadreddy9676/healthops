@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -72,11 +73,29 @@ Rules:
 	}
 
 	actions := e.parseAIResponse(response, req)
+	if actions == nil {
+		actions = []Action{}
+	}
 
-	// Store actions and audit
+	// Store actions and audit. Reuse matching pending suggestions so repeated
+	// generate clicks do not flood the operator queue with duplicates.
 	e.mu.Lock()
+	e.expirePendingLocked()
+	existingPending := make(map[string]Action)
+	for _, action := range e.actions {
+		if action.Status == StatusPending {
+			existingPending[actionDedupKey(action)] = action
+		}
+	}
+	storedActions := make([]Action, 0, len(actions))
 	for i := range actions {
+		if existing, ok := existingPending[actionDedupKey(actions[i])]; ok {
+			storedActions = append(storedActions, existing)
+			continue
+		}
 		e.actions = append(e.actions, actions[i])
+		existingPending[actionDedupKey(actions[i])] = actions[i]
+		storedActions = append(storedActions, actions[i])
 		e.audit = append(e.audit, AuditEntry{
 			ID:        auditID(),
 			ActionID:  actions[i].ID,
@@ -88,14 +107,14 @@ Rules:
 	}
 	e.mu.Unlock()
 
-	e.logger.Printf("[automation] AI suggested %d actions", len(actions))
-	return actions, nil
+	e.logger.Printf("[automation] AI suggested %d actions, %d queued", len(actions), len(storedActions))
+	return storedActions, nil
 }
 
 // ListActions returns all actions, optionally filtered by status.
 func (e *Engine) ListActions(status string) []Action {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
 	e.expirePendingLocked()
 
@@ -202,6 +221,16 @@ func (e *Engine) buildContext(req SuggestRequest) string {
 	var sb strings.Builder
 
 	state := e.store.Snapshot()
+	checkByID := make(map[string]monitoring.CheckConfig, len(state.Checks))
+	for _, c := range state.Checks {
+		checkByID[c.ID] = c
+	}
+	latestByCheck := make(map[string]monitoring.CheckResult)
+	for _, r := range state.Results {
+		if existing, ok := latestByCheck[r.CheckID]; !ok || r.FinishedAt.After(existing.FinishedAt) {
+			latestByCheck[r.CheckID] = r
+		}
+	}
 
 	// Include relevant check info
 	if req.CheckID != "" {
@@ -225,6 +254,39 @@ func (e *Engine) buildContext(req SuggestRequest) string {
 			sb.WriteString(fmt.Sprintf("  Result: status=%s healthy=%v duration=%dms at=%s msg=%s\n",
 				r.Status, r.Healthy, r.DurationMs, r.FinishedAt.Format(time.RFC3339), r.Message))
 		}
+	} else {
+		var unhealthy []monitoring.CheckResult
+		for _, r := range latestByCheck {
+			if !r.Healthy {
+				unhealthy = append(unhealthy, r)
+			}
+		}
+		sort.Slice(unhealthy, func(i, j int) bool {
+			return unhealthy[i].FinishedAt.After(unhealthy[j].FinishedAt)
+		})
+		if len(unhealthy) > 0 {
+			sb.WriteString("Current unhealthy checks:\n")
+			for i, r := range unhealthy {
+				if i >= 5 {
+					break
+				}
+				check := checkByID[r.CheckID]
+				name := r.Name
+				if name == "" {
+					name = check.Name
+				}
+				checkType := r.Type
+				if checkType == "" {
+					checkType = check.Type
+				}
+				server := r.Server
+				if server == "" {
+					server = check.Server
+				}
+				sb.WriteString(fmt.Sprintf("  - %s (type=%s, server=%s, target=%s): status=%s duration=%dms at=%s msg=%s\n",
+					name, checkType, server, check.Target, r.Status, r.DurationMs, r.FinishedAt.Format(time.RFC3339), r.Message))
+			}
+		}
 	}
 
 	// Include incident info
@@ -235,17 +297,34 @@ func (e *Engine) buildContext(req SuggestRequest) string {
 				inc.CheckName, inc.Severity, inc.Status, inc.StartedAt.Format(time.RFC3339)))
 			sb.WriteString(fmt.Sprintf("  Message: %s\n", inc.Message))
 		}
+	} else if e.incidentRepo != nil {
+		incidents, err := e.incidentRepo.ListIncidents()
+		if err == nil {
+			var open []monitoring.Incident
+			for _, inc := range incidents {
+				if inc.Status != "resolved" {
+					open = append(open, inc)
+				}
+			}
+			sort.Slice(open, func(i, j int) bool {
+				return open[i].UpdatedAt.After(open[j].UpdatedAt)
+			})
+			if len(open) > 0 {
+				sb.WriteString("\nOpen incidents:\n")
+				for i, inc := range open {
+					if i >= 5 {
+						break
+					}
+					sb.WriteString(fmt.Sprintf("  - %s (severity=%s, status=%s, updated=%s)\n",
+						inc.CheckName, inc.Severity, inc.Status, inc.UpdatedAt.Format(time.RFC3339)))
+					sb.WriteString(fmt.Sprintf("    Message: %s\n", inc.Message))
+				}
+			}
+		}
 	}
 
 	// General system summary
-	summary := state
 	var healthyCount, unhealthyCount int
-	latestByCheck := make(map[string]monitoring.CheckResult)
-	for _, r := range summary.Results {
-		if existing, ok := latestByCheck[r.CheckID]; !ok || r.FinishedAt.After(existing.FinishedAt) {
-			latestByCheck[r.CheckID] = r
-		}
-	}
 	for _, r := range latestByCheck {
 		if r.Healthy {
 			healthyCount++
@@ -321,6 +400,10 @@ func (e *Engine) expirePendingLocked() {
 func actionID(actionType, title string) string {
 	h := sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%d", actionType, title, time.Now().UnixNano())))
 	return fmt.Sprintf("act_%x", h[:8])
+}
+
+func actionDedupKey(action Action) string {
+	return string(action.Type) + "\x00" + strings.ToLower(strings.TrimSpace(action.Title))
 }
 
 func auditID() string {

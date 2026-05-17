@@ -2,14 +2,15 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Activity, AlertTriangle, Database,
   BarChart3, Brain, Settings, ChevronsLeft, X, Heart, Server,
-  Users, Bell, LogOut, FileText, GitBranch, MessageSquare, Eye, Zap,
+  Users, Bell, LogOut, FileText, GitBranch, MessageSquare, Eye, Zap, Globe2,
 } from 'lucide-react'
 import { cn } from "@/shared/lib/utils"
 import { useAuth } from "@/shared/hooks/useAuth"
+import { useAIAvailability } from "@/features/ai/hooks/useAIAvailability"
 
 const ICON_MAP = {
   LayoutDashboard, Activity, AlertTriangle, Database,
-  BarChart3, Brain, Settings, Server, Users, Bell, FileText, GitBranch, MessageSquare, Eye, Zap,
+  BarChart3, Brain, Settings, Server, Users, Bell, FileText, GitBranch, MessageSquare, Eye, Zap, Globe2,
 } as const
 
 const NAV = [
@@ -17,14 +18,15 @@ const NAV = [
   { label: 'Servers', path: '/servers', icon: 'Server' as const },
   { label: 'Checks', path: '/checks', icon: 'Activity' as const },
   { label: 'Incidents', path: '/incidents', icon: 'AlertTriangle' as const },
-  { label: 'RCA', path: '/rca', icon: 'GitBranch' as const },
+  { label: 'Status Pages', path: '/status-pages', icon: 'Globe2' as const },
+  { label: 'Root Cause', path: '/rca', icon: 'GitBranch' as const, requiresAI: true },
   { label: 'MySQL', path: '/mysql', icon: 'Database' as const },
   { label: 'Analytics', path: '/analytics', icon: 'BarChart3' as const },
-  { label: 'AI Analysis', path: '/ai', icon: 'Brain' as const },
-  { label: 'Assistant', path: '/assistant', icon: 'MessageSquare' as const },
-  { label: 'Recommendations', path: '/recommendations', icon: 'Eye' as const },
-  { label: 'Automation', path: '/automation', icon: 'Zap' as const },
-  { label: 'Logs', path: '/logs', icon: 'FileText' as const },
+  { label: 'AI Results', path: '/ai', icon: 'Brain' as const, requiresAI: true },
+  { label: 'Ask AI', path: '/assistant', icon: 'MessageSquare' as const, requiresAI: true },
+  { label: 'Monitor Tuning', path: '/recommendations', icon: 'Eye' as const },
+  { label: 'Remediation', path: '/automation', icon: 'Zap' as const, requiresAI: true },
+  { label: 'Log Events', path: '/logs', icon: 'FileText' as const },
   { label: 'Notifications', path: '/notifications', icon: 'Bell' as const },
   { label: 'Users', path: '/users', icon: 'Users' as const },
   { label: 'Settings', path: '/settings', icon: 'Settings' as const },
@@ -39,6 +41,8 @@ interface Props {
 
 export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Props) {
   const { user, logout } = useAuth()
+  const { isAIAvailable } = useAIAvailability()
+  const navItems = NAV.filter((item) => !item.requiresAI || isAIAvailable)
 
   return (
     <aside
@@ -82,7 +86,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Pr
 
       {/* Nav */}
       <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3">
-        {NAV.map((item) => {
+        {navItems.map((item) => {
           const Icon = ICON_MAP[item.icon]
           return (
             <NavLink

@@ -68,7 +68,7 @@ function EventEntry({ event, isLast }: { event: IncidentTimelineEvent; isLast: b
     )
 }
 
-export function EvidenceTimeline({ incidentId }: { incidentId: string }) {
+export function EvidenceTimeline({ incidentId, showAIEvents = true }: { incidentId: string; showAIEvents?: boolean }) {
     const { data, isLoading, error } = useQuery({
         queryKey: ['evidence', 'timeline', incidentId],
         queryFn: () => evidenceApi.getTimeline(incidentId),
@@ -76,7 +76,7 @@ export function EvidenceTimeline({ incidentId }: { incidentId: string }) {
         retry: false,
     })
 
-    const events = data?.events ?? []
+    const events = (data?.events ?? []).filter((event) => showAIEvents || event.type !== 'ai_brief_generated')
 
     // Don't render the panel if loading failed or no events
     if (error || (!isLoading && events.length === 0)) return null

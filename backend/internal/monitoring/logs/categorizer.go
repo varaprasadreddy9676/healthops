@@ -41,7 +41,7 @@ func NewCategorizer(repo Repository, provider AIProvider, logger *log.Logger) *C
 
 const categorizerSystemPrompt = `You are an expert SRE categorizing error log patterns.
 Given error message patterns, stack traces, and sample messages, assign each error family:
-1. A category from this list: db_auth, timeout, thread_exhaustion, slow_query, network, app_bug, memory, config, permission, disk_io, unknown
+1. A category from this list: db_auth, timeout, thread_exhaustion, slow_query, database, network, app_bug, application, memory, config, permission, security, rate_limit, access_log, audit, disk_io, unknown
 2. A short AI summary (1-2 sentences explaining what this error means)
 3. A severity assessment: critical, warning, or info
 
@@ -73,7 +73,15 @@ func (c *Categorizer) CategorizeFamilies(ctx context.Context, limit int) (int, e
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	families, err := c.repo.ListFamilies("active", 100)
+	queryLimit := 100
+	if limit > 0 && limit*10 > queryLimit {
+		queryLimit = limit * 10
+	}
+	if queryLimit > 1000 {
+		queryLimit = 1000
+	}
+
+	families, err := c.repo.ListFamilies("active", queryLimit)
 	if err != nil {
 		return 0, fmt.Errorf("list families: %w", err)
 	}

@@ -82,6 +82,55 @@ func TestBasicAuthMiddleware_ValidAuth(t *testing.T) {
 	}
 }
 
+func TestBasicAuthMiddleware_SensitiveReadsRequireAuth(t *testing.T) {
+	cfg := AuthConfig{
+		Enabled:  true,
+		Username: "admin",
+		Password: "secret",
+	}
+
+	middleware := basicAuthMiddleware(cfg, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("success"))
+	}))
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		authHeader string
+		wantStatus int
+	}{
+		{name: "heartbeat list requires auth", method: http.MethodGet, path: "/api/v1/heartbeats", wantStatus: http.StatusUnauthorized},
+		{name: "dashboard list requires auth", method: http.MethodGet, path: "/api/v1/dashboards", wantStatus: http.StatusUnauthorized},
+		{name: "dashboard data requires auth", method: http.MethodGet, path: "/api/v1/dashboards/dash-1/data", wantStatus: http.StatusUnauthorized},
+		{name: "chat conversations require auth", method: http.MethodGet, path: "/api/v1/chat/conversations", wantStatus: http.StatusUnauthorized},
+		{name: "status pages admin list requires auth", method: http.MethodGet, path: "/api/v1/status-pages", wantStatus: http.StatusUnauthorized},
+		{name: "maintenance list requires auth", method: http.MethodGet, path: "/api/v1/maintenance", wantStatus: http.StatusUnauthorized},
+		{name: "sensitive read accepts valid auth", method: http.MethodGet, path: "/api/v1/dashboards", authHeader: "Basic " + basicAuth("admin", "secret"), wantStatus: http.StatusOK},
+		{name: "ordinary read remains public", method: http.MethodGet, path: "/api/v1/checks", wantStatus: http.StatusOK},
+		{name: "heartbeat ping GET remains public", method: http.MethodGet, path: "/api/v1/heartbeats/token-123", wantStatus: http.StatusOK},
+		{name: "heartbeat ping POST remains public", method: http.MethodPost, path: "/api/v1/heartbeats/token-123", wantStatus: http.StatusOK},
+		{name: "public status page remains public", method: http.MethodGet, path: "/status/acme", wantStatus: http.StatusOK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, nil)
+			if tt.authHeader != "" {
+				req.Header.Set("Authorization", tt.authHeader)
+			}
+			w := httptest.NewRecorder()
+
+			middleware.ServeHTTP(w, req)
+
+			if status := w.Code; status != tt.wantStatus {
+				t.Errorf("status = %v, want %v", status, tt.wantStatus)
+			}
+		})
+	}
+}
+
 func TestBasicAuthMiddleware_InvalidAuth(t *testing.T) {
 	cfg := AuthConfig{
 		Enabled:  true,

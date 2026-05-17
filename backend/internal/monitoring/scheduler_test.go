@@ -1,11 +1,39 @@
 package monitoring
 
 import (
+	"context"
+	"errors"
 	"log"
 	"sync"
 	"testing"
 	"time"
 )
+
+type schedulerTestExecutor struct{}
+
+func init() { RegisterCheckExecutor(schedulerTestExecutor{}) }
+
+func (schedulerTestExecutor) Type() string { return "scheduler-test" }
+
+func (schedulerTestExecutor) ApplyDefaults(*CheckConfig) {}
+
+func (schedulerTestExecutor) Validate(*CheckConfig, *Config) error { return nil }
+
+func (schedulerTestExecutor) Execute(ctx context.Context, _ *Runner, check CheckConfig, _ *CheckResult) error {
+	switch check.Target {
+	case "fail":
+		return errors.New("scheduler test failure")
+	case "slow":
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(10 * time.Second):
+			return nil
+		}
+	default:
+		return nil
+	}
+}
 
 // MockStore for testing
 type mockStore struct {
@@ -117,16 +145,16 @@ func TestCheckScheduler_PerCheckIntervals(t *testing.T) {
 				{
 					ID:              "fast-check",
 					Name:            "Fast Check",
-					Type:            "api",
-					Target:          "http://example.com/fast",
+					Type:            "scheduler-test",
+					Target:          "pass",
 					IntervalSeconds: 1,
 					Enabled:         boolPtr(true),
 				},
 				{
 					ID:              "slow-check",
 					Name:            "Slow Check",
-					Type:            "api",
-					Target:          "http://example.com/slow",
+					Type:            "scheduler-test",
+					Target:          "pass",
 					IntervalSeconds: 3,
 					Enabled:         boolPtr(true),
 				},
@@ -143,8 +171,8 @@ func TestCheckScheduler_PerCheckIntervals(t *testing.T) {
 				{
 					ID:      "default-check",
 					Name:    "Default Check",
-					Type:    "api",
-					Target:  "http://example.com/default",
+					Type:    "scheduler-test",
+					Target:  "pass",
 					Enabled: boolPtr(true),
 					// IntervalSeconds not set, should use default
 				},
@@ -206,8 +234,8 @@ func TestCheckScheduler_RetryLogic(t *testing.T) {
 			check: CheckConfig{
 				ID:              "no-retry",
 				Name:            "No Retry",
-				Type:            "api",
-				Target:          "http://invalid.example.com", // Will fail
+				Type:            "scheduler-test",
+				Target:          "fail",
 				IntervalSeconds: 10,
 				RetryCount:      0,
 				Enabled:         boolPtr(true),
@@ -222,8 +250,8 @@ func TestCheckScheduler_RetryLogic(t *testing.T) {
 			check: CheckConfig{
 				ID:                "with-retry",
 				Name:              "With Retry",
-				Type:              "api",
-				Target:            "http://invalid.example.com", // Will fail
+				Type:              "scheduler-test",
+				Target:            "fail",
 				IntervalSeconds:   10,
 				RetryCount:        2,
 				RetryDelaySeconds: 1,
@@ -276,8 +304,8 @@ func TestCheckScheduler_Cooldown(t *testing.T) {
 	check := CheckConfig{
 		ID:                "cooldown-check",
 		Name:              "Cooldown Check",
-		Type:              "api",
-		Target:            "http://invalid.example.com",
+		Type:              "scheduler-test",
+		Target:            "fail",
 		IntervalSeconds:   1,
 		RetryCount:        1,
 		RetryDelaySeconds: 1,
@@ -324,8 +352,8 @@ func TestCheckScheduler_GracefulShutdown(t *testing.T) {
 	check := CheckConfig{
 		ID:              "shutdown-check",
 		Name:            "Shutdown Check",
-		Type:            "api",
-		Target:          "http://example.com",
+		Type:            "scheduler-test",
+		Target:          "slow",
 		TimeoutSeconds:  10, // Long timeout to test interruption
 		IntervalSeconds: 1,
 		Enabled:         boolPtr(true),
@@ -371,8 +399,8 @@ func TestCheckScheduler_RescheduleOnConfigChange(t *testing.T) {
 		{
 			ID:              "check1",
 			Name:            "Check 1",
-			Type:            "api",
-			Target:          "http://example.com/1",
+			Type:            "scheduler-test",
+			Target:          "pass",
 			IntervalSeconds: 5,
 			Enabled:         boolPtr(true),
 		},
@@ -404,8 +432,8 @@ func TestCheckScheduler_RescheduleOnConfigChange(t *testing.T) {
 	newCheck := CheckConfig{
 		ID:              "check2",
 		Name:            "Check 2",
-		Type:            "api",
-		Target:          "http://example.com/2",
+		Type:            "scheduler-test",
+		Target:          "pass",
 		IntervalSeconds: 3,
 		Enabled:         boolPtr(true),
 	}
@@ -445,16 +473,16 @@ func TestCheckScheduler_DisabledChecksNotScheduled(t *testing.T) {
 		{
 			ID:              "enabled-check",
 			Name:            "Enabled Check",
-			Type:            "api",
-			Target:          "http://example.com/enabled",
+			Type:            "scheduler-test",
+			Target:          "pass",
 			IntervalSeconds: 1,
 			Enabled:         boolPtr(true),
 		},
 		{
 			ID:              "disabled-check",
 			Name:            "Disabled Check",
-			Type:            "api",
-			Target:          "http://example.com/disabled",
+			Type:            "scheduler-test",
+			Target:          "pass",
 			IntervalSeconds: 1,
 			Enabled:         boolPtr(false),
 		},
@@ -502,8 +530,8 @@ func TestCheckScheduler_ConcurrentAccess(t *testing.T) {
 		{
 			ID:              "concurrent-check",
 			Name:            "Concurrent Check",
-			Type:            "api",
-			Target:          "http://example.com",
+			Type:            "scheduler-test",
+			Target:          "pass",
 			IntervalSeconds: 1,
 			Enabled:         boolPtr(true),
 		},
@@ -539,8 +567,8 @@ func TestCheckScheduler_ConcurrentAccess(t *testing.T) {
 			check := CheckConfig{
 				ID:              "concurrent-check",
 				Name:            "Updated Check",
-				Type:            "api",
-				Target:          "http://example.com/updated",
+				Type:            "scheduler-test",
+				Target:          "pass",
 				IntervalSeconds: 2 + i,
 				Enabled:         boolPtr(true),
 			}

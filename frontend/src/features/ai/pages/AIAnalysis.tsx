@@ -11,6 +11,10 @@ import { cn, relativeTime } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import type { AIProviderConfig, AIAnalysisResult } from "@/shared/types"
 
+function aiProviderLabel(result: AIAnalysisResult): string {
+  return [result.provider, result.model].filter(Boolean).join(' / ')
+}
+
 export default function AIAnalysis() {
   const { data: config, isLoading, error, refetch } = useQuery({
     queryKey: ['ai', 'config'],
@@ -38,9 +42,9 @@ export default function AIAnalysis() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">AI Analysis</h1>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">AI Results</h1>
         <p className="text-sm text-slate-500">
-          {config?.enabled ? 'AI-powered incident analysis is active' : 'AI analysis is disabled'}
+          {config?.enabled ? 'Saved incident analyses and provider health checks' : 'AI analysis is disabled'}
         </p>
       </div>
 
@@ -119,37 +123,44 @@ export default function AIAnalysis() {
       {/* Recent analyses */}
       <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-100 px-5 py-3.5 dark:border-slate-800">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Recent AI Analyses</h2>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Recent Incident Analyses</h2>
         </div>
         {results && results.length > 0 ? (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {results.slice(0, 20).map((r: AIAnalysisResult, i: number) => (
-              <div key={i} className="px-5 py-4">
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <Brain className="h-3.5 w-3.5 text-blue-500" />
-                  <span>Incident {r.incidentId}</span>
-                  <span>•</span>
-                  <span>{r.provider} / {r.model}</span>
-                  <span className="ml-auto">{relativeTime(r.createdAt)}</span>
-                </div>
-                <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
-                  {markdownToPlainText(r.analysis)}
-                </p>
-                {r.suggestions && r.suggestions.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {r.suggestions.slice(0, 3).map((s, j) => (
-                      <span key={j} className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] text-blue-600 dark:bg-blue-950/30 dark:text-blue-400">
-                        {s.length > 60 ? s.slice(0, 60) + '…' : s}
-                      </span>
-                    ))}
+            {results.slice(0, 20).map((r: AIAnalysisResult, i: number) => {
+              const providerLabel = aiProviderLabel(r)
+              return (
+                <div key={i} className="px-5 py-4">
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <Brain className="h-3.5 w-3.5 text-blue-500" />
+                    <span>Incident {r.incidentId}</span>
+                    {providerLabel && (
+                      <>
+                        <span>•</span>
+                        <span>{providerLabel}</span>
+                      </>
+                    )}
+                    <span className="ml-auto">{relativeTime(r.createdAt)}</span>
                   </div>
-                )}
-              </div>
-            ))}
+                  <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+                    {markdownToPlainText(r.analysis)}
+                  </p>
+                  {r.suggestions && r.suggestions.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {r.suggestions.slice(0, 3).map((s, j) => (
+                        <span key={j} className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] text-blue-600 dark:bg-blue-950/30 dark:text-blue-400">
+                          {s.length > 60 ? s.slice(0, 60) + '…' : s}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         ) : (
           <div className="px-5 py-8">
-            <EmptyState title="No analyses yet" description="AI analyses will appear here when incidents are processed." icon={<Brain className="h-6 w-6" />} />
+            <EmptyState title="No saved analyses yet" description="Run AI analysis from an incident detail page; completed results appear here." icon={<Brain className="h-6 w-6" />} />
           </div>
         )}
       </div>

@@ -1,7 +1,15 @@
 package logs
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -95,6 +103,48 @@ func TestExtractPattern(t *testing.T) {
 	}
 }
 
+func TestInferEntryCategory(t *testing.T) {
+	tests := []struct {
+		name     string
+		entry    LogEntry
+		expected string
+	}{
+		{
+			name:     "security auth failures",
+			entry:    LogEntry{Level: "warn", Source: "sshd", Message: "Failed password for invalid user admin from 203.0.113.10 port 44122 ssh2"},
+			expected: CategorySecurity,
+		},
+		{
+			name:     "access logs",
+			entry:    LogEntry{Level: "info", Source: "api-gateway", Message: "GET /api/v1/orders 200 81ms request_id=abc"},
+			expected: CategoryAccessLog,
+		},
+		{
+			name:     "database locks",
+			entry:    LogEntry{Level: "error", Source: "worker", Message: "deadlock found when trying to get lock"},
+			expected: CategoryDatabase,
+		},
+		{
+			name:     "disk failures",
+			entry:    LogEntry{Level: "error", Source: "kernel", Message: "EXT4-fs warning: no space left on device /var/lib/docker"},
+			expected: CategoryDiskIO,
+		},
+		{
+			name:     "routine application events",
+			entry:    LogEntry{Level: "info", Source: "checkout-api", Message: "checkout completed in 122ms for order 12345"},
+			expected: CategoryApplication,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := InferEntryCategory(tt.entry); got != tt.expected {
+				t.Fatalf("InferEntryCategory() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestFileRepository_IngestAndCluster(t *testing.T) {
 	dir := t.TempDir()
 	repo, err := NewFileRepository(dir)
@@ -140,6 +190,9 @@ func TestFileRepository_IngestAndCluster(t *testing.T) {
 
 	if connFamily.Source != "mysql-client" {
 		t.Errorf("expected source 'mysql-client', got %q", connFamily.Source)
+	}
+	if connFamily.Category != CategoryNetwork {
+		t.Errorf("expected category %q, got %q", CategoryNetwork, connFamily.Category)
 	}
 	if len(connFamily.Servers) != 2 {
 		t.Errorf("expected 2 servers, got %d: %v", len(connFamily.Servers), connFamily.Servers)
@@ -250,6 +303,172 @@ func TestFileRepository_Stats(t *testing.T) {
 	}
 	if stats.ActiveFamilies != 2 {
 		t.Errorf("expected 2 active families, got %d", stats.ActiveFamilies)
+	}
+	if stats.CategoryCounts[CategoryDBAuth] != 1 {
+		t.Errorf("expected one db auth family, got %d", stats.CategoryCounts[CategoryDBAuth])
+	}
+	if stats.CategoryCounts[CategoryTimeout] != 1 {
+		t.Errorf("expected one timeout family, got %d", stats.CategoryCounts[CategoryTimeout])
+	}
+}
+
+func TestAPIHandler_IngestAcceptsStructuredMeta(t *testing.T) {
+	dir := t.TempDir()
+	repo, err := NewFileRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewAPIHandler(repo, nil, log.New(io.Discard, "", 0))
+
+	body := map[string]interface{}{
+		"entries": []map[string]interface{}{
+			{
+				"timestamp": time.Now().UTC().Format(time.RFC3339),
+				"level":     "warn",
+				"source":    "jvm",
+				"server":    "app-1",
+				"message":   "GC pause exceeded threshold: G1 Young Generation took 1820ms",
+				"meta": map[string]interface{}{
+					"scenario": "log-storm",
+					"pauseMs":  1820,
+					"sampled":  true,
+				},
+			},
+		},
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/logs/ingest", bytes.NewReader(payload))
+	rr := httptest.NewRecorder()
+	handler.handleIngest(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	entries, err := repo.RecentEntries("jvm", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].Meta["scenario"] != "log-storm" {
+		t.Fatalf("expected scenario metadata to persist, got %#v", entries[0].Meta["scenario"])
+	}
+	if entries[0].Meta["pauseMs"] != float64(1820) {
+		t.Fatalf("expected numeric pauseMs metadata to persist, got %#v", entries[0].Meta["pauseMs"])
+	}
+	if entries[0].Meta["sampled"] != true {
+		t.Fatalf("expected boolean sampled metadata to persist, got %#v", entries[0].Meta["sampled"])
+	}
+}
+
+func TestAPIHandler_FamiliesFiltersCategoryBeforeLimit(t *testing.T) {
+	dir := t.TempDir()
+	repo, err := NewFileRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().UTC()
+	entries := []LogEntry{
+		{ID: "n1", Timestamp: now, Level: "error", Message: "connection refused to billing-a.internal on port 443", Source: "proxy"},
+		{ID: "n2", Timestamp: now.Add(time.Second), Level: "error", Message: "connection refused to billing-b.internal on port 443", Source: "proxy"},
+		{ID: "n3", Timestamp: now.Add(2 * time.Second), Level: "error", Message: "connection refused to billing-c.internal on port 443", Source: "proxy"},
+		{ID: "a1", Timestamp: now.Add(3 * time.Second), Level: "info", Message: "checkout completed for order abc", Source: "app"},
+		{ID: "a2", Timestamp: now.Add(4 * time.Second), Level: "info", Message: "checkout completed for order def", Source: "app"},
+	}
+	if err := repo.IngestEntries(entries); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := NewAPIHandler(repo, nil, log.New(io.Discard, "", 0))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs/families?category=network&limit=2", nil)
+	rr := httptest.NewRecorder()
+	handler.handleFamilies(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp struct {
+		Success bool          `json:"success"`
+		Data    []ErrorFamily `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if !resp.Success {
+		t.Fatalf("expected success response")
+	}
+	if len(resp.Data) != 2 {
+		t.Fatalf("expected 2 filtered network families, got %d: %#v", len(resp.Data), resp.Data)
+	}
+	for _, family := range resp.Data {
+		if family.Category != CategoryNetwork {
+			t.Fatalf("expected only network families, got %q", family.Category)
+		}
+	}
+}
+
+func TestAPIHandler_CategorizeSpecificFamily(t *testing.T) {
+	dir := t.TempDir()
+	repo, err := NewFileRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().UTC()
+	if err := repo.IngestEntries([]LogEntry{
+		{ID: "1", Timestamp: now, Level: "error", Message: "DNS resolution failed for billing.internal after 5 retries", Source: "worker", Server: "app-1"},
+		{ID: "2", Timestamp: now.Add(time.Second), Level: "error", Message: "DNS resolution failed for billing.internal after 5 retries", Source: "worker", Server: "app-1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	families, err := repo.ListFamilies("active", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(families) != 1 {
+		t.Fatalf("expected 1 family, got %d", len(families))
+	}
+
+	family := families[0]
+	family.Category = CategoryTimeout
+	if err := repo.UpdateFamily(family); err != nil {
+		t.Fatal(err)
+	}
+
+	provider := AIProviderFunc(func(_ context.Context, _ string, userMsg string) (string, error) {
+		if !strings.Contains(userMsg, "DNS resolution failed") {
+			t.Fatalf("expected target family text in AI request, got %q", userMsg)
+		}
+		return `{"category":"network","summary":"DNS failures are recurring.","severity":"critical"}`, nil
+	})
+	handler := NewAPIHandler(repo, NewCategorizer(repo, provider, log.New(io.Discard, "", 0)), log.New(io.Discard, "", 0))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/logs/families/"+family.ID+"/categorize", nil)
+	rr := httptest.NewRecorder()
+	handler.handleFamilyDetail(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	updated, err := repo.GetFamily(family.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Category != CategoryNetwork {
+		t.Fatalf("expected category %q, got %q", CategoryNetwork, updated.Category)
+	}
+	if updated.AISummary != "DNS failures are recurring." {
+		t.Fatalf("expected AI summary to be saved, got %q", updated.AISummary)
 	}
 }
 

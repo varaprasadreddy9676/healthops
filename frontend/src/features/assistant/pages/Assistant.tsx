@@ -22,6 +22,18 @@ const SUGGESTIONS = [
     'Summarize current system health',
 ]
 
+const MAX_VISIBLE_REFERENCES = 8
+
+function uniqueReferences(refs: AssistantReference[] = []): AssistantReference[] {
+    const seen = new Set<string>()
+    return refs.filter((ref) => {
+        const key = `${ref.type}:${ref.id}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+    })
+}
+
 function ReferenceChip({ ref }: { ref: AssistantReference }) {
     const linkMap: Record<string, string> = {
         check: `/checks/${ref.id}`,
@@ -46,6 +58,9 @@ function ReferenceChip({ ref }: { ref: AssistantReference }) {
 
 function MessageBubble({ message }: { message: ChatMessage }) {
     const isUser = message.role === 'user'
+    const references = uniqueReferences(message.references)
+    const visibleReferences = references.slice(0, MAX_VISIBLE_REFERENCES)
+    const hiddenReferenceCount = references.length - visibleReferences.length
 
     return (
         <div className={cn('flex gap-3', isUser ? 'flex-row-reverse' : 'flex-row')}>
@@ -72,11 +87,16 @@ function MessageBubble({ message }: { message: ChatMessage }) {
                         <MarkdownContent text={message.content} className="text-sm" />
                     )}
                 </div>
-                {message.references && message.references.length > 0 && (
+                {visibleReferences.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                        {message.references.map((ref, i) => (
+                        {visibleReferences.map((ref, i) => (
                             <ReferenceChip key={`${ref.type}-${ref.id}-${i}`} ref={ref} />
                         ))}
+                        {hiddenReferenceCount > 0 && (
+                            <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                                +{hiddenReferenceCount} more in context
+                            </span>
+                        )}
                     </div>
                 )}
                 <div className="flex items-center gap-2 text-[10px] text-slate-400">

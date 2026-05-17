@@ -43,7 +43,7 @@ export default function Settings() {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Settings</h1>
-        <p className="text-sm text-slate-500">Manage monitoring configuration, checks, alerts, and AI providers</p>
+        <p className="text-sm text-slate-500">Manage monitoring configuration, checks, alerts, and integrations</p>
       </div>
 
       <div className="flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800">

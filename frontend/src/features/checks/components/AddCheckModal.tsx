@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { checksApi } from "@/features/checks/api/checks"
 import { checkTypeLabel, cn } from "@/shared/lib/utils"
 import { CHECK_TYPES } from "@/shared/lib/constants"
-import type { CheckConfig } from "@/shared/types"
+import type { CheckConfig, CheckType } from "@/shared/types"
 
 function deriveTarget(check: CheckConfig): string {
   switch (check.type) {
@@ -20,12 +20,22 @@ function deriveTarget(check: CheckConfig): string {
       return check.mysql?.dsnEnv ?? ''
     case 'ssh':
       return check.ssh ? `${check.ssh.host}:${check.ssh.port ?? 22}` : ''
+    case 'ssl':
+      return check.ssl?.host ?? check.host ?? check.target ?? ''
+    case 'dns':
+      return check.dns?.name ?? check.target ?? ''
+    case 'ping':
+      return check.ping?.host ?? check.host ?? check.target ?? ''
+    case 'domain':
+      return check.domain?.domain ?? check.target ?? ''
+    case 'heartbeat':
+      return check.heartbeat?.expectedIntervalSeconds ? String(check.heartbeat.expectedIntervalSeconds) : ''
     default:
       return ''
   }
 }
 
-const TARGET_META: Record<CheckConfig['type'], { label: string; placeholder: string; hint: string }> = {
+const TARGET_META: Record<CheckType, { label: string; placeholder: string; hint: string }> = {
   api: {
     label: 'URL',
     placeholder: 'https://example.com/healthz',
@@ -61,6 +71,31 @@ const TARGET_META: Record<CheckConfig['type'], { label: string; placeholder: str
     placeholder: 'linux-server-1:22',
     hint: 'Use host:port. Provide the SSH user below.',
   },
+  ssl: {
+    label: 'Host or URL',
+    placeholder: 'https://example.com',
+    hint: 'Checks certificate validity and expiry. URLs are reduced to their host automatically.',
+  },
+  dns: {
+    label: 'DNS Name',
+    placeholder: 'example.com',
+    hint: 'Creates an A-record DNS check. Advanced record expectations can be edited through the API.',
+  },
+  ping: {
+    label: 'Host or IP',
+    placeholder: '10.0.0.10',
+    hint: 'Runs reachability probes and tracks packet loss/latency.',
+  },
+  domain: {
+    label: 'Domain',
+    placeholder: 'example.com',
+    hint: 'Checks domain expiry through RDAP, with WHOIS fallback when available.',
+  },
+  heartbeat: {
+    label: 'Expected Interval (seconds)',
+    placeholder: '300',
+    hint: 'Creates a push heartbeat. The generated token is available on the check and heartbeat APIs.',
+  },
 }
 
 function splitHostPort(value: string, defaultPort?: number) {
@@ -77,7 +112,7 @@ function splitHostPort(value: string, defaultPort?: number) {
 
 function buildCheckPayload(input: {
   name: string
-  type: CheckConfig['type']
+  type: CheckType
   server: string
   target: string
   enabled: boolean
@@ -111,12 +146,22 @@ function buildCheckPayload(input: {
       const { host, port } = splitHostPort(target, 22)
       return { ...base, ssh: { host, port, user: input.sshUser.trim() } }
     }
+    case 'ssl':
+      return { ...base, target, ssl: { host: target } }
+    case 'dns':
+      return { ...base, target, dns: { name: target, recordType: 'A' } }
+    case 'ping':
+      return { ...base, target, ping: { host: target } }
+    case 'domain':
+      return { ...base, target, domain: { domain: target } }
+    case 'heartbeat':
+      return { ...base, heartbeat: { expectedIntervalSeconds: Number(target), graceSeconds: 60 } }
   }
 }
 
 function validatePayload(input: {
   name: string
-  type: CheckConfig['type']
+  type: CheckType
   target: string
   sshUser: string
 }) {
@@ -130,6 +175,10 @@ function validatePayload(input: {
     const { host, port } = splitHostPort(input.target, 22)
     if (!host || !port) return 'SSH target must include a host'
     if (!input.sshUser.trim()) return 'SSH user is required'
+  }
+  if (input.type === 'heartbeat') {
+    const interval = Number(input.target.trim())
+    if (!Number.isInteger(interval) || interval <= 0) return 'Heartbeat interval must be a positive number of seconds'
   }
   return null
 }
@@ -149,18 +198,23 @@ export function AddCheckModal({
   const isEditing = initialData != null
 
   const [name, setName] = useState(initialData?.name ?? '')
-  const [type, setType] = useState<CheckConfig['type']>(initialData?.type ?? 'api')
+  const [type, setType] = useState<CheckType>(initialData?.type ?? 'api')
   const [server, setServer] = useState(initialData?.server ?? defaultServer ?? '')
   const [target, setTarget] = useState(initialData ? deriveTarget(initialData) : '')
   const [sshUser, setSshUser] = useState(initialData?.ssh?.user ?? 'root')
   const [enabled, setEnabled] = useState(initialData?.enabled ?? true)
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [createdHeartbeat, setCreatedHeartbeat] = useState<CheckConfig | null>(null)
 
   const mutation = useMutation({
     mutationFn: (check: Partial<CheckConfig>) =>
       isEditing ? checksApi.update(initialData!.id, check) : checksApi.create(check),
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['checks'] })
+      if (!isEditing && created.type === 'heartbeat' && created.heartbeat?.token) {
+        setCreatedHeartbeat(created)
+        return
+      }
       onCreated()
     },
   })
@@ -186,11 +240,50 @@ export function AddCheckModal({
   }
 
   const targetMeta = TARGET_META[type]
+  const heartbeatURL = createdHeartbeat?.heartbeat?.token
+    ? `${window.location.origin}/api/v1/heartbeats/${createdHeartbeat.heartbeat.token}`
+    : ''
+
+  if (createdHeartbeat && heartbeatURL) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+        <div
+          className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-slate-800"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h2 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Heartbeat Created</h2>
+          <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+            Store this ping URL in the job or cron task that should report healthy execution.
+          </p>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
+            <div className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Ping URL</div>
+            <code className="block break-all text-xs text-slate-800 dark:text-slate-200">{heartbeatURL}</code>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(heartbeatURL)}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              Copy URL
+            </button>
+            <button
+              type="button"
+              onClick={() => onCreated()}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
-        className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-slate-800"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-800"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">{isEditing ? 'Edit Check' : 'Add Check'}</h2>
@@ -211,7 +304,7 @@ export function AddCheckModal({
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Type</label>
             <select
               value={type}
-              onChange={(e) => setType(e.target.value as CheckConfig['type'])}
+              onChange={(e) => setType(e.target.value as CheckType)}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white"
             >
               {CHECK_TYPES.map((t) => (
@@ -234,8 +327,9 @@ export function AddCheckModal({
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{targetMeta.label}</label>
             <input
-              type="text"
+              type={type === 'heartbeat' ? 'number' : 'text'}
               required
+              min={type === 'heartbeat' ? 1 : undefined}
               value={target}
               onChange={(e) => setTarget(e.target.value)}
               placeholder={targetMeta.placeholder}

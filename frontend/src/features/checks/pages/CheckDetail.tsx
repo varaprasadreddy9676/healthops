@@ -13,7 +13,7 @@ import { MetricCard } from "@/shared/components/MetricCard"
 import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
 import { ResponseTimeChart } from "@/shared/charts/ResponseTimeChart"
-import { formatDuration, formatUptime, relativeTime, checkTypeLabel } from "@/shared/lib/utils"
+import { formatDuration, formatUptime, relativeTime, checkTypeLabel, incidentMessageSummary } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import type { CheckConfig, CheckResult } from "@/shared/types"
 
@@ -327,7 +327,7 @@ export default function CheckDetail() {
                 className="flex items-center gap-3 rounded-lg bg-white p-3 transition-colors hover:bg-red-50 dark:bg-slate-900 dark:hover:bg-slate-800"
               >
                 <StatusBadge status={inc.severity} label={false} />
-                <span className="text-sm text-slate-700 dark:text-slate-300">{inc.message}</span>
+                <span className="text-sm text-slate-700 dark:text-slate-300">{incidentMessageSummary(inc.message)}</span>
                 <span className="ml-auto text-xs text-slate-400">{relativeTime(inc.startedAt)}</span>
               </Link>
             ))}

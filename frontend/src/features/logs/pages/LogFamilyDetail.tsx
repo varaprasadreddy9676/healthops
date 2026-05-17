@@ -10,6 +10,7 @@ import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
 import { useToast } from "@/shared/components/Toast"
 import { cn, relativeTime } from "@/shared/lib/utils"
+import { useAIAvailability } from "@/features/ai/hooks/useAIAvailability"
 
 const SEVERITY_COLORS: Record<string, string> = {
     critical: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
@@ -41,14 +42,32 @@ const CATEGORY_OPTIONS = [
     { value: 'timeout', label: 'Timeout' },
     { value: 'thread_exhaustion', label: 'Thread Exhaustion' },
     { value: 'slow_query', label: 'Slow Query' },
+    { value: 'database', label: 'Database' },
     { value: 'network', label: 'Network' },
     { value: 'app_bug', label: 'App Bug' },
+    { value: 'application', label: 'Application' },
     { value: 'memory', label: 'Memory' },
     { value: 'config', label: 'Config' },
     { value: 'permission', label: 'Permission' },
+    { value: 'security', label: 'Security' },
+    { value: 'rate_limit', label: 'Rate Limit' },
+    { value: 'access_log', label: 'Access Log' },
+    { value: 'audit', label: 'Audit' },
     { value: 'disk_io', label: 'Disk I/O' },
-    { value: 'unknown', label: 'Unknown' },
+    { value: 'unknown', label: 'Unclassified' },
 ]
+
+function formatMetaValue(value: unknown): string {
+    if (value == null) return ''
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        return String(value)
+    }
+    try {
+        return JSON.stringify(value)
+    } catch {
+        return String(value)
+    }
+}
 
 function CopyButton({ text }: { text: string }) {
     const [copied, setCopied] = useState(false)
@@ -92,6 +111,7 @@ export default function LogFamilyDetail() {
     const { id } = useParams<{ id: string }>()
     const queryClient = useQueryClient()
     const toast = useToast()
+    const { isAIAvailable } = useAIAvailability()
     const [editingField, setEditingField] = useState<'status' | 'category' | 'severity' | null>(null)
     const [entrySearch, setEntrySearch] = useState('')
     const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
@@ -108,16 +128,17 @@ export default function LogFamilyDetail() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['logs'] })
             setEditingField(null)
-            toast.success('Family updated')
+            toast.success('Pattern updated')
         },
         onError: (err: Error) => toast.error(err.message || 'Update failed'),
     })
 
     const categorizeMutation = useMutation({
-        mutationFn: () => logsApi.categorize(1),
-        onSuccess: (result) => {
+        mutationFn: () => logsApi.categorizeFamily(id!),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['logs', 'family', id] })
             queryClient.invalidateQueries({ queryKey: ['logs'] })
-            toast.success(result.categorized > 0 ? 'AI categorized this family' : 'No change')
+            toast.success('Categorized this pattern')
         },
         onError: (err: Error) => toast.error(err.message || 'Categorization failed'),
     })
@@ -145,21 +166,24 @@ export default function LogFamilyDetail() {
 
     if (isLoading) return <LoadingState />
     if (error) return <ErrorState message={error.message} retry={() => refetch()} />
-    if (!data) return <ErrorState message="Family not found" />
+    if (!data) return <ErrorState message="Pattern not found" />
 
     const { family, entries } = data
+    const categoryLabel = CATEGORY_OPTIONS.find((opt) => opt.value === family.category)?.label
+        ?? family.category?.replace(/_/g, ' ')
+        ?? 'Unclassified'
 
     return (
         <div className="space-y-6 animate-fade-in">
             {/* Header */}
             <div>
                 <Link to="/logs" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-3">
-                    <ArrowLeft className="h-4 w-4" /> Back to Log Intelligence
+                    <ArrowLeft className="h-4 w-4" /> Back to Logs
                 </Link>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-1.5">
                         <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                            {family.pattern || family.title || `Family ${family.id.slice(0, 8)}`}
+                            {family.pattern || family.title || `Pattern ${family.id.slice(0, 8)}`}
                         </h1>
                         <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
                             <span className="inline-flex items-center gap-1 font-mono text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
@@ -173,15 +197,16 @@ export default function LogFamilyDetail() {
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        {/* AI Categorize button */}
-                        <button
-                            onClick={() => categorizeMutation.mutate()}
-                            disabled={categorizeMutation.isPending}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50"
-                        >
-                            <Brain className="h-3.5 w-3.5" />
-                            {categorizeMutation.isPending ? 'Analyzing...' : 'AI Analyze'}
-                        </button>
+                        {isAIAvailable && (
+                            <button
+                                onClick={() => categorizeMutation.mutate()}
+                                disabled={categorizeMutation.isPending}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50"
+                            >
+                                <Brain className="h-3.5 w-3.5" />
+                                {categorizeMutation.isPending ? 'Analyzing...' : 'AI Analyze'}
+                            </button>
+                        )}
 
                         {/* Severity badge / editor */}
                         {editingField === 'severity' ? (
@@ -280,8 +305,11 @@ export default function LogFamilyDetail() {
                             className="text-sm font-medium text-slate-900 dark:text-slate-100 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer"
                             title="Click to change category"
                         >
-                            {family.category?.replace(/_/g, ' ') || 'Uncategorized'}
+                            {categoryLabel}
                         </button>
+                    )}
+                    {(family.category === 'unknown' || !family.category) && (
+                        <p className="mt-1 text-[10px] text-slate-400">Rule-based classifier could not identify this pattern.</p>
                     )}
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -317,7 +345,7 @@ export default function LogFamilyDetail() {
             </div>
 
             {/* AI Summary */}
-            {(family.aiSummary || family.aiLabel) && (
+            {isAIAvailable && (family.aiSummary || family.aiLabel) && (
                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/30">
                     <div className="flex items-center gap-2 mb-2">
                         <Brain className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -412,7 +440,7 @@ export default function LogFamilyDetail() {
                                                     {Object.entries(entry.meta).map(([k, v]) => (
                                                         <span key={k} className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-700">
                                                             <span className="font-medium text-slate-600 dark:text-slate-400">{k}:</span>
-                                                            <span className="ml-0.5 text-slate-500 dark:text-slate-500">{v}</span>
+                                                            <span className="ml-0.5 text-slate-500 dark:text-slate-500">{formatMetaValue(v)}</span>
                                                         </span>
                                                     ))}
                                                 </div>
@@ -448,7 +476,7 @@ export default function LogFamilyDetail() {
                     <div className="px-4 py-12 text-center">
                         <FileText className="mx-auto h-8 w-8 text-slate-300" />
                         <p className="mt-2 text-sm text-slate-500">
-                            {entrySearch ? 'No entries match your search.' : 'No entries found for this family.'}
+                            {entrySearch ? 'No entries match your search.' : 'No entries found for this pattern.'}
                         </p>
                     </div>
                 )}

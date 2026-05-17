@@ -12,7 +12,7 @@ export interface LogEntry {
     fingerprint: string
     familyId: string
     tags?: string[]
-    meta?: Record<string, string>
+    meta?: Record<string, unknown>
 }
 
 export interface ErrorFamily {
@@ -57,7 +57,7 @@ function qs(params?: Record<string, string | number | undefined>): string {
 }
 
 export const logsApi = {
-    ingest: (entries: Array<{ level: string; message: string; source: string; server?: string; stackTrace?: string; tags?: string[]; meta?: Record<string, string> }>) =>
+    ingest: (entries: Array<{ level: string; message: string; source: string; server?: string; stackTrace?: string; tags?: string[]; meta?: Record<string, unknown> }>) =>
         api.post<{ ingested: number; families: number }>('/logs/ingest', { entries }),
 
     entries: (params?: { source?: string; limit?: number }) =>
@@ -71,6 +71,9 @@ export const logsApi = {
 
     updateFamily: (id: string, data: { status?: string; category?: string; severity?: string }) =>
         api.patch<ErrorFamily>(`/logs/families/${encodeURIComponent(id)}`, data),
+
+    categorizeFamily: (id: string) =>
+        api.post<ErrorFamily>(`/logs/families/${encodeURIComponent(id)}/categorize`),
 
     stats: () =>
         api.get<LogFamilyStats>('/logs/stats'),

@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { mysqlApi, type MySQLAIResponse } from "@/features/mysql/api/mysql"
-import { aiApi } from "@/features/ai/api/ai"
-import { useQuery } from '@tanstack/react-query'
+import { useAIAvailability } from "@/features/ai/hooks/useAIAvailability"
 import { MarkdownContent } from "@/shared/components/MarkdownContent"
 import { cn } from "@/shared/lib/utils"
 import { Bot, Send, X, Sparkles, AlertTriangle, Info, Loader2, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react'
@@ -35,16 +34,7 @@ export function MySQLAIPanel() {
   const [messages, setMessages] = useState<Message[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-
-  // Check if AI is enabled
-  const { data: aiConfig } = useQuery({
-    queryKey: ['ai', 'config'],
-    queryFn: aiApi.config,
-    retry: 1,
-    staleTime: 60000,
-  })
-
-  const aiEnabled = aiConfig?.enabled ?? false
+  const { isAIAvailable } = useAIAvailability()
 
   const askMutation = useMutation({
     mutationFn: (question: string) => mysqlApi.aiAsk(question),
@@ -126,30 +116,7 @@ export function MySQLAIPanel() {
     askMutation.mutate('')
   }
 
-  if (!aiEnabled) {
-    return (
-      <div className="fixed bottom-6 right-6 z-50">
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className="group flex h-14 w-14 items-center justify-center rounded-full bg-slate-400 text-white shadow-lg transition-all hover:bg-slate-500"
-          title="AI not configured"
-        >
-          <Bot className="h-6 w-6" />
-        </button>
-        {isOpen && (
-          <div className="absolute bottom-16 right-0 w-80 rounded-xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-            <div className="flex items-center gap-2 text-slate-500">
-              <Info className="h-5 w-5" />
-              <p className="text-sm font-medium">AI Not Configured</p>
-            </div>
-            <p className="mt-2 text-xs text-slate-400">
-              Enable AI in Settings → AI to ask questions about your MySQL server. Supports OpenAI, Anthropic, Gemini, Ollama, and custom providers.
-            </p>
-          </div>
-        )}
-      </div>
-    )
-  }
+  if (!isAIAvailable) return null
 
   return (
     <div className="fixed bottom-6 right-6 z-50">

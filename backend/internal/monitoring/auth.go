@@ -24,6 +24,19 @@ func authMiddleware(cfg AuthConfig, userStore UserStoreBackend, next http.Handle
 			return
 		}
 
+		// Heartbeat ping endpoints are unauthenticated (cron jobs / external services).
+		// Only exempt /api/v1/heartbeats/{token} (with a token segment), NOT /api/v1/heartbeats (the list).
+		if isHeartbeatPingPath(path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Public status pages — unauthenticated
+		if strings.HasPrefix(path, "/status/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// Serve frontend SPA files without auth
 		if !strings.HasPrefix(path, "/api/") && path != "/metrics" {
 			next.ServeHTTP(w, r)
@@ -59,14 +72,43 @@ func authMiddleware(cfg AuthConfig, userStore UserStoreBackend, next http.Handle
 
 		// Fallback: legacy Basic Auth
 		if cfg.Enabled {
-			if isMutatingMethod(r.Method) && !IsRequestAuthorized(cfg, r) {
-				RequestAuth(w)
-				return
+			// Mutating requests always require auth.
+			// Sensitive reads (heartbeat list reveals tokens; private dashboard
+			// data exposes potentially confidential layouts/results) also require
+			// auth even though they are GETs.
+			if isMutatingMethod(r.Method) || isSensitiveReadPath(path) {
+				if !IsRequestAuthorized(cfg, r) {
+					RequestAuth(w)
+					return
+				}
 			}
 		}
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isSensitiveReadPath returns true for GET endpoints whose responses may include
+// secrets or per-user/private data, and which therefore must require auth even
+// in legacy Basic Auth fallback mode (where most GETs are otherwise public).
+func isSensitiveReadPath(path string) bool {
+	switch {
+	case path == "/api/v1/heartbeats":
+		return true
+	case path == "/api/v1/dashboards" || strings.HasPrefix(path, "/api/v1/dashboards/"):
+		return true
+	case path == "/api/v1/chat" || strings.HasPrefix(path, "/api/v1/chat/"):
+		return true
+	case path == "/api/v1/status-pages" || strings.HasPrefix(path, "/api/v1/status-pages/"):
+		return true
+	case path == "/api/v1/maintenance" || strings.HasPrefix(path, "/api/v1/maintenance/"):
+		return true
+	}
+	return false
+}
+
+func isHeartbeatPingPath(path string) bool {
+	return strings.HasPrefix(path, "/api/v1/heartbeats/") && len(path) > len("/api/v1/heartbeats/")
 }
 
 // basicAuthMiddleware returns middleware that enforces basic auth.
@@ -77,9 +119,16 @@ func basicAuthMiddleware(cfg AuthConfig, next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isMutatingMethod(r.Method) && !IsRequestAuthorized(cfg, r) {
-			RequestAuth(w)
+		path := r.URL.Path
+		if isHeartbeatPingPath(path) || strings.HasPrefix(path, "/status/") {
+			next.ServeHTTP(w, r)
 			return
+		}
+		if isMutatingMethod(r.Method) || isSensitiveReadPath(path) {
+			if !IsRequestAuthorized(cfg, r) {
+				RequestAuth(w)
+				return
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -143,4 +192,14 @@ func parseBasicAuth(auth string) (username, password string, ok bool) {
 	}
 
 	return creds[0], creds[1], true
+}
+
+// ownerFromRequest extracts the authenticated user identity from JWT claims.
+// Returns the username from JWT, or empty string if no JWT auth is present
+// (e.g. legacy Basic Auth mode where users are not individually identified).
+func ownerFromRequest(r *http.Request) string {
+	if claims := ExtractJWTClaims(r); claims != nil {
+		return claims.Username
+	}
+	return ""
 }

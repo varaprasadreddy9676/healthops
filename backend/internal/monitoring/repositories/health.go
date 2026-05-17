@@ -6,8 +6,8 @@ import (
 
 // HealthStatus represents the health check result for a repository
 type HealthStatus struct {
-	Healthy bool   `json:"healthy"` // true if the repository is operational
-	Message string `json:"message"` // human-readable status description
+	Healthy bool   `json:"healthy"`           // true if the repository is operational
+	Message string `json:"message"`           // human-readable status description
 	Latency string `json:"latency,omitempty"` // optional latency measurement
 }
 

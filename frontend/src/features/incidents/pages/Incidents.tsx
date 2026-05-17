@@ -4,21 +4,31 @@ import { useState } from 'react'
 import { AlertTriangle, CheckCircle, Clock, Filter, Brain } from 'lucide-react'
 import { incidentsApi } from "@/features/incidents/api/incidents"
 import { aiApi } from "@/features/ai/api/ai"
+import { useAIAvailability } from "@/features/ai/hooks/useAIAvailability"
 import { LoadingState } from "@/shared/components/LoadingState"
 import { ErrorState } from "@/shared/components/ErrorState"
 import { EmptyState } from "@/shared/components/EmptyState"
 import { ExportButton } from "@/shared/components/ExportButton"
 import { MetricCard } from "@/shared/components/MetricCard"
-import { cn, relativeTime, incidentStatusLabel, severityColor } from "@/shared/lib/utils"
+import { cn, relativeTime, incidentStatusLabel, severityColor, incidentMessageSummary } from "@/shared/lib/utils"
 import { settingsApi } from "@/features/settings/api/settings"
 import { analyticsApi } from "@/features/analytics/api/analytics"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
 import { useLiveSummary } from "@/features/dashboard/hooks/useLiveSummary"
 import { LiveIndicator } from "@/shared/components/LiveIndicator"
 
+function usefulAISummary(summary?: string): string {
+  const trimmed = summary?.trim() ?? ''
+  if (trimmed === 'Demo AI analysis: HealthOps correlated check failures, logs, and infrastructure signals.') {
+    return ''
+  }
+  return trimmed
+}
+
 export default function Incidents() {
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [severityFilter, setSeverityFilter] = useState<string>('')
+  const { isAIAvailable } = useAIAvailability()
 
   const { data: incidents, isLoading, error, refetch } = useQuery({
     queryKey: ['incidents', statusFilter, severityFilter],
@@ -35,6 +45,7 @@ export default function Incidents() {
     queryKey: ['ai', 'results', 'all'],
     queryFn: aiApi.allResults,
     refetchInterval: REFETCH_INTERVAL,
+    enabled: isAIAvailable,
   })
 
   // Map AI results by incidentId for quick lookup
@@ -46,6 +57,10 @@ export default function Incidents() {
 
   if (isLoading) return <LoadingState />
   if (error) return <ErrorState message={error.message} retry={() => refetch()} />
+
+  const incidentItems = incidents?.items ?? []
+  const openCount = incidentItems.filter((inc) => inc.status === 'open').length
+  const acknowledgedCount = incidentItems.filter((inc) => inc.status === 'acknowledged').length
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -63,9 +78,9 @@ export default function Incidents() {
       {/* Summary cards */}
       {stats && (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-          <MetricCard label="Total" value={stats.total} />
-          <MetricCard label="Open" value={live.connected ? live.activeIncidents : (stats?.open ?? 0)} className={(live.connected ? live.activeIncidents : (stats?.open ?? 0)) > 0 ? 'ring-1 ring-red-200 dark:ring-red-900' : ''} />
-          <MetricCard label="Acknowledged" value={stats.acknowledged} />
+          <MetricCard label="Total" value={incidents?.total ?? stats.total} />
+          <MetricCard label="Open" value={openCount} className={openCount > 0 ? 'ring-1 ring-red-200 dark:ring-red-900' : ''} />
+          <MetricCard label="Acknowledged" value={acknowledgedCount} />
           <MetricCard label="MTTA" value={stats.mttaMinutes > 0 ? `${stats.mttaMinutes.toFixed(0)}m` : '—'} subValue="Mean time to acknowledge" />
           <MetricCard label="MTTR" value={stats.mttrMinutes > 0 ? `${stats.mttrMinutes.toFixed(0)}m` : '—'} subValue="Mean time to resolve" />
         </div>
@@ -128,11 +143,11 @@ export default function Incidents() {
                       {inc.severity}
                     </span>
                   </div>
-                  <p className="mt-0.5 truncate text-xs text-slate-500">{inc.message}</p>
-                  {aiSummaryMap.get(inc.id)?.summary && (
+                  <p className="mt-0.5 truncate text-xs text-slate-500">{incidentMessageSummary(inc.message)}</p>
+                  {isAIAvailable && usefulAISummary(aiSummaryMap.get(inc.id)?.summary) && (
                     <p className="mt-1 flex items-center gap-1 truncate text-xs text-blue-600 dark:text-blue-400">
                       <Brain className="h-3 w-3 shrink-0" />
-                      {aiSummaryMap.get(inc.id)!.summary}
+                      {usefulAISummary(aiSummaryMap.get(inc.id)?.summary)}
                     </p>
                   )}
                 </div>

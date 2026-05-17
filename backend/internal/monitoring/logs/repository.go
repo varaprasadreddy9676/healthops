@@ -87,6 +87,9 @@ func (r *FileRepository) IngestEntries(entries []LogEntry) error {
 		if entry.Fingerprint == "" {
 			entry.Fingerprint = ComputeFingerprint(entry.Message, entry.StackTrace, entry.Source)
 		}
+		if entry.Category == "" {
+			entry.Category = InferEntryCategory(*entry)
+		}
 
 		// Find or create error family
 		family, exists := r.families[entry.Fingerprint]
@@ -102,9 +105,13 @@ func (r *FileRepository) IngestEntries(entries []LogEntry) error {
 				OccurrenceCount: 0,
 				Status:          "active",
 				Severity:        levelToSeverity(entry.Level),
+				Category:        entry.Category,
 			}
 			r.families[entry.Fingerprint] = family
 			r.familyIdx[family.ID] = family
+		}
+		if (family.Category == "" || family.Category == CategoryUnknown) && entry.Category != "" {
+			family.Category = entry.Category
 		}
 
 		// Update family stats
@@ -199,7 +206,9 @@ func (r *FileRepository) ListFamilies(status string, limit int) ([]ErrorFamily, 
 		if status != "" && f.Status != status {
 			continue
 		}
-		result = append(result, *f)
+		copy := *f
+		copy.Category = effectiveFamilyCategory(copy)
+		result = append(result, copy)
 	}
 
 	// Sort by last seen (newest first)
@@ -250,11 +259,7 @@ func (r *FileRepository) FamilyStats() LogFamilyStats {
 		if f.Status == "active" {
 			stats.ActiveFamilies++
 		}
-		if f.Category != "" {
-			stats.CategoryCounts[f.Category]++
-		} else {
-			stats.CategoryCounts[CategoryUnknown]++
-		}
+		stats.CategoryCounts[effectiveFamilyCategory(*f)]++
 		stats.SeverityCounts[f.Severity]++
 	}
 
@@ -271,7 +276,9 @@ func (r *FileRepository) listFamiliesUnsafe(status string, limit int) ([]ErrorFa
 		if status != "" && f.Status != status {
 			continue
 		}
-		result = append(result, *f)
+		copy := *f
+		copy.Category = effectiveFamilyCategory(copy)
+		result = append(result, copy)
 	}
 	sortFamilies(result)
 	if limit > 0 && len(result) > limit {

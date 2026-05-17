@@ -13,7 +13,7 @@ export interface SystemStatus {
 export interface CheckConfig {
   id: string
   name: string
-  type: 'api' | 'tcp' | 'process' | 'command' | 'log' | 'mysql' | 'ssh'
+  type: CheckType
   server?: string
   application?: string
   target?: string
@@ -32,12 +32,31 @@ export interface CheckConfig {
   cooldownSeconds?: number
   enabled?: boolean
   tags?: string[]
-  metadata?: Record<string, string>
+  metadata?: Record<string, unknown>
   mysql?: MySQLCheckConfig
   ssh?: SSHCheckConfig
+  ssl?: SSLCheckConfig
+  dns?: DNSCheckConfig
+  ping?: PingCheckConfig
+  domain?: DomainCheckConfig
+  heartbeat?: HeartbeatCheckConfig
   serverId?: string
   notificationChannelIds?: string[]
 }
+
+export type CheckType =
+  | 'api'
+  | 'tcp'
+  | 'process'
+  | 'command'
+  | 'log'
+  | 'mysql'
+  | 'ssh'
+  | 'ssl'
+  | 'dns'
+  | 'ping'
+  | 'domain'
+  | 'heartbeat'
 
 export interface SSHCheckConfig {
   host: string
@@ -62,6 +81,43 @@ export interface MySQLCheckConfig {
   processlistLimit?: number
   statementLimit?: number
   hostUserLimit?: number
+}
+
+export interface SSLCheckConfig {
+  host?: string
+  port?: number
+  serverName?: string
+  warningDays?: number
+  criticalDays?: number
+  insecureSkipVerify?: boolean
+}
+
+export interface DNSCheckConfig {
+  name: string
+  recordType?: 'A' | 'AAAA' | 'CNAME' | 'TXT' | 'MX' | 'NS'
+  resolver?: string
+  expected?: string[]
+  mustNotContain?: string[]
+}
+
+export interface PingCheckConfig {
+  host?: string
+  count?: number
+  maxPacketLossPercent?: number
+  maxAvgLatencyMs?: number
+}
+
+export interface DomainCheckConfig {
+  domain: string
+  warningDays?: number
+  criticalDays?: number
+  rdapEndpoint?: string
+}
+
+export interface HeartbeatCheckConfig {
+  token?: string
+  expectedIntervalSeconds: number
+  graceSeconds?: number
 }
 
 export interface CheckResult {
@@ -342,6 +398,37 @@ export interface CheckDetail {
   avgDurationMs: number
   recentResults: CheckResult[]
   openIncidents?: Incident[]
+}
+
+// --- Status Pages ---
+
+export interface StatusPageComponent {
+  id: string
+  name: string
+  description?: string
+  checkIds?: string[]
+  tags?: string[]
+  servers?: string[]
+  order?: number
+  group?: string
+}
+
+export interface StatusPageConfig {
+  id: string
+  name: string
+  slug: string
+  description?: string
+  logoUrl?: string
+  faviconUrl?: string
+  customDomain?: string
+  isPublic: boolean
+  showIncidents: boolean
+  showUptime: boolean
+  uptimeDays: number
+  components: StatusPageComponent[]
+  announcement?: string
+  createdAt: string
+  updatedAt: string
 }
 
 // --- Frontend API ---

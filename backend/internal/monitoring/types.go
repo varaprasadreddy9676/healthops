@@ -92,6 +92,22 @@ type CheckConfig struct {
 	NotificationChannelIDs []string          `json:"notificationChannelIds,omitempty" bson:"notificationChannelIds,omitempty"`
 	MySQL                  *MySQLCheckConfig `json:"mysql,omitempty" bson:"mysql,omitempty"`
 	SSH                    *SSHCheckConfig   `json:"ssh,omitempty" bson:"ssh,omitempty"`
+
+	// Pluggable check-type config blocks. Each is owned by the corresponding
+	// CheckExecutor registered in check_registry.go and is nil for other types.
+	SSL       *SSLCheckConfig       `json:"ssl,omitempty" bson:"ssl,omitempty"`
+	DNS       *DNSCheckConfig       `json:"dns,omitempty" bson:"dns,omitempty"`
+	Ping      *PingCheckConfig      `json:"ping,omitempty" bson:"ping,omitempty"`
+	Domain    *DomainCheckConfig    `json:"domain,omitempty" bson:"domain,omitempty"`
+	Heartbeat *HeartbeatCheckConfig `json:"heartbeat,omitempty" bson:"heartbeat,omitempty"`
+
+	// Reliability controls (Phase 2 — alert trust).
+	// FailuresToOpen: number of consecutive failed runs before an incident opens.
+	// Defaults to 1 (open immediately) for backward compatibility.
+	FailuresToOpen int `json:"failuresToOpen,omitempty" bson:"failuresToOpen,omitempty"`
+	// SuccessesToResolve: number of consecutive successful runs before an open
+	// incident auto-resolves. Defaults to 1.
+	SuccessesToResolve int `json:"successesToResolve,omitempty" bson:"successesToResolve,omitempty"`
 }
 
 type State struct {

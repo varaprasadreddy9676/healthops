@@ -8,68 +8,68 @@ import (
 
 // App color palette (matches Tailwind tokens used in the frontend)
 const (
-	colorSlate50   = "#f8fafc"
-	colorSlate100  = "#f1f5f9"
-	colorSlate200  = "#e2e8f0"
-	colorSlate400  = "#94a3b8"
-	colorSlate500  = "#64748b"
-	colorSlate700  = "#334155"
-	colorSlate900  = "#0f172a"
-	colorBlue600   = "#2563eb"
-	colorBlue50    = "#eff6ff"
-	colorBlue100   = "#dbeafe"
-	colorBlue700   = "#1d4ed8"
-	colorRed600    = "#dc2626"
-	colorRed50     = "#fef2f2"
-	colorRed100    = "#fee2e2"
-	colorRed200    = "#fecaca"
-	colorRed700    = "#b91c1c"
-	colorAmber600  = "#d97706"
-	colorAmber50   = "#fffbeb"
-	colorAmber100  = "#fef3c7"
-	colorAmber200  = "#fde68a"
-	colorAmber700  = "#92400e"
-	colorGreen600  = "#16a34a"
-	colorGreen50   = "#f0fdf4"
-	colorGreen100  = "#dcfce7"
-	colorGreen200  = "#bbf7d0"
-	colorGreen700  = "#15803d"
+	colorSlate50  = "#f8fafc"
+	colorSlate100 = "#f1f5f9"
+	colorSlate200 = "#e2e8f0"
+	colorSlate400 = "#94a3b8"
+	colorSlate500 = "#64748b"
+	colorSlate700 = "#334155"
+	colorSlate900 = "#0f172a"
+	colorBlue600  = "#2563eb"
+	colorBlue50   = "#eff6ff"
+	colorBlue100  = "#dbeafe"
+	colorBlue700  = "#1d4ed8"
+	colorRed600   = "#dc2626"
+	colorRed50    = "#fef2f2"
+	colorRed100   = "#fee2e2"
+	colorRed200   = "#fecaca"
+	colorRed700   = "#b91c1c"
+	colorAmber600 = "#d97706"
+	colorAmber50  = "#fffbeb"
+	colorAmber100 = "#fef3c7"
+	colorAmber200 = "#fde68a"
+	colorAmber700 = "#92400e"
+	colorGreen600 = "#16a34a"
+	colorGreen50  = "#f0fdf4"
+	colorGreen100 = "#dcfce7"
+	colorGreen200 = "#bbf7d0"
+	colorGreen700 = "#15803d"
 )
 
 type emailPalette struct {
-	accentBg     string // header stripe + CTA button
-	accentText   string // on accentBg
-	badgeBg      string
-	badgeText    string
-	badgeBorder  string
-	dotColor     string
-	statusLabel  string
-	msgBorder    string // left border on message box
+	accentBg    string // header stripe + CTA button
+	accentText  string // on accentBg
+	badgeBg     string
+	badgeText   string
+	badgeBorder string
+	dotColor    string
+	statusLabel string
+	msgBorder   string // left border on message box
 }
 
 func paletteFor(severity, status string) emailPalette {
 	switch {
 	case status == "resolved":
 		return emailPalette{
-			accentBg:    colorGreen600, accentText: "#ffffff",
+			accentBg: colorGreen600, accentText: "#ffffff",
 			badgeBg: colorGreen100, badgeText: colorGreen700, badgeBorder: colorGreen200,
 			dotColor: colorGreen600, statusLabel: "RESOLVED", msgBorder: colorGreen600,
 		}
 	case severity == "critical":
 		return emailPalette{
-			accentBg:    colorRed600, accentText: "#ffffff",
+			accentBg: colorRed600, accentText: "#ffffff",
 			badgeBg: colorRed100, badgeText: colorRed700, badgeBorder: colorRed200,
 			dotColor: colorRed600, statusLabel: "CRITICAL", msgBorder: colorRed600,
 		}
 	case severity == "warning":
 		return emailPalette{
-			accentBg:    colorAmber600, accentText: "#ffffff",
+			accentBg: colorAmber600, accentText: "#ffffff",
 			badgeBg: colorAmber100, badgeText: colorAmber700, badgeBorder: colorAmber200,
 			dotColor: colorAmber600, statusLabel: "WARNING", msgBorder: colorAmber600,
 		}
 	default:
 		return emailPalette{
-			accentBg:    colorBlue600, accentText: "#ffffff",
+			accentBg: colorBlue600, accentText: "#ffffff",
 			badgeBg: colorBlue100, badgeText: colorBlue700, badgeBorder: colorBlue100,
 			dotColor: colorBlue600, statusLabel: "INFO", msgBorder: colorBlue600,
 		}
@@ -319,7 +319,7 @@ func buildDigestHTMLEmail(payloads []NotificationPayload, critical, warning int,
 	var rows string
 	for _, p := range payloads {
 		rpal := paletteFor(p.Severity, "")
-		server := `<span style="color:`+colorSlate400+`">—</span>`
+		server := `<span style="color:` + colorSlate400 + `">—</span>`
 		if p.Server != "" {
 			server = fmt.Sprintf(`<span style="color:%s">%s</span>`, colorSlate700, htmlEscape(p.Server))
 		}

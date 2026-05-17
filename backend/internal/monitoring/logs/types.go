@@ -10,18 +10,18 @@ import (
 
 // LogEntry represents a single ingested log line.
 type LogEntry struct {
-	ID          string            `json:"id" bson:"_id"`
-	Timestamp   time.Time         `json:"timestamp" bson:"timestamp"`
-	Level       string            `json:"level" bson:"level"`
-	Message     string            `json:"message" bson:"message"`
-	Source      string            `json:"source" bson:"source"`
-	Server      string            `json:"server,omitempty" bson:"server,omitempty"`
-	Category    string            `json:"category,omitempty" bson:"category,omitempty"`
-	StackTrace  string            `json:"stackTrace,omitempty" bson:"stackTrace,omitempty"`
-	Fingerprint string            `json:"fingerprint" bson:"fingerprint"`
-	FamilyID    string            `json:"familyId" bson:"familyId"`
-	Tags        []string          `json:"tags,omitempty" bson:"tags,omitempty"`
-	Meta        map[string]string `json:"meta,omitempty" bson:"meta,omitempty"`
+	ID          string                 `json:"id" bson:"_id"`
+	Timestamp   time.Time              `json:"timestamp" bson:"timestamp"`
+	Level       string                 `json:"level" bson:"level"`
+	Message     string                 `json:"message" bson:"message"`
+	Source      string                 `json:"source" bson:"source"`
+	Server      string                 `json:"server,omitempty" bson:"server,omitempty"`
+	Category    string                 `json:"category,omitempty" bson:"category,omitempty"`
+	StackTrace  string                 `json:"stackTrace,omitempty" bson:"stackTrace,omitempty"`
+	Fingerprint string                 `json:"fingerprint" bson:"fingerprint"`
+	FamilyID    string                 `json:"familyId" bson:"familyId"`
+	Tags        []string               `json:"tags,omitempty" bson:"tags,omitempty"`
+	Meta        map[string]interface{} `json:"meta,omitempty" bson:"meta,omitempty"`
 }
 
 // ErrorFamily groups similar log entries together.
@@ -50,14 +50,14 @@ type LogIngestRequest struct {
 
 // LogIngestEntry is a single entry in an ingest request.
 type LogIngestEntry struct {
-	Timestamp  string            `json:"timestamp,omitempty"`
-	Level      string            `json:"level"`
-	Message    string            `json:"message"`
-	Source     string            `json:"source"`
-	Server     string            `json:"server,omitempty"`
-	StackTrace string            `json:"stackTrace,omitempty"`
-	Tags       []string          `json:"tags,omitempty"`
-	Meta       map[string]string `json:"meta,omitempty"`
+	Timestamp  string                 `json:"timestamp,omitempty"`
+	Level      string                 `json:"level"`
+	Message    string                 `json:"message"`
+	Source     string                 `json:"source"`
+	Server     string                 `json:"server,omitempty"`
+	StackTrace string                 `json:"stackTrace,omitempty"`
+	Tags       []string               `json:"tags,omitempty"`
+	Meta       map[string]interface{} `json:"meta,omitempty"`
 }
 
 // LogFamilyStats provides aggregated stats for dashboard display.
@@ -76,11 +76,17 @@ const (
 	CategoryTimeout          = "timeout"
 	CategoryThreadExhaustion = "thread_exhaustion"
 	CategorySlowQuery        = "slow_query"
+	CategoryDatabase         = "database"
 	CategoryNetwork          = "network"
 	CategoryAppBug           = "app_bug"
+	CategoryApplication      = "application"
 	CategoryMemory           = "memory"
 	CategoryConfig           = "config"
 	CategoryPermission       = "permission"
+	CategorySecurity         = "security"
+	CategoryRateLimit        = "rate_limit"
+	CategoryAccessLog        = "access_log"
+	CategoryAudit            = "audit"
 	CategoryDiskIO           = "disk_io"
 	CategoryUnknown          = "unknown"
 )
@@ -89,10 +95,126 @@ const (
 func AllCategories() []string {
 	return []string{
 		CategoryDBAuth, CategoryTimeout, CategoryThreadExhaustion,
-		CategorySlowQuery, CategoryNetwork, CategoryAppBug,
-		CategoryMemory, CategoryConfig, CategoryPermission,
+		CategorySlowQuery, CategoryDatabase, CategoryNetwork, CategoryAppBug,
+		CategoryApplication, CategoryMemory, CategoryConfig, CategoryPermission,
+		CategorySecurity, CategoryRateLimit, CategoryAccessLog, CategoryAudit,
 		CategoryDiskIO, CategoryUnknown,
 	}
+}
+
+// InferEntryCategory assigns a practical baseline category before optional AI
+// enrichment runs. This keeps logs usable even when AI is disabled.
+func InferEntryCategory(entry LogEntry) string {
+	text := categoryText(entry.Source, entry.Message, entry.StackTrace, strings.Join(entry.Tags, " "))
+
+	switch {
+	case anyContains(text, "access denied", "using password", "mysql auth", "db auth"):
+		return CategoryDBAuth
+	case anyContains(text, "failed password", "brute-force", "break-in", "invalid signature", "jwt signature", "signature verification", "authentication failed"):
+		return CategorySecurity
+	case anyContains(text, "permission denied", "forbidden", "unauthorized"):
+		return CategoryPermission
+	case anyContains(text, "no space left", "disk space", "disk full", "ext4-fs", "i/o error", "io error", "disk_io"):
+		return CategoryDiskIO
+	case anyContains(text, "oomkilled", "out of memory", "heap ", "gc pause", "memory"):
+		return CategoryMemory
+	case anyContains(text, "pool exhausted", "pending threads", "thread pool", "too many connections"):
+		return CategoryThreadExhaustion
+	case anyContains(text, "slow query"):
+		return CategorySlowQuery
+	case anyContains(text, "deadlock", "lock wait", "database lock"):
+		return CategoryDatabase
+	case anyContains(text, "timeout", "timed out", "deadline exceeded"):
+		return CategoryTimeout
+	case anyContains(text, "dns", "nxdomain", "econnrefused", "connection refused", "connection reset", "no route to host", "upstream", "http 503", " returned 503", "circuit breaker"):
+		return CategoryNetwork
+	case anyContains(text, "rate limit", "too many requests", " 429 "):
+		return CategoryRateLimit
+	case anyContains(text, "certificate", "config", "configuration", "feature flag", "launchdarkly"):
+		return CategoryConfig
+	case anyContains(text, "panic", "nil pointer", "exception", "crashloopbackoff", "crashed", "stacktrace"):
+		return CategoryAppBug
+	case anyContains(text, "audit", "role.changed", "user.role", "permission.changed"):
+		return CategoryAudit
+	case isAccessLog(text):
+		return CategoryAccessLog
+	case entry.Level == "info" || anyContains(text, "checkout completed", "request completed"):
+		return CategoryApplication
+	default:
+		return CategoryUnknown
+	}
+}
+
+// InferFamilyCategory applies the same baseline category to an existing family.
+func InferFamilyCategory(family ErrorFamily) string {
+	text := categoryText(family.Source, family.Title, family.Pattern, strings.Join(family.SampleMessages, " "))
+
+	switch {
+	case anyContains(text, "access denied", "using password", "mysql auth", "db auth"):
+		return CategoryDBAuth
+	case anyContains(text, "failed password", "brute-force", "break-in", "invalid signature", "jwt signature", "signature verification", "authentication failed"):
+		return CategorySecurity
+	case anyContains(text, "permission denied", "forbidden", "unauthorized"):
+		return CategoryPermission
+	case anyContains(text, "no space left", "disk space", "disk full", "ext4-fs", "i/o error", "io error", "disk_io"):
+		return CategoryDiskIO
+	case anyContains(text, "oomkilled", "out of memory", "heap ", "gc pause", "memory"):
+		return CategoryMemory
+	case anyContains(text, "pool exhausted", "pending threads", "thread pool", "too many connections"):
+		return CategoryThreadExhaustion
+	case anyContains(text, "slow query"):
+		return CategorySlowQuery
+	case anyContains(text, "deadlock", "lock wait", "database lock"):
+		return CategoryDatabase
+	case anyContains(text, "timeout", "timed out", "deadline exceeded"):
+		return CategoryTimeout
+	case anyContains(text, "dns", "nxdomain", "econnrefused", "connection refused", "connection reset", "no route to host", "upstream", "http 503", " returned 503", "circuit breaker"):
+		return CategoryNetwork
+	case anyContains(text, "rate limit", "too many requests", " 429 "):
+		return CategoryRateLimit
+	case anyContains(text, "certificate", "config", "configuration", "feature flag", "launchdarkly"):
+		return CategoryConfig
+	case anyContains(text, "panic", "nil pointer", "exception", "crashloopbackoff", "crashed", "stacktrace"):
+		return CategoryAppBug
+	case anyContains(text, "audit", "role.changed", "user.role", "permission.changed"):
+		return CategoryAudit
+	case isAccessLog(text):
+		return CategoryAccessLog
+	case anyContains(text, "checkout completed", "request completed"):
+		return CategoryApplication
+	default:
+		return CategoryUnknown
+	}
+}
+
+func effectiveFamilyCategory(family ErrorFamily) string {
+	if family.Category != "" && family.Category != CategoryUnknown {
+		return family.Category
+	}
+	return InferFamilyCategory(family)
+}
+
+func categoryText(parts ...string) string {
+	return strings.ToLower(strings.Join(parts, " "))
+}
+
+func anyContains(text string, needles ...string) bool {
+	for _, needle := range needles {
+		if strings.Contains(text, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func isAccessLog(text string) bool {
+	return strings.Contains(text, " get /") ||
+		strings.Contains(text, " post /") ||
+		strings.Contains(text, " put /") ||
+		strings.Contains(text, " delete /") ||
+		strings.Contains(text, " 200 ") ||
+		strings.Contains(text, " 201 ") ||
+		strings.Contains(text, " 204 ")
 }
 
 // --- Fingerprinting ---

@@ -108,6 +108,9 @@ services:
     image: hashicorp/http-echo
     command: ["-text=healthy", "-listen=:9000"]
     restart: unless-stopped
+    # NOTE: hashicorp/http-echo is a scratch image with no shell/wget/nc, so
+    # an exec-based healthcheck is not possible. The healthops `echo-server`
+    # API check covers liveness from outside the container.
 
   demo-api:
     build: ./docker/demo-api

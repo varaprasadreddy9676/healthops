@@ -33,16 +33,16 @@ type MySQLHostStat struct {
 
 // MySQLDigestStat represents a top query from performance_schema.events_statements_summary_by_digest.
 type MySQLDigestStat struct {
-	DigestText    string  `json:"digestText"`
-	CountStar     int64   `json:"countStar"`
-	SumTimerWait  float64 `json:"sumTimerWait"`
-	AvgTimerWait  float64 `json:"avgTimerWait"`
-	SumRowsSent   int64   `json:"sumRowsSent"`
-	SumRowsExam   int64   `json:"sumRowsExam"`
-	SumErrors     int64   `json:"sumErrors"`
-	SumWarnings   int64   `json:"sumWarnings"`
-	FirstSeen     string  `json:"firstSeen"`
-	LastSeen      string  `json:"lastSeen"`
+	DigestText   string  `json:"digestText"`
+	CountStar    int64   `json:"countStar"`
+	SumTimerWait float64 `json:"sumTimerWait"`
+	AvgTimerWait float64 `json:"avgTimerWait"`
+	SumRowsSent  int64   `json:"sumRowsSent"`
+	SumRowsExam  int64   `json:"sumRowsExam"`
+	SumErrors    int64   `json:"sumErrors"`
+	SumWarnings  int64   `json:"sumWarnings"`
+	FirstSeen    string  `json:"firstSeen"`
+	LastSeen     string  `json:"lastSeen"`
 }
 
 // MySQLSampler collects raw MySQL metrics from a database target.
@@ -52,43 +52,43 @@ type MySQLSampler interface {
 
 // MySQLSample holds raw counters and gauges from a single MySQL collection.
 type MySQLSample struct {
-	SampleID             string    `json:"sampleId" bson:"sampleId"`
-	CheckID              string    `json:"checkId" bson:"checkId"`
-	Timestamp            time.Time `json:"timestamp" bson:"timestamp"`
-	Connections          int64     `json:"connections" bson:"connections"`
-	MaxConnections       int64     `json:"maxConnections" bson:"maxConnections"`
-	MaxUsedConnections   int64     `json:"maxUsedConnections" bson:"maxUsedConnections"`
-	ThreadsRunning       int64     `json:"threadsRunning" bson:"threadsRunning"`
-	ThreadsConnected     int64     `json:"threadsConnected" bson:"threadsConnected"`
-	ThreadsCreated       int64     `json:"threadsCreated" bson:"threadsCreated"`
-	AbortedConnects      int64     `json:"abortedConnects" bson:"abortedConnects"`
-	AbortedClients       int64     `json:"abortedClients" bson:"abortedClients"`
-	SlowQueries          int64     `json:"slowQueries" bson:"slowQueries"`
-	Questions            int64     `json:"questions" bson:"questions"`
-	QuestionsPerSec      float64   `json:"questionsPerSec" bson:"questionsPerSec"`
-	UptimeSeconds        int64     `json:"uptimeSeconds" bson:"uptimeSeconds"`
-	InnoDBRowLockWaits   int64     `json:"innodbRowLockWaits" bson:"innodbRowLockWaits"`
-	InnoDBRowLockTime    int64     `json:"innodbRowLockTime" bson:"innodbRowLockTime"`
-	CreatedTmpDiskTables int64     `json:"createdTmpDiskTables" bson:"createdTmpDiskTables"`
-	CreatedTmpTables     int64     `json:"createdTmpTables" bson:"createdTmpTables"`
-	ConnectionsRefused   int64     `json:"connectionsRefused" bson:"connectionsRefused"`
-	SelectScan           int64     `json:"selectScan" bson:"selectScan"`
-	SelectFullJoin       int64     `json:"selectFullJoin" bson:"selectFullJoin"`
-	SortMergePasses      int64     `json:"sortMergePasses" bson:"sortMergePasses"`
-	HandlerReadRndNext   int64     `json:"handlerReadRndNext" bson:"handlerReadRndNext"`
-	BufferPoolReadRequests int64   `json:"bufferPoolReadRequests" bson:"bufferPoolReadRequests"`
-	BufferPoolReads      int64     `json:"bufferPoolReads" bson:"bufferPoolReads"`
-	TableLocksWaited     int64     `json:"tableLocksWaited" bson:"tableLocksWaited"`
-	TableLocksImmediate  int64     `json:"tableLocksImmediate" bson:"tableLocksImmediate"`
-	OpenFiles            int64     `json:"openFiles" bson:"openFiles"`
-	OpenTables           int64     `json:"openTables" bson:"openTables"`
-	OpenedTables         int64     `json:"openedTables" bson:"openedTables"`
-	OpenFilesLimit       int64     `json:"openFilesLimit" bson:"openFilesLimit"`
-	TableOpenCache       int64     `json:"tableOpenCache" bson:"tableOpenCache"`
-	ProcessList          []MySQLProcess    `json:"processList,omitempty" bson:"processList,omitempty"`
-	UserStats            []MySQLUserStat   `json:"userStats,omitempty" bson:"userStats,omitempty"`
-	HostStats            []MySQLHostStat   `json:"hostStats,omitempty" bson:"hostStats,omitempty"`
-	TopQueries           []MySQLDigestStat `json:"topQueries,omitempty" bson:"topQueries,omitempty"`
+	SampleID               string            `json:"sampleId" bson:"sampleId"`
+	CheckID                string            `json:"checkId" bson:"checkId"`
+	Timestamp              time.Time         `json:"timestamp" bson:"timestamp"`
+	Connections            int64             `json:"connections" bson:"connections"`
+	MaxConnections         int64             `json:"maxConnections" bson:"maxConnections"`
+	MaxUsedConnections     int64             `json:"maxUsedConnections" bson:"maxUsedConnections"`
+	ThreadsRunning         int64             `json:"threadsRunning" bson:"threadsRunning"`
+	ThreadsConnected       int64             `json:"threadsConnected" bson:"threadsConnected"`
+	ThreadsCreated         int64             `json:"threadsCreated" bson:"threadsCreated"`
+	AbortedConnects        int64             `json:"abortedConnects" bson:"abortedConnects"`
+	AbortedClients         int64             `json:"abortedClients" bson:"abortedClients"`
+	SlowQueries            int64             `json:"slowQueries" bson:"slowQueries"`
+	Questions              int64             `json:"questions" bson:"questions"`
+	QuestionsPerSec        float64           `json:"questionsPerSec" bson:"questionsPerSec"`
+	UptimeSeconds          int64             `json:"uptimeSeconds" bson:"uptimeSeconds"`
+	InnoDBRowLockWaits     int64             `json:"innodbRowLockWaits" bson:"innodbRowLockWaits"`
+	InnoDBRowLockTime      int64             `json:"innodbRowLockTime" bson:"innodbRowLockTime"`
+	CreatedTmpDiskTables   int64             `json:"createdTmpDiskTables" bson:"createdTmpDiskTables"`
+	CreatedTmpTables       int64             `json:"createdTmpTables" bson:"createdTmpTables"`
+	ConnectionsRefused     int64             `json:"connectionsRefused" bson:"connectionsRefused"`
+	SelectScan             int64             `json:"selectScan" bson:"selectScan"`
+	SelectFullJoin         int64             `json:"selectFullJoin" bson:"selectFullJoin"`
+	SortMergePasses        int64             `json:"sortMergePasses" bson:"sortMergePasses"`
+	HandlerReadRndNext     int64             `json:"handlerReadRndNext" bson:"handlerReadRndNext"`
+	BufferPoolReadRequests int64             `json:"bufferPoolReadRequests" bson:"bufferPoolReadRequests"`
+	BufferPoolReads        int64             `json:"bufferPoolReads" bson:"bufferPoolReads"`
+	TableLocksWaited       int64             `json:"tableLocksWaited" bson:"tableLocksWaited"`
+	TableLocksImmediate    int64             `json:"tableLocksImmediate" bson:"tableLocksImmediate"`
+	OpenFiles              int64             `json:"openFiles" bson:"openFiles"`
+	OpenTables             int64             `json:"openTables" bson:"openTables"`
+	OpenedTables           int64             `json:"openedTables" bson:"openedTables"`
+	OpenFilesLimit         int64             `json:"openFilesLimit" bson:"openFilesLimit"`
+	TableOpenCache         int64             `json:"tableOpenCache" bson:"tableOpenCache"`
+	ProcessList            []MySQLProcess    `json:"processList,omitempty" bson:"processList,omitempty"`
+	UserStats              []MySQLUserStat   `json:"userStats,omitempty" bson:"userStats,omitempty"`
+	HostStats              []MySQLHostStat   `json:"hostStats,omitempty" bson:"hostStats,omitempty"`
+	TopQueries             []MySQLDigestStat `json:"topQueries,omitempty" bson:"topQueries,omitempty"`
 }
 
 // MySQLDelta holds the computed delta between two consecutive samples.

@@ -20,6 +20,7 @@ type CheckScheduler struct {
 	cooldowns map[string]time.Time
 	cancel    context.CancelFunc
 	ctx       context.Context
+	wgMu      sync.Mutex
 	wg        sync.WaitGroup
 	running   bool
 	config    *Config
@@ -92,7 +93,9 @@ func (s *CheckScheduler) Stop() {
 	s.mu.Unlock()
 
 	// Wait for active checks to complete
+	s.wgMu.Lock()
 	s.wg.Wait()
+	s.wgMu.Unlock()
 	s.logger.Printf("scheduler stopped")
 }
 
@@ -201,7 +204,15 @@ func (s *CheckScheduler) scheduleCheck(check CheckConfig) {
 
 // runCheck executes a single check with retry logic.
 func (s *CheckScheduler) runCheck(check CheckConfig) {
+	s.wgMu.Lock()
+	select {
+	case <-s.ctx.Done():
+		s.wgMu.Unlock()
+		return
+	default:
+	}
 	s.wg.Add(1)
+	s.wgMu.Unlock()
 	defer s.wg.Done()
 
 	select {

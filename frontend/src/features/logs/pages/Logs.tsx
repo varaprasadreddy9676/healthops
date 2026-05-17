@@ -14,17 +14,24 @@ import { MetricCard } from "@/shared/components/MetricCard"
 import { useToast } from "@/shared/components/Toast"
 import { cn, relativeTime } from "@/shared/lib/utils"
 import { REFETCH_INTERVAL } from "@/shared/lib/constants"
+import { useAIAvailability } from "@/features/ai/hooks/useAIAvailability"
 
 const CATEGORY_ICONS: Record<string, typeof Bug> = {
     db_auth: Database,
     timeout: Clock,
     thread_exhaustion: Layers,
     slow_query: Database,
+    database: Database,
     network: Wifi,
     app_bug: Bug,
+    application: FileText,
     memory: HardDrive,
     config: Settings,
     permission: Key,
+    security: Key,
+    rate_limit: Clock,
+    access_log: FileText,
+    audit: FileText,
     disk_io: HardDrive,
     unknown: AlertTriangle,
 }
@@ -34,13 +41,19 @@ const CATEGORY_LABELS: Record<string, string> = {
     timeout: 'Timeout',
     thread_exhaustion: 'Thread Exhaustion',
     slow_query: 'Slow Query',
+    database: 'Database',
     network: 'Network',
     app_bug: 'App Bug',
+    application: 'Application',
     memory: 'Memory',
     config: 'Config',
     permission: 'Permission',
+    security: 'Security',
+    rate_limit: 'Rate Limit',
+    access_log: 'Access Log',
+    audit: 'Audit',
     disk_io: 'Disk I/O',
-    unknown: 'Unknown',
+    unknown: 'Unclassified',
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -98,7 +111,7 @@ function SeverityBar({ counts }: { counts: Record<string, number> }) {
     }
 
     return (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <div>
             <h3 className="mb-3 text-xs font-semibold uppercase text-slate-500">Severity Distribution</h3>
             <div className="mb-2 flex h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                 {order.map((sev) => {
@@ -137,9 +150,12 @@ function CategoryChart({ counts, activeFilter, onToggle }: { counts: Record<stri
     const maxCount = sorted[0]?.[1] || 1
 
     return (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-            <h3 className="mb-3 text-xs font-semibold uppercase text-slate-500">By Category</h3>
-            <div className="space-y-2">
+        <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-xs font-semibold uppercase text-slate-500">By Category</h3>
+                <span className="text-[11px] font-medium text-slate-400">Patterns, rule-based</span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                 {sorted.map(([cat, count]) => {
                     const Icon = CATEGORY_ICONS[cat] || AlertTriangle
                     const label = CATEGORY_LABELS[cat] || cat.replace(/_/g, ' ')
@@ -149,6 +165,7 @@ function CategoryChart({ counts, activeFilter, onToggle }: { counts: Record<stri
                         <button
                             key={cat}
                             onClick={() => onToggle(cat)}
+                            title={`${count.toLocaleString()} ${label.toLowerCase()} ${count === 1 ? 'pattern' : 'patterns'}. Click to filter.`}
                             className={cn(
                                 'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors',
                                 isActive ? 'bg-blue-50 ring-1 ring-blue-200 dark:bg-blue-900/20 dark:ring-blue-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
@@ -157,7 +174,7 @@ function CategoryChart({ counts, activeFilter, onToggle }: { counts: Record<stri
                             <Icon className="h-3.5 w-3.5 shrink-0 text-slate-500" />
                             <span className="flex-1 truncate text-xs font-medium text-slate-700 dark:text-slate-300">{label}</span>
                             <div className="flex items-center gap-2">
-                                <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+                                <div className="hidden h-1.5 w-12 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700 sm:block">
                                     <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${pct}%` }} />
                                 </div>
                                 <span className="w-6 text-right text-xs font-medium text-slate-500">{count}</span>
@@ -173,6 +190,7 @@ function CategoryChart({ counts, activeFilter, onToggle }: { counts: Record<stri
 export default function Logs() {
     const queryClient = useQueryClient()
     const toast = useToast()
+    const { isAIAvailable } = useAIAvailability()
     const [statusFilter, setStatusFilter] = useState<string>('')
     const [categoryFilter, setCategoryFilter] = useState<string>('')
     const [severityFilter, setSeverityFilter] = useState<string>('')
@@ -197,10 +215,10 @@ export default function Logs() {
         onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: ['logs'] })
             toast.success(result.categorized > 0
-                ? `Categorized ${result.categorized} log ${result.categorized === 1 ? 'family' : 'families'}`
-                : 'No uncategorized log families found')
+                ? `Categorized ${result.categorized} recurring log ${result.categorized === 1 ? 'pattern' : 'patterns'}`
+                : 'No recurring uncategorized log patterns found')
         },
-        onError: (err: Error) => toast.error(err.message || 'AI categorization failed'),
+        onError: (err: Error) => toast.error(err.message || 'Categorization failed'),
     })
 
     const filteredAndSorted = useMemo(() => {
@@ -259,6 +277,13 @@ export default function Logs() {
 
     const activeFilters = [statusFilter, categoryFilter, severityFilter, searchQuery].filter(Boolean).length
     const clearFilters = () => { setStatusFilter(''); setCategoryFilter(''); setSeverityFilter(''); setSearchQuery('') }
+    const unknownFamilyCount = stats?.categoryCounts?.unknown ?? 0
+    const loadedFamilyCount = families?.length ?? 0
+    const categoryTotal = categoryFilter ? stats?.categoryCounts?.[categoryFilter] : undefined
+    const totalAvailableFamilies = categoryTotal ?? (!statusFilter ? stats?.totalFamilies : statusFilter === 'active' ? stats?.activeFamilies : undefined)
+    const cappedListLabel = totalAvailableFamilies && totalAvailableFamilies > loadedFamilyCount
+        ? ` · first ${loadedFamilyCount} of ${totalAvailableFamilies} ${categoryFilter ? `${CATEGORY_LABELS[categoryFilter] ?? categoryFilter} ` : ''}patterns`
+        : ''
 
     if (isLoading) return <LoadingState />
     if (error) return <ErrorState message={error.message} retry={() => refetch()} />
@@ -268,37 +293,46 @@ export default function Logs() {
             {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Log Intelligence</h1>
+                    <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Log Events</h1>
                     <p className="text-sm text-slate-500">
-                        {stats?.totalFamilies ?? 0} error families &middot; {stats?.activeFamilies ?? 0} active &middot; {stats?.totalEntries ?? 0} total entries
+                        Messages sent to HealthOps through the log ingestion API, grouped by repeated pattern.
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                        Source: <span className="font-mono">POST /api/v1/logs/ingest</span> from apps, agents, or scripts. Health-check probes live under Checks.
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                        {stats?.totalFamilies ?? 0} patterns &middot; {stats?.activeFamilies ?? 0} active &middot; {stats?.totalEntries ?? 0} raw log events
                     </p>
                 </div>
-                <button
-                    onClick={() => categorizeMutation.mutate()}
-                    disabled={categorizeMutation.isPending}
-                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-700 dark:hover:bg-blue-600"
-                >
-                    <Brain className="h-4 w-4" />
-                    {categorizeMutation.isPending ? 'Categorizing...' : 'AI Categorize'}
-                </button>
+                {isAIAvailable && (
+                    <button
+                        onClick={() => categorizeMutation.mutate()}
+                        disabled={categorizeMutation.isPending}
+                        title="Categorize recurring unknown log patterns with the configured AI provider"
+                        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-700 dark:hover:bg-blue-600"
+                    >
+                        <Brain className="h-4 w-4" />
+                        {categorizeMutation.isPending ? 'Categorizing...' : 'AI Categorize'}
+                    </button>
+                )}
             </div>
 
             {/* Stats cards */}
             {stats && (
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                     <MetricCard
-                        label="Error Families"
+                        label="Log Patterns"
                         value={stats.totalFamilies}
                         icon={<BarChart3 className="h-5 w-5" />}
                     />
                     <MetricCard
-                        label="Active Families"
+                        label="Active Patterns"
                         value={stats.activeFamilies}
                         icon={<AlertTriangle className="h-5 w-5" />}
                         className={stats.activeFamilies > 0 ? 'ring-1 ring-red-200 dark:ring-red-900' : ''}
                     />
                     <MetricCard
-                        label="Total Entries"
+                        label="Raw Log Events"
                         value={stats.totalEntries.toLocaleString()}
                         icon={<FileText className="h-5 w-5" />}
                     />
@@ -313,16 +347,25 @@ export default function Logs() {
 
             {/* Severity + Category breakdowns */}
             {stats && (Object.keys(stats.severityCounts).length > 0 || Object.keys(stats.categoryCounts).length > 0) && (
-                <div className="grid gap-4 lg:grid-cols-2">
-                    {Object.keys(stats.severityCounts).length > 0 && (
-                        <SeverityBar counts={stats.severityCounts} />
-                    )}
-                    {Object.keys(stats.categoryCounts).length > 0 && (
-                        <CategoryChart
-                            counts={stats.categoryCounts}
-                            activeFilter={categoryFilter}
-                            onToggle={(cat) => setCategoryFilter(cat === categoryFilter ? '' : cat)}
-                        />
+                <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                    <div className="space-y-5">
+                        {Object.keys(stats.severityCounts).length > 0 && (
+                            <div className={Object.keys(stats.categoryCounts).length > 0 ? 'border-b border-slate-100 pb-4 dark:border-slate-800' : undefined}>
+                                <SeverityBar counts={stats.severityCounts} />
+                            </div>
+                        )}
+                        {Object.keys(stats.categoryCounts).length > 0 && (
+                            <CategoryChart
+                                counts={stats.categoryCounts}
+                                activeFilter={categoryFilter}
+                                onToggle={(cat) => setCategoryFilter(cat === categoryFilter ? '' : cat)}
+                            />
+                        )}
+                    </div>
+                    {isAIAvailable && unknownFamilyCount > 0 && (
+                        <p className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300">
+                            Unclassified means the rule-based classifier could not identify the pattern. Use AI Categorize or open the pattern to review it directly.
+                        </p>
                     )}
                 </div>
             )}
@@ -390,8 +433,9 @@ export default function Logs() {
             {/* Sort controls + results count */}
             <div className="flex items-center justify-between">
                 <p className="text-xs text-slate-500">
-                    {filteredAndSorted.length} {filteredAndSorted.length === 1 ? 'family' : 'families'}
-                    {activeFilters > 0 && ` (filtered from ${families?.length ?? 0})`}
+                    {filteredAndSorted.length} {filteredAndSorted.length === 1 ? 'pattern' : 'patterns'}
+                    {activeFilters > 0 && filteredAndSorted.length !== loadedFamilyCount && ` (filtered from ${loadedFamilyCount} loaded)`}
+                    {cappedListLabel}
                 </p>
                 <div className="flex items-center gap-1">
                     <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
@@ -422,7 +466,7 @@ export default function Logs() {
                 </div>
             </div>
 
-            {/* Families list */}
+            {/* Patterns list */}
             {filteredAndSorted.length > 0 ? (
                 <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
                     <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -482,10 +526,10 @@ export default function Logs() {
             ) : (
                 <EmptyState
                     icon={<FileText className="h-12 w-12 text-slate-300" />}
-                    title={activeFilters > 0 ? 'No matching families' : 'No error families'}
+                    title={activeFilters > 0 ? 'No matching patterns' : 'No log patterns'}
                     description={activeFilters > 0
                         ? 'Try adjusting your filters or search query.'
-                        : 'Ingest logs via POST /api/v1/logs/ingest to start clustering errors automatically.'}
+                        : 'Send log events to POST /api/v1/logs/ingest from apps, agents, or scripts to start grouping repeated messages.'}
                 />
             )}
         </div>

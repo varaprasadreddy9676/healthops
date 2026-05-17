@@ -90,24 +90,38 @@ func toCheckListItems(checks []CheckConfig) []CheckListItem {
 	return items
 }
 
+// sanitizeCheckForResponse returns a CheckConfig with sensitive fields masked for
+// read APIs that expose check configuration.
+func sanitizeCheckForResponse(check CheckConfig) CheckConfig {
+	safe := check
+	safe.Metadata = nil
+	// Mask MySQL password
+	if safe.MySQL != nil && safe.MySQL.Password != "" {
+		cp := *safe.MySQL
+		cp.Password = "********"
+		safe.MySQL = &cp
+	}
+	// Mask SSH password (already masked on server objects, but also mask in checks)
+	if safe.SSH != nil && safe.SSH.Password != "" {
+		cp := *safe.SSH
+		cp.Password = "********"
+		safe.SSH = &cp
+	}
+	// Heartbeat tokens authenticate unauthenticated ping endpoints, so they must
+	// not be exposed by broad read APIs.
+	if safe.Heartbeat != nil && safe.Heartbeat.Token != "" {
+		cp := *safe.Heartbeat
+		cp.Token = maskToken(cp.Token)
+		safe.Heartbeat = &cp
+	}
+	return safe
+}
+
 // sanitizeChecksForList returns full CheckConfig objects with sensitive metadata stripped
 func sanitizeChecksForList(checks []CheckConfig) []CheckConfig {
 	safe := make([]CheckConfig, len(checks))
 	for i := range checks {
-		safe[i] = checks[i]
-		safe[i].Metadata = nil
-		// Mask MySQL password
-		if safe[i].MySQL != nil && safe[i].MySQL.Password != "" {
-			cp := *safe[i].MySQL
-			cp.Password = "********"
-			safe[i].MySQL = &cp
-		}
-		// Mask SSH password (already masked on server objects, but also mask in checks)
-		if safe[i].SSH != nil && safe[i].SSH.Password != "" {
-			cp := *safe[i].SSH
-			cp.Password = "********"
-			safe[i].SSH = &cp
-		}
+		safe[i] = sanitizeCheckForResponse(checks[i])
 	}
 	return safe
 }

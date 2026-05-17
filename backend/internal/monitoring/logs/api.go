@@ -154,13 +154,17 @@ func (h *APIHandler) handleFamilies(w http.ResponseWriter, r *http.Request) {
 	category := r.URL.Query().Get("category")
 	limit := queryInt(r, "limit", 50)
 
-	families, err := h.repo.ListFamilies(status, limit)
+	// Apply category before limit so category chips and filtered lists agree.
+	fetchLimit := limit
+	if category != "" {
+		fetchLimit = 0
+	}
+	families, err := h.repo.ListFamilies(status, fetchLimit)
 	if err != nil {
 		monitoring.WriteAPIError(w, http.StatusInternalServerError, err)
 		return
 	}
 
-	// Filter by category if requested
 	if category != "" {
 		var filtered []ErrorFamily
 		for _, f := range families {
@@ -169,6 +173,9 @@ func (h *APIHandler) handleFamilies(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		families = filtered
+		if limit > 0 && len(families) > limit {
+			families = families[:limit]
+		}
 	}
 
 	if families == nil {
@@ -179,8 +186,15 @@ func (h *APIHandler) handleFamilies(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/v1/logs/families/{id}
 // PATCH /api/v1/logs/families/{id} — update status/category
+// POST /api/v1/logs/families/{id}/categorize — AI-categorize one family
 func (h *APIHandler) handleFamilyDetail(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/logs/families/")
+	categorizeOne := false
+	if strings.HasSuffix(id, "/categorize") {
+		categorizeOne = true
+		id = strings.TrimSuffix(id, "/categorize")
+		id = strings.TrimSuffix(id, "/")
+	}
 	if id == "" {
 		monitoring.WriteAPIError(w, http.StatusBadRequest, fmt.Errorf("missing family ID"))
 		return
@@ -193,10 +207,12 @@ func (h *APIHandler) handleFamilyDetail(w http.ResponseWriter, r *http.Request) 
 			monitoring.WriteAPIError(w, http.StatusNotFound, err)
 			return
 		}
+		familyCopy := *family
+		familyCopy.Category = effectiveFamilyCategory(familyCopy)
 		// Also include recent entries
 		entries, _ := h.repo.EntriesByFamily(id, 20)
 		monitoring.WriteAPIResponse(w, http.StatusOK, monitoring.NewAPIResponse(map[string]interface{}{
-			"family":  family,
+			"family":  familyCopy,
 			"entries": entries,
 		}))
 
@@ -227,6 +243,26 @@ func (h *APIHandler) handleFamilyDetail(w http.ResponseWriter, r *http.Request) 
 		}
 		if err := h.repo.UpdateFamily(*family); err != nil {
 			monitoring.WriteAPIError(w, http.StatusInternalServerError, err)
+			return
+		}
+		monitoring.WriteAPIResponse(w, http.StatusOK, monitoring.NewAPIResponse(family))
+
+	case http.MethodPost:
+		if !categorizeOne {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if h.categorizer == nil {
+			monitoring.WriteAPIError(w, http.StatusServiceUnavailable, fmt.Errorf("AI categorization not available"))
+			return
+		}
+		if err := h.categorizer.CategorizeFamily(r.Context(), id); err != nil {
+			monitoring.WriteAPIError(w, http.StatusInternalServerError, err)
+			return
+		}
+		family, err := h.repo.GetFamily(id)
+		if err != nil {
+			monitoring.WriteAPIError(w, http.StatusNotFound, err)
 			return
 		}
 		monitoring.WriteAPIResponse(w, http.StatusOK, monitoring.NewAPIResponse(family))

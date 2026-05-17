@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -46,7 +47,25 @@ type Service struct {
 	serverRepo           ServerRepository
 	degradedMode         *DegradedMode
 	mongoHealthCheck     func(ctx context.Context) error // Phase 0: if set, /healthz pings MongoDB
+	heartbeatAPI         *HeartbeatAPIHandler
+	maintenanceStore     *MaintenanceStore
+	maintenanceAPI       *MaintenanceAPIHandler
+	dashboardStore       *CustomDashboardStore
+	dashboardAPI         *CustomDashboardAPIHandler
+	statusPageStore      *StatusPageStore
+	statusPageAPI        *StatusPageAPIHandler
+	chatStore            *ChatStore
+	chatAPI              *AIChatHandler
+	consecutiveTracker   map[string]*consecutiveCount // checkID → consecutive failure/success counts
+	consecutiveMu        sync.Mutex                   // guards consecutiveTracker (scheduler may invoke callback from multiple goroutines)
 	// alertRuleRepo     repositories.AlertRuleRepository // TODO: uncomment when needed
+}
+
+// consecutiveCount tracks consecutive failures and successes for a check
+// to support failuresToOpen / successesToResolve thresholds.
+type consecutiveCount struct {
+	failures  int
+	successes int
 }
 
 func NewService(cfg *Config, store Store, logger *log.Logger) *Service {
@@ -60,12 +79,13 @@ func NewService(cfg *Config, store Store, logger *log.Logger) *Service {
 	runner.SetMetricsCollector(metrics)
 
 	svc := &Service{
-		cfg:       cfg,
-		store:     store,
-		runner:    runner,
-		scheduler: NewCheckScheduler(cfg, store, runner, logger),
-		metrics:   metrics,
-		logger:    logger,
+		cfg:                cfg,
+		store:              store,
+		runner:             runner,
+		scheduler:          NewCheckScheduler(cfg, store, runner, logger),
+		metrics:            metrics,
+		logger:             logger,
+		consecutiveTracker: make(map[string]*consecutiveCount),
 	}
 
 	// Initialize degraded mode if store supports MongoDB health checks
@@ -101,58 +121,143 @@ func NewService(cfg *Config, store Store, logger *log.Logger) *Service {
 
 	// Set up alert callback for scheduler
 	svc.scheduler.SetAlertCallback(func(results []CheckResult) {
-		if svc.alertEngine != nil {
-			alerts := svc.alertEngine.Evaluate(results)
-			if len(alerts) > 0 {
-				if svc.logger != nil {
-					svc.logger.Printf("alert evaluation: %d alerts triggered", len(alerts))
-				}
-
-				// Process alerts through incident manager if configured
-				if svc.incidentManager != nil {
-					// Build a lookup from checkID → result for metadata
-					resultMap := make(map[string]CheckResult, len(results))
-					for _, r := range results {
-						resultMap[r.CheckID] = r
-					}
-
-					for _, alert := range alerts {
-						metadata := map[string]string{
-							"ruleId":   alert.RuleID,
-							"ruleName": alert.RuleName,
-							"message":  alert.Message,
-						}
-						checkType := ""
-						if r, ok := resultMap[alert.CheckID]; ok {
-							checkType = r.Type
-							if r.Server != "" {
-								metadata["server"] = r.Server
-							}
-						}
-						_ = svc.incidentManager.ProcessAlert(
-							alert.CheckID,
-							alert.CheckName,
-							checkType,
-							alert.Severity,
-							alert.Message,
-							metadata,
-						)
-					}
-				}
-			}
-
-			// Auto-resolve incidents for checks that recovered
-			if svc.incidentManager != nil {
-				for _, result := range results {
-					if result.Healthy {
-						_ = svc.incidentManager.AutoResolveOnRecovery(result.CheckID)
-					}
-				}
-			}
-		}
+		svc.handleAlertResults(results)
 	})
 
 	return svc
+}
+
+func (s *Service) handleAlertResults(results []CheckResult) {
+	if s.alertEngine == nil || len(results) == 0 {
+		return
+	}
+
+	state := s.store.Snapshot()
+	checkMap := make(map[string]CheckConfig, len(state.Checks))
+	for _, c := range state.Checks {
+		checkMap[c.ID] = c
+	}
+	resultMap := make(map[string]CheckResult, len(results))
+	for _, r := range results {
+		resultMap[r.CheckID] = r
+	}
+
+	s.updateConsecutiveTrackers(results)
+
+	alerts := s.alertEngine.Evaluate(results)
+	if len(alerts) > 0 && s.logger != nil {
+		s.logger.Printf("alert evaluation: %d alerts triggered", len(alerts))
+	}
+
+	if s.incidentManager == nil {
+		return
+	}
+
+	incidentAlerts := s.alertEngine.EvaluateForIncidents(results)
+	s.processIncidentAlerts(incidentAlerts, checkMap, resultMap)
+	s.autoResolveRecovered(results, checkMap)
+}
+
+func (s *Service) updateConsecutiveTrackers(results []CheckResult) {
+	// The scheduler invokes alert callbacks from per-check timer goroutines, so
+	// consecutiveTracker must be guarded. Track raw run health rather than alert
+	// emissions so notification cooldown cannot hide repeated failures.
+	s.consecutiveMu.Lock()
+	defer s.consecutiveMu.Unlock()
+	for _, result := range results {
+		cc := s.consecutiveTracker[result.CheckID]
+		if cc == nil {
+			cc = &consecutiveCount{}
+			s.consecutiveTracker[result.CheckID] = cc
+		}
+		if result.Healthy {
+			cc.successes++
+			cc.failures = 0
+		} else {
+			cc.failures++
+			cc.successes = 0
+		}
+	}
+}
+
+func (s *Service) processIncidentAlerts(alerts []Alert, checkMap map[string]CheckConfig, resultMap map[string]CheckResult) {
+	for _, alert := range alerts {
+		// Skip alerting if check is in a maintenance window.
+		if s.maintenanceStore != nil {
+			if cc, ok := checkMap[alert.CheckID]; ok && s.maintenanceStore.IsCheckInMaintenance(cc) {
+				continue
+			}
+		}
+
+		// Enforce failuresToOpen for failed health-check runs. Alert rules that
+		// intentionally fire on healthy results (for example latency-only rules)
+		// should not be permanently blocked by a failure counter.
+		if cc, ok := checkMap[alert.CheckID]; ok {
+			if result, hasResult := resultMap[alert.CheckID]; hasResult && !result.Healthy {
+				threshold := cc.FailuresToOpen
+				if threshold <= 0 {
+					threshold = 1
+				}
+				if s.consecutiveFailures(alert.CheckID) < threshold {
+					continue
+				}
+			}
+		}
+
+		metadata := map[string]string{
+			"ruleId":   alert.RuleID,
+			"ruleName": alert.RuleName,
+			"message":  alert.Message,
+		}
+		checkType := ""
+		if r, ok := resultMap[alert.CheckID]; ok {
+			checkType = r.Type
+			if r.Server != "" {
+				metadata["server"] = r.Server
+			}
+		}
+		_ = s.incidentManager.ProcessAlert(
+			alert.CheckID,
+			alert.CheckName,
+			checkType,
+			alert.Severity,
+			alert.Message,
+			metadata,
+		)
+	}
+}
+
+func (s *Service) autoResolveRecovered(results []CheckResult, checkMap map[string]CheckConfig) {
+	for _, result := range results {
+		if !result.Healthy {
+			continue
+		}
+		threshold := 1
+		if cc, ok := checkMap[result.CheckID]; ok && cc.SuccessesToResolve > 0 {
+			threshold = cc.SuccessesToResolve
+		}
+		if s.consecutiveSuccesses(result.CheckID) >= threshold {
+			_ = s.incidentManager.AutoResolveOnRecovery(result.CheckID)
+		}
+	}
+}
+
+func (s *Service) consecutiveFailures(checkID string) int {
+	s.consecutiveMu.Lock()
+	defer s.consecutiveMu.Unlock()
+	if tracker := s.consecutiveTracker[checkID]; tracker != nil {
+		return tracker.failures
+	}
+	return 0
+}
+
+func (s *Service) consecutiveSuccesses(checkID string) int {
+	s.consecutiveMu.Lock()
+	defer s.consecutiveMu.Unlock()
+	if tracker := s.consecutiveTracker[checkID]; tracker != nil {
+		return tracker.successes
+	}
+	return 0
 }
 
 // SetIncidentManager sets the incident manager for the service
@@ -221,6 +326,52 @@ func (s *Service) SetRecommendationRoutes(r RouteRegistrar) {
 // SetAutomationRoutes sets the assisted automation route registrar.
 func (s *Service) SetAutomationRoutes(r RouteRegistrar) {
 	s.automationRoutes = r
+}
+
+// SetHeartbeatAPI sets the heartbeat API handler for unauthenticated ping endpoints.
+func (s *Service) SetHeartbeatAPI(h *HeartbeatAPIHandler) {
+	s.heartbeatAPI = h
+}
+
+// SetMaintenanceStore sets the maintenance window store and creates the API handler.
+func (s *Service) SetMaintenanceStore(store *MaintenanceStore) {
+	s.maintenanceStore = store
+	s.maintenanceAPI = NewMaintenanceAPIHandler(store)
+}
+
+// MaintenanceStore returns the maintenance store for external use (e.g. runner).
+func (s *Service) MaintenanceStore() *MaintenanceStore {
+	return s.maintenanceStore
+}
+
+// SetCustomDashboardStore sets the custom dashboard store and creates its API handler.
+func (s *Service) SetCustomDashboardStore(store *CustomDashboardStore) {
+	s.dashboardStore = store
+	var incRepo IncidentRepository
+	if s.incidentManager != nil {
+		incRepo = s.incidentManager.repo
+	}
+	s.dashboardAPI = NewCustomDashboardAPIHandler(store, s.store, incRepo)
+}
+
+// SetStatusPageStore sets the status page store and creates its API handler.
+func (s *Service) SetStatusPageStore(store *StatusPageStore) {
+	s.statusPageStore = store
+	var incRepo IncidentRepository
+	if s.incidentManager != nil {
+		incRepo = s.incidentManager.repo
+	}
+	s.statusPageAPI = NewStatusPageAPIHandler(store, s.store, incRepo, s.maintenanceStore)
+}
+
+// SetAIChatStore sets the AI chat store and creates its API handler.
+func (s *Service) SetAIChatStore(store *ChatStore, aiProvider ChatProvider) {
+	s.chatStore = store
+	var incRepo IncidentRepository
+	if s.incidentManager != nil {
+		incRepo = s.incidentManager.repo
+	}
+	s.chatAPI = NewAIChatHandler(store, s.store, incRepo, aiProvider)
 }
 
 // SetSnapshotRepo sets the incident snapshot repository for the service.
@@ -373,6 +524,31 @@ func (s *Service) Run(ctx context.Context) error {
 	// Register automation routes if handler is configured
 	if s.automationRoutes != nil {
 		s.automationRoutes.RegisterRoutes(mux)
+	}
+
+	// Register heartbeat ping endpoints (unauthenticated — cron jobs call them)
+	if s.heartbeatAPI != nil {
+		s.heartbeatAPI.RegisterRoutes(mux)
+	}
+
+	// Register maintenance window CRUD endpoints
+	if s.maintenanceAPI != nil {
+		s.maintenanceAPI.RegisterRoutes(mux)
+	}
+
+	// Register custom dashboard endpoints
+	if s.dashboardAPI != nil {
+		s.dashboardAPI.RegisterRoutes(mux)
+	}
+
+	// Register status page endpoints
+	if s.statusPageAPI != nil {
+		s.statusPageAPI.RegisterRoutes(mux)
+	}
+
+	// Register AI chat endpoints
+	if s.chatAPI != nil {
+		s.chatAPI.RegisterRoutes(mux)
 	}
 
 	// Add Prometheus metrics endpoint
@@ -568,19 +744,19 @@ func (s *Service) handleCheckByID(w http.ResponseWriter, r *http.Request) {
 		}
 		// Verify the check exists before updating
 		state := s.store.Snapshot()
-		exists := false
+		var existing CheckConfig
 		for _, c := range state.Checks {
 			if c.ID == id {
-				exists = true
+				existing = c
 				break
 			}
 		}
-		if !exists {
+		if existing.ID == "" {
 			WriteAPIError(w, http.StatusNotFound, fmt.Errorf("check not found"))
 			return
 		}
-		var check CheckConfig
-		if err := json.NewDecoder(r.Body).Decode(&check); err != nil {
+		check, err := decodeCheckUpdate(r.Body, existing)
+		if err != nil {
 			WriteAPIError(w, http.StatusBadRequest, err)
 			return
 		}
@@ -642,6 +818,75 @@ func (s *Service) handleCheckByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func decodeCheckUpdate(body io.Reader, existing CheckConfig) (CheckConfig, error) {
+	data, err := io.ReadAll(io.LimitReader(body, 1<<20))
+	if err != nil {
+		return CheckConfig{}, err
+	}
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return CheckConfig{}, fmt.Errorf("request body is required")
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return CheckConfig{}, err
+	}
+
+	check := existing
+	appliers := []func() error{
+		func() error { return applyJSONField(fields, "name", &check.Name) },
+		func() error { return applyJSONField(fields, "type", &check.Type) },
+		func() error { return applyJSONField(fields, "server", &check.Server) },
+		func() error { return applyJSONField(fields, "application", &check.Application) },
+		func() error { return applyJSONField(fields, "target", &check.Target) },
+		func() error { return applyJSONField(fields, "host", &check.Host) },
+		func() error { return applyJSONField(fields, "port", &check.Port) },
+		func() error { return applyJSONField(fields, "command", &check.Command) },
+		func() error { return applyJSONField(fields, "path", &check.Path) },
+		func() error { return applyJSONField(fields, "expectedStatus", &check.ExpectedStatus) },
+		func() error { return applyJSONField(fields, "expectedContains", &check.ExpectedContains) },
+		func() error { return applyJSONField(fields, "timeoutSeconds", &check.TimeoutSeconds) },
+		func() error { return applyJSONField(fields, "warningThresholdMs", &check.WarningThresholdMs) },
+		func() error { return applyJSONField(fields, "freshnessSeconds", &check.FreshnessSeconds) },
+		func() error { return applyJSONField(fields, "intervalSeconds", &check.IntervalSeconds) },
+		func() error { return applyJSONField(fields, "retryCount", &check.RetryCount) },
+		func() error { return applyJSONField(fields, "retryDelaySeconds", &check.RetryDelaySeconds) },
+		func() error { return applyJSONField(fields, "cooldownSeconds", &check.CooldownSeconds) },
+		func() error { return applyJSONField(fields, "enabled", &check.Enabled) },
+		func() error { return applyJSONField(fields, "tags", &check.Tags) },
+		func() error { return applyJSONField(fields, "metadata", &check.Metadata) },
+		func() error { return applyJSONField(fields, "serverId", &check.ServerId) },
+		func() error { return applyJSONField(fields, "notificationChannelIds", &check.NotificationChannelIDs) },
+		func() error { return applyJSONField(fields, "mysql", &check.MySQL) },
+		func() error { return applyJSONField(fields, "ssh", &check.SSH) },
+		func() error { return applyJSONField(fields, "ssl", &check.SSL) },
+		func() error { return applyJSONField(fields, "dns", &check.DNS) },
+		func() error { return applyJSONField(fields, "ping", &check.Ping) },
+		func() error { return applyJSONField(fields, "domain", &check.Domain) },
+		func() error { return applyJSONField(fields, "heartbeat", &check.Heartbeat) },
+		func() error { return applyJSONField(fields, "failuresToOpen", &check.FailuresToOpen) },
+		func() error { return applyJSONField(fields, "successesToResolve", &check.SuccessesToResolve) },
+	}
+	for _, apply := range appliers {
+		if err := apply(); err != nil {
+			return CheckConfig{}, err
+		}
+	}
+	check.ID = existing.ID
+	return check, nil
+}
+
+func applyJSONField[T any](fields map[string]json.RawMessage, key string, dst *T) error {
+	raw, ok := fields[key]
+	if !ok {
+		return nil
+	}
+	if err := json.Unmarshal(raw, dst); err != nil {
+		return fmt.Errorf("%s: %w", key, err)
+	}
+	return nil
+}
+
 func (s *Service) handleRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -685,29 +930,7 @@ func (s *Service) handleRun(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Evaluate alert rules
-		if s.alertEngine != nil {
-			alerts := s.alertEngine.Evaluate([]CheckResult{result})
-			s.logger.Printf("single check run: %d alerts triggered", len(alerts))
-
-			if s.incidentManager != nil && len(alerts) > 0 {
-				for _, alert := range alerts {
-					metadata := map[string]string{
-						"ruleId":   alert.RuleID,
-						"ruleName": alert.RuleName,
-						"message":  alert.Message,
-					}
-					_ = s.incidentManager.ProcessAlert(
-						alert.CheckID,
-						alert.CheckName,
-						check.Type,
-						alert.Severity,
-						alert.Message,
-						metadata,
-					)
-				}
-			}
-		}
+		s.handleAlertResults([]CheckResult{result})
 
 		WriteAPIResponse(w, http.StatusAccepted, NewAPIResponse(result))
 		return
@@ -720,30 +943,7 @@ func (s *Service) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Evaluate alert rules against check results
-	if s.alertEngine != nil && len(summary.Results) > 0 {
-		alerts := s.alertEngine.Evaluate(summary.Results)
-		s.logger.Printf("alert evaluation: %d alerts triggered", len(alerts))
-
-		// Process alerts through incident manager if configured
-		if s.incidentManager != nil {
-			for _, alert := range alerts {
-				metadata := map[string]string{
-					"ruleId":   alert.RuleID,
-					"ruleName": alert.RuleName,
-					"message":  alert.Message,
-				}
-				_ = s.incidentManager.ProcessAlert(
-					alert.CheckID,
-					alert.CheckName,
-					"", // type not available in alert
-					alert.Severity,
-					alert.Message,
-					metadata,
-				)
-			}
-		}
-	}
+	s.handleAlertResults(summary.Results)
 
 	WriteAPIResponse(w, http.StatusAccepted, NewAPIResponse(summary))
 }

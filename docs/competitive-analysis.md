@@ -1,338 +1,426 @@
-# HealthOps Competitive Analysis & Feature Gap Brainstorm
+# HealthOps Competitive Analysis & Practical Roadmap
 
-> **Purpose:** Comprehensive comparison of HealthOps against 10 major monitoring/incident tools.
-> Use this to decide what to build next.
+> Purpose: decide what to build next, based on what would make HealthOps more useful in real operations.
 >
-> **Last updated:** 2026-05-17
-> **Tools analyzed:** BetterStack, UptimeRobot, Pingdom, PagerDuty, OpsGenie, Grafana Cloud,
-> Datadog, New Relic, Statuspage (Atlassian), Cronitor, Healthchecks.io, Site24x7, Zabbix
+> Last verified: 2026-05-17
+>
+> Scope: uptime monitoring, cron/heartbeat monitoring, status pages, incident response, self-hosted monitoring, and lightweight observability.
 
 ---
 
-## What HealthOps Already Has (Baseline)
+## Executive Takeaways
 
-Before the gaps — what we already do well:
+HealthOps should not try to become Datadog, New Relic, Grafana Cloud, or a full APM suite. That market is expensive because it includes logs, traces, RUM, profiling, security, cloud inventory, and huge ingestion pipelines. HealthOps wins by being smaller, cheaper, private, fast to operate, and useful during the first 15 minutes of an incident.
 
-| Capability | Details |
-|-----------|---------|
-| **HTTP/API checks** | Status code, response body substring, latency threshold |
-| **TCP port checks** | Connectivity + latency |
-| **Process checks** | `ps`-based process existence matching |
-| **Command checks** | Shell command with exit code + output validation |
-| **Log file freshness** | File mtime within threshold |
-| **MySQL deep monitoring** | `SHOW GLOBAL STATUS/VARIABLES`, 15+ metrics, 9 alert rules, deltas, slow query rate, lock waits, InnoDB buffer hit rate |
-| **SSH server metrics** | CPU, memory, disk, network via SSH — unique vs all competitors |
-| **AI-powered RCA** | BYOK: OpenAI, Anthropic, Gemini, Ollama, custom OpenAI-compatible |
-| **Log AI categorization** | Auto-labels error families: db_auth, timeout, thread_exhaustion, etc. |
-| **Incident lifecycle** | Create → Acknowledge → Resolve with full audit trail |
-| **Alert rule engine** | Threshold + operator + cooldown, fully configurable |
-| **Notification channels** | Slack, Email, Telegram, PagerDuty, Discord, Webhook |
-| **Automation engine** | Propose + approve/reject remediation actions |
-| **Prometheus metrics** | `/metrics` endpoint, Grafana-compatible |
-| **SSE real-time events** | Live dashboard updates |
-| **Hybrid storage** | Local JSON + optional MongoDB mirror |
-| **Self-hosted / open source** | No data leaves your infra, $6/mo vs $300–500/mo SaaS |
+The practical wedge is:
 
-**HealthOps' unique advantages over all competitors:**
-- Only tool with SSH server health checks (CPU/mem/disk via SSH, no agent install)
-- Only tool with BYOK AI across 5 providers including local Ollama
-- Only self-hosted tool with full incident AI RCA out of the box
-- Runs on a $6/month VPS — competitors charge $300–500/month for equivalent features
+1. Replace the small-team stack: UptimeRobot + Healthchecks/Cronitor + basic Statuspage + basic PagerDuty/Opsgenie.
+2. Stay self-hosted and predictable: no per-host, per-seat, per-GB, or per-incident surprise.
+3. Make RCA useful: collect local evidence from HTTP, MySQL, SSH, command checks, logs, and feed it into BYOK/local AI.
+4. Be honest about the market: AI RCA and SSH checks both exist elsewhere. HealthOps' differentiator is the combination of local/BYOK AI, agentless SSH/MySQL context, simple deployment, and low cost.
+5. Build the boring missing features first. SSL expiry, domain expiry, heartbeat, DNS, ping, maintenance windows, flapping control, and status pages will change adoption more than advanced ML or dashboards.
+
+The strongest short-term roadmap is:
+
+1. Monitoring completeness: SSL, domain expiry, heartbeat, DNS, ping.
+2. Alert trust: maintenance windows, consecutive failure threshold, recovery confirmation, flapping suppression.
+3. Customer communication: public status page, component mapping, incident history, uptime calendar, status badge.
+4. Team adoption: multi-user/RBAC, TOTP, API tokens, escalation policies, Slack/Teams ack.
+5. HealthOps-specific leverage: AI postmortems, evidence-rich runbooks, approved remediation execution, importers from UptimeRobot/Healthchecks/Opsgenie.
 
 ---
 
-## Gap Analysis by Category
+## Current HealthOps Baseline
+
+| Capability | Current strength |
+|---|---|
+| HTTP/API checks | Status code, response body substring, latency threshold |
+| TCP checks | Connectivity and latency |
+| Process checks | `ps`-based process existence matching |
+| Command checks | Shell command execution with exit code and output validation |
+| Log file freshness | File mtime freshness checks |
+| MySQL monitoring | Deep MySQL status/variable collection, deltas, slow query rate, lock waits, buffer hit rate, alert rules |
+| SSH server monitoring | Agentless CPU, memory, disk, load, process, network, and disk I/O collection over SSH |
+| Incident lifecycle | Open, acknowledge, resolve, evidence snapshots, audit trail |
+| AI RCA | BYOK providers: OpenAI, Anthropic, Gemini, Ollama, custom OpenAI-compatible endpoints |
+| Notification channels | Slack, email, Telegram, PagerDuty, Discord, webhook |
+| Automation engine | Propose and approve/reject remediation actions |
+| Metrics/export | Prometheus `/metrics`, analytics, CSV/JSON export |
+| Deployment | Self-hosted, low-cost VPS, open source |
+
+Important positioning correction:
+
+| Old claim to avoid | Better claim |
+|---|---|
+| "Only tool with SSH server checks" | "Modern self-hosted tool combining agentless SSH server checks with incident evidence and BYOK/local AI." Zabbix has agentless SSH checks. |
+| "Only tool with AI RCA" | "AI RCA without SaaS lock-in: BYOK, local Ollama, and incident evidence from private infrastructure." Better Stack, Checkly, Datadog, New Relic, PagerDuty, Rootly, and incident.io all have AI incident features. |
+| "Replaces Datadog" | "Replaces the small-team uptime, heartbeat, status page, and basic on-call stack; can complement Datadog/Grafana for teams that do not need full APM." |
 
 ---
 
-### 1. Check Types
+## Verified Competitor Snapshot
 
-#### What competitors support that we don't
+Pricing and packaging change often. These notes were checked from official pages on 2026-05-17.
 
-| Check Type | Who Has It | Priority | Effort | Notes |
-|-----------|-----------|:--------:|:------:|-------|
-| **SSL certificate expiry** | UptimeRobot, BetterStack, Pingdom, Site24x7 | 🔴 HIGH | XS | TLS handshake → parse cert NotAfter. Alert at 30/14/7 days. ~100 lines |
-| **Domain expiration** | UptimeRobot, BetterStack, Site24x7 | 🔴 HIGH | S | WHOIS lookup → parse expiry date. Teams forget this constantly. ~150 lines |
-| **Ping / ICMP** | UptimeRobot, Site24x7, Zabbix | 🔴 HIGH | XS | `exec ping -c 1`. Checks basic reachability before TCP/HTTP. ~50 lines |
-| **DNS record monitoring** | UptimeRobot, Site24x7 | 🟡 MEDIUM | S | `net.LookupHost`, compare expected vs actual. Catch DNS hijacking/misconfiguration. ~100 lines |
-| **Cron job / heartbeat** | UptimeRobot, Cronitor, Healthchecks.io | 🔴 HIGH | S | Accept POST/GET ping; alert when expected ping not received. Replaces Cronitor ($25/mo). ~200 lines |
-| **Keyword / text detection** | UptimeRobot, BetterStack, Site24x7 | 🟡 MEDIUM | XS | Already partial (api type has `responseContains`). Extend to all check types, add "must NOT contain" variant |
-| **SMTP / POP3 / IMAP** | UptimeRobot, BetterStack, Site24x7 | 🟡 MEDIUM | S | TCP connect + banner greeting check. Verifies mail server is accepting connections |
-| **FTP / SFTP** | Site24x7 | 🟢 LOW | S | Niche — only needed for legacy infra |
-| **Browser transaction (Playwright)** | BetterStack, Pingdom, Site24x7 | 🟢 LOW | XL | Full browser flow: login, checkout, etc. Huge effort, requires headless Chrome |
-| **SNMP** | Zabbix, Site24x7 | 🟢 LOW | L | Network device monitoring. Niche for enterprise |
-| **Redis health** | — | 🟡 MEDIUM | S | Mirror of MySQL monitoring pattern. PING + INFO command + key metrics. Would be unique |
-| **PostgreSQL deep monitoring** | — | 🟡 MEDIUM | M | Like MySQL monitoring but PostgreSQL: `pg_stat_*` tables, replication lag, lock waits |
-| **MongoDB monitoring** | — | 🟡 MEDIUM | S | `serverStatus`, replication state, connection pool, ops/sec |
-| **Docker container health** | — | 🟡 MEDIUM | S | Query Docker socket or daemon API: container state, restart count, OOM events |
-| **Kubernetes pod health** | Datadog, Grafana | 🟢 LOW | L | CrashLoopBackOff detection, pod restart rate, deployment readiness |
-
-**Highest bang-for-buck additions:** SSL cert, domain expiry, ping, heartbeat/cron. These four alone would let HealthOps fully replace UptimeRobot and Cronitor.
-
----
-
-### 2. Alerting & On-Call
-
-| Feature | Who Has It | Priority | Effort | Notes |
-|--------|-----------|:--------:|:------:|-------|
-| **Maintenance windows** | All major tools | 🔴 HIGH | S | Suppress alerts during planned downtime. Date/time range + recurring (every Sunday 2–4am). Don't affect uptime stats. Absolutely essential. |
-| **Flapping / dedup protection** | Zabbix, PagerDuty, Grafana | 🔴 HIGH | S | If check goes down then up within 2 min, don't alert. Configurable consecutive-failure threshold before firing. Eliminates transient noise. |
-| **Escalation policies** | PagerDuty, OpsGenie, BetterStack | 🔴 HIGH | M | If incident not acked in N minutes → notify next channel/person in chain. "Alert Slack, if no ack in 5 min → SMS, if no ack in 15 min → phone call" |
-| **On-call rotation schedules** | PagerDuty, OpsGenie, BetterStack | 🟡 MEDIUM | M | Define weekly/daily rotations. Who's on-call right now. Override management. Replaces OpsGenie at $9/user/month |
-| **Multi-location checks** | UptimeRobot, BetterStack, Site24x7 | 🟡 MEDIUM | L | Run same check from multiple IPs/regions. Only alert if majority fail (eliminates regional false positives). Hard when self-hosted but doable with distributed agents |
-| **Alert grouping / smart merge** | PagerDuty, BetterStack | 🟡 MEDIUM | M | If 10 checks fail simultaneously → one incident, not 10 alerts. Group by server/application tag |
-| **Runbooks attached to alerts** | PagerDuty, OpsGenie | 🟡 MEDIUM | S | Markdown runbook field on CheckConfig. Included in alert message. "When this fires, do X → Y → Z" |
-| **Anomaly detection** | Datadog, New Relic, Zabbix | 🟢 LOW | L | Statistical baseline + alert on deviation. Complex ML model. Better to use AI provider for this |
-| **Two-way Slack acknowledgement** | PagerDuty, BetterStack | 🟡 MEDIUM | M | Reply `:ack` in Slack thread → incident acknowledged in HealthOps. Slash command to resolve. Game-changer for ops teams |
-| **Alert silencing / snooze** | PagerDuty, Grafana | 🟡 MEDIUM | S | Snooze a specific check's alerts for 1h/4h/24h without a full maintenance window |
+| Competitor | What matters | Practical implication for HealthOps |
+|---|---|---|
+| UptimeRobot | Free plan has 5-minute interval and basic status pages. Paid plans add 60-second checks, API/UDP/multi-location/slow-response/DNS monitoring, SSL/domain expiry, heartbeat monitoring, and fuller status pages. Team plan currently shows 100 monitors and around $29-38/month depending billing. [Source](https://uptimerobot.com/pricing/) | HealthOps needs SSL, domain, heartbeat, DNS, ping, and status page before it can honestly replace UptimeRobot for a team. |
+| Better Stack | Free includes 10 monitors/heartbeats and 1 status page. Responder is about $29 annual or $34 monthly per responder. Includes on-call, unlimited phone/SMS alerts, smart incident merging, AI postmortems, maintenance windows, SSL, TLD expiry, DNS, status pages, and heartbeats. [Source](https://betterstack.com/pricing) | Do not try to beat Better Stack feature-for-feature. Win with self-hosting, privacy, local/BYOK AI, agentless SSH/MySQL evidence, and no per-responder billing. |
+| Healthchecks.io | Focused heartbeat monitoring. Business is $20/month for 100 jobs or $16/month annually; Business Plus is $80/month for 1000 jobs or $64/month annually. [Source](https://healthchecks.io/pricing/) | A good heartbeat MVP can replace this quickly. This is one of the highest ROI features. |
+| Cronitor | Free includes 5 monitors. Business is usage based: $2/month per monitor plus $5/month per user, with cron, heartbeat, website/API monitoring, automatic reports, and integrations. [Source](https://cronitor.io/pricing) | Heartbeat plus simple job logs and failure reasons is enough for many teams. |
+| Atlassian Statuspage | Public pages: Free, Hobby $29/month, Startup $99/month, Business $399/month, Enterprise $1,499/month. Private pages start at $79/month. Audience-specific pages start at $300/month. [Source](https://www.atlassian.com/software/statuspage) | A basic public status page is valuable immediately. Subscribers, private pages, and audience-specific pages can wait. |
+| PagerDuty | Free up to 5 users. Professional is $21/user/month annual or $25 monthly. Business is $41/user/month annual or $49 monthly. PagerDuty Advance AI starts at $415/month; AIOps starts at $699/month. [Source](https://www.pagerduty.com/pricing/) | HealthOps can replace only basic paging after escalation policies, schedules, ack/resolve workflows, and delivery reliability exist. |
+| Opsgenie | New sales ended June 4, 2025; support ends April 5, 2027. Historical plans showed Essentials $9.45/user/month, Standard $19.95, Enterprise $31.90 annual. [Source](https://www.atlassian.com/software/opsgenie/pricing) | Opsgenie migration is a real market window. Import schedules/escalations later; first build basic on-call well. |
+| incident.io | Basic is free and includes Slack/Teams response, single-team on-call, status page, and essential automation. Team is $15/user/month annual or $19 monthly for incident response, plus $10/user/month for on-call. Pro is $25/user/month plus $20/user/month for on-call. [Source](https://incident.io/pricing) | Modern incident tools are Slack/Teams-first. Two-way Slack/Teams ack matters more than another dashboard widget. |
+| FireHydrant | Platform Pro is $9,600/year for growing teams, with up to 20 responders, runbooks, Slack/Teams chatbot, unlimited public status pages, on-call scheduling, escalation policies, SMS/voice/push, webhooks, and alert rules. Enterprise adds AI summaries, transcripts, retros, follow-ups, private incidents/pages, analytics. [Source](https://firehydrant.com/pricing/) | Not the first replacement target. Useful as a reference for runbooks, retrospectives, and incident workflow maturity. |
+| Rootly | Essentials is $20/user/month and includes incident response, AI chat, AI similar incidents, AI scribe, retrospectives, status page, mobile app, metrics, and SSO/SAML. Products can be purchased standalone. [Source](https://rootly.com/pricing) | AI incident management is mainstream. HealthOps should emphasize private evidence and local/BYOK AI, not generic AI claims. |
+| Datadog | Infrastructure Pro is $15/host/month annual; Database Monitoring is $70/database host/month annual; Synthetic API Tests are $5 per 10K API test runs; On-Call is $20/seat/month; Incident Management is $30/seat/month; Bits AI SRE investigations are $500 per 20 investigations annual. [Source](https://www.datadoghq.com/pricing/list/) | Do not chase Datadog breadth. Use cost predictability and privacy as the contrast. |
+| New Relic | Usage model combines data and users. Standard full platform users list at $99/user/month after the first promotional user; Pro is higher. New Relic has AIOps and AI assistant capabilities. [Source](https://docs.newrelic.com/docs/licenses/license-information/usage-plans/new-relic-usage-plan/) | HealthOps is not a New Relic replacement unless the buyer only needs basic infra/service health and RCA. |
+| Grafana Cloud | Pro starts at $19/month plus usage. Synthetics include API/browser test execution pricing. Incident Response & Management is $20/active IRM user after included usage. [Source](https://grafana.com/pricing/) | Integrate with Prometheus/Grafana instead of rebuilding Grafana dashboards. |
+| Checkly | Synthetic monitoring platform with status pages and AI root cause analysis; automated RCA can trigger when checks fail. [Source](https://www.checklyhq.com/pricing/) | AI RCA is becoming expected in synthetic monitoring. HealthOps needs better local evidence, not just AI text. |
+| Uptime Kuma | Open-source self-hosted monitoring supports HTTP(s), TCP, keyword, JSON query, websocket, ping, DNS record, push, Steam, Docker containers, 20-second intervals, multiple status pages, custom domains, ping chart, and certificate info. [Source](https://github.com/louislam/uptime-kuma) | This is the closest "simple self-hosted" competitor. HealthOps must close check/status gaps, then win on incidents, AI RCA, MySQL, and SSH. |
+| OneUptime | Open source, self-host or cloud. Free includes 1 status page, 100 subscribers, unlimited manual monitors, incident management, logs/traces/metrics. Growth is $22/month, Scale $99/month. Active monitors are $1/month each. [Source](https://oneuptime.com/pricing) | This is the strongest open-source breadth competitor. HealthOps should be leaner, easier to run, and more evidence/RCA focused. |
+| Zabbix | Supports agentless SSH checks; Zabbix agent is not needed for SSH checks. [Source](https://www.zabbix.com/documentation/6.4/en/manual/config/items/itemtypes/ssh_checks) | Do not claim SSH checks are unique. Claim simpler UX and AI-supported incident context. |
+| Prometheus Alertmanager | Handles alerts, grouping, inhibition, silencing, and alert fanout patterns; has controls to avoid receiver flooding. [Source](https://prometheus.io/docs/alerting/latest/alertmanager/) | Accept Alertmanager webhooks rather than trying to replace Prometheus for metric alerting. |
 
 ---
 
-### 3. Status Pages
+## Where HealthOps Can Win
 
-**Currently: zero status page capability. Every single competitor has one.**
+### 1. Small Teams With Real Infrastructure
 
-Teams pay $79–$299/month just for Atlassian Statuspage. We can replace it entirely.
+Target buyer: startups, agencies, freelancers, small SaaS teams, and self-hosted operators with 5-50 services, a database, a few servers, and no dedicated SRE team.
 
-| Feature | Statuspage | UptimeRobot | BetterStack | Priority | Effort |
-|--------|:----------:|:-----------:|:-----------:|:--------:|:------:|
-| **Public `/status` page** | ✓ | ✓ | ✓ | 🔴 HIGH | M |
-| **Per-component status display** | ✓ | ✓ | ✓ | 🔴 HIGH | S |
-| **Active incident banner** | ✓ | ✓ | ✓ | 🔴 HIGH | S |
-| **Incident history timeline** | ✓ | ✓ | ✓ | 🔴 HIGH | S |
-| **Uptime % display (30/90 days)** | ✓ | ✓ | ✓ | 🔴 HIGH | S |
-| **Scheduled maintenance announcements** | ✓ | ✓ | ✓ | 🟡 MEDIUM | S |
-| **Email subscriber notifications** | ✓ | ✓ | ✓ | 🟡 MEDIUM | M |
-| **Custom domain support** | ✓ | ✓ | ✓ | 🟡 MEDIUM | S |
-| **Custom branding / CSS** | ✓ | — | ✓ | 🟢 LOW | S |
-| **Private / password-protected page** | ✓ | ✓ | — | 🟡 MEDIUM | S |
-| **Embed status badge in README** | ✓ | ✓ | ✓ | 🟡 MEDIUM | XS |
-| **Audience-specific pages** | ✓ | — | — | 🟢 LOW | M |
-| **Webhook on status change** | ✓ | ✓ | ✓ | 🟡 MEDIUM | S |
-| **RSS/Atom feed** | ✓ | — | — | 🟢 LOW | XS |
+What they need:
 
-**How to implement:** New `/status` route (no auth required). Read-only view of component groups, incident history, uptime percentages from existing analytics. No new data model needed, mostly presentation layer.
+- "Tell me when the API, cron job, SSL cert, domain, database, or server is about to break."
+- "Do not wake me for one flaky check."
+- "Give me one page I can send customers during an outage."
+- "Tell me what to check first."
+- "Do not require an agent on every server."
+- "Do not become another $300/month tool."
 
----
+HealthOps should optimize for this workflow, not enterprise observability.
 
-### 4. SLO / SLA Tracking
+### 2. Private RCA
 
-**Currently: uptime % calculation exists in analytics but no SLO definition or tracking.**
+Competitors now have AI, but most require data to live in their SaaS platform and often price AI as an add-on or usage meter. HealthOps can make a stronger practical promise:
 
-| Feature | Who Has It | Priority | Effort | Notes |
-|--------|-----------|:--------:|:------:|-------|
-| **SLO definition** (target uptime %) | Datadog, New Relic, Grafana, Zabbix | 🔴 HIGH | M | Per-check or per-group target: "99.9% uptime over 30 days". Store alongside CheckConfig |
-| **Error budget tracking** | Datadog, New Relic, Grafana | 🔴 HIGH | M | Remaining budget = (actual uptime − SLO target). Burn rate calculation |
-| **SLO breach alerts** | Datadog, New Relic, Grafana | 🔴 HIGH | S | Alert when error budget < 20% (warning) or 0% (critical) |
-| **SLA report generation** | Zabbix, Site24x7, Datadog | 🟡 MEDIUM | M | Monthly PDF/CSV report: uptime %, incidents, MTTR, MTTA. Sendable to management/customers |
-| **Uptime history calendar** | Datadog, BetterStack | 🟡 MEDIUM | S | GitHub-style grid: each day green/yellow/red. 90-day view. Already have the data |
-| **Downtime cost calculator** | — (no one has this) | 🟢 LOW | S | "This outage cost ~$X at $Y/hour revenue". Configurable revenue metric |
+- local Ollama option,
+- BYOK providers,
+- encrypted keys,
+- incident evidence from SSH/MySQL/command/log checks,
+- no telemetry ingestion bill,
+- no vendor data retention concern.
 
----
+The output must be concrete. The product should show:
 
-### 5. AI & Incident Intelligence
+- likely root cause,
+- confidence level,
+- evidence used,
+- commands to verify,
+- suggested runbook steps,
+- past similar incidents,
+- what changed recently if HealthOps knows it.
 
-HealthOps already leads here with BYOK AI. These are the remaining gaps:
+### 3. Agentless SSH + MySQL Evidence
 
-| Feature | Who Has It | Priority | Effort | Notes |
-|--------|-----------|:--------:|:------:|-------|
-| **AI post-mortem generation** | BetterStack, Datadog, PagerDuty | 🔴 HIGH | S | Generate structured post-mortem from incident timeline, evidence, RCA. Template: what happened, why, impact, timeline, action items. BYOK means private data stays local — better than competitors |
-| **Automated remediation execution** | PagerDuty, Datadog | 🔴 HIGH | S | Automation engine exists (approve/reject) but never executes. Wire up approved commands to actually run via SSH/command check mechanism |
-| **AI anomaly detection** | Datadog, New Relic | 🟡 MEDIUM | M | Ask AI provider: "Is this metric value unusual given the last 7 days of history?" Cheaper than building ML models |
-| **AI alert summarization** | BetterStack, PagerDuty | 🟡 MEDIUM | S | When 10 checks fail: "3 services on web-01 are down, likely infrastructure issue. Last deploy was 14 mins ago." One sentence summary |
-| **Predictive alerting** | Datadog, New Relic | 🟢 LOW | L | "Disk will fill in ~3 days at current rate." Trend extrapolation. Linear regression on metric history |
-| **AI-generated runbooks** | — (no one has this) | 🟡 MEDIUM | M | When a new check fails for the first time, AI proposes a runbook. User edits and saves it |
+Datadog/New Relic/Grafana are stronger if the team installs agents and sends telemetry. HealthOps can win when:
+
+- servers are client-owned,
+- installing agents is not allowed,
+- the operator only has SSH,
+- database credentials can be read from env/config,
+- the team wants enough signal for triage, not full observability.
+
+This should be framed as "fast, low-friction ops context" rather than "enterprise telemetry."
 
 ---
 
-### 6. Team & Access Control
+## Practical Feature Roadmap
 
-**Currently: single shared basic auth. Every competitor supports teams.**
+### Phase 1: Monitoring Completeness
 
-| Feature | Who Has It | Priority | Effort | Notes |
-|--------|-----------|:--------:|:------:|-------|
-| **Multi-user accounts** | All | 🔴 HIGH | M | User model: username, email, password hash, role. Already has MongoUserRepository but UI needs work |
-| **Role-based access** | All | 🔴 HIGH | M | Admin (full), Ops (ack/resolve incidents), Read-only (view only), API-only (token) |
-| **API tokens per user** | All | 🟡 MEDIUM | S | Bearer token auth for API access. Per-user, revocable |
-| **SSO / SAML** | Datadog, New Relic, Zabbix (enterprise) | 🟢 LOW | L | Enterprise feature. Integrate with Google/Okta/Azure AD |
-| **LDAP integration** | Zabbix, Datadog | 🟢 LOW | L | Enterprise only |
-| **Invite via email** | All SaaS | 🟡 MEDIUM | S | Send invite link, user sets own password |
-| **Team-based alert routing** | PagerDuty, OpsGenie | 🟡 MEDIUM | M | Route alerts to specific team based on check tag. "backend" alerts → backend team |
+Goal: honestly replace UptimeRobot + Healthchecks/Cronitor for small teams.
 
----
+| Feature | Priority | Effort | Why it matters | MVP scope |
+|---|---:|---:|---|---|
+| SSL certificate monitoring | P0 | XS | Common outage cause, easy win, expected by uptime tools. | TLS handshake, leaf expiry, chain validity, issuer/subject, alert thresholds at 30/14/7 days. |
+| Domain expiry monitoring | P0 | S | Teams forget renewals; high perceived value. | WHOIS/RDAP lookup, expiry parsing, alert thresholds, registrar/name server display. |
+| Heartbeat/cron monitoring | P0 | S | Replaces a separate paid tool; catches silent job failures. | Unique ping URL, expected interval, grace period, last ping, missed/late/failure status, optional log payload. |
+| DNS record monitoring | P0 | S | Catches DNS misconfig, bad deploys, hijack symptoms. | A/AAAA/CNAME/TXT/MX expected values, TTL display, compare actual vs expected. |
+| ICMP ping monitoring | P0 | XS | Basic reachability check, expected feature. | `ping` or Go ICMP fallback, packet loss, latency, timeout. |
+| Keyword negative match | P1 | XS | Useful for "must not contain error/maintenance" checks. | Extend current `responseContains` with `responseNotContains`. |
+| SMTP/IMAP/POP banner check | P2 | S | Useful for agencies/MSPs with mail servers. | TCP connect plus greeting/banner validation. |
+| Redis/Postgres/Mongo monitoring | P2 | M | Extends the deep DB-monitoring story. | Start with Redis INFO/PING and Postgres basic stats before MongoDB. |
+| Docker container health | P2 | S | Uptime Kuma already has Docker; useful for self-hosters. | Docker socket/API container status, restart count, health status, OOM events. |
 
-### 7. Integrations & Extensibility
+Phase 1 should ship before browser transactions, SNMP, Kubernetes maps, or anomaly detection. It closes the biggest "why can't it monitor this basic thing?" objections.
 
-| Integration | Who Has It | Priority | Effort | Notes |
-|------------|-----------|:--------:|:------:|-------|
-| **Jira ticket creation** | PagerDuty, Datadog, Zabbix | 🟡 MEDIUM | S | On incident create → Jira API → create ticket with incident details. Two-way sync optional |
-| **GitHub issue creation** | Healthchecks.io | 🟡 MEDIUM | S | Popular for dev-focused teams. Same pattern as Jira |
-| **Two-way Slack commands** | PagerDuty, BetterStack | 🟡 MEDIUM | M | Slack slash commands: `/healthops ack`, `/healthops status`. Slash command endpoint |
-| **MCP server** | BetterStack, UptimeRobot | 🟡 MEDIUM | M | Expose check/incident data via MCP protocol so AI agents can query. Already using MCP elsewhere |
-| **Terraform provider** | BetterStack, Datadog | 🟢 LOW | L | Define checks as code. IaC crowd loves this |
-| **Prometheus alertmanager integration** | Grafana, many | 🟡 MEDIUM | S | Accept alerts from Prometheus Alertmanager. Treat them as HealthOps incidents |
-| **Zapier / Make webhook format** | UptimeRobot | 🟢 LOW | S | Documented webhook schema that Zapier can parse for no-code automations |
-| **Google Chat** | Healthchecks.io, UptimeRobot | 🟢 LOW | XS | Another notification channel |
-| **Microsoft Teams** | All | 🟡 MEDIUM | S | Adaptive card format for Teams webhooks. Big for enterprise |
-| **VictorOps / Splunk On-Call** | UptimeRobot | 🟢 LOW | S | Niche |
+### Phase 2: Alert Trust
 
----
+Goal: reduce noise so users trust HealthOps alerts.
 
-### 8. Visualization & Reporting
+| Feature | Priority | Effort | Why it matters | MVP scope |
+|---|---:|---:|---|---|
+| Maintenance windows | P0 | S | Every serious ops team expects planned downtime suppression. | One-time and recurring windows, check/tag scope, suppress notifications without deleting results. |
+| Consecutive failure threshold | P0 | XS | Prevents alerting on one bad packet/request. | Open incident only after N failures; configurable per check. |
+| Recovery confirmation | P0 | XS | Prevents instant resolve/reopen loops. | Resolve only after N successes. |
+| Flapping suppression | P0 | S | Biggest quality-of-life fix for uptime tools. | If state changes repeatedly within a window, mark flapping and reduce notifications. |
+| Alert grouping | P1 | M | One server outage should not create 20 separate pages. | Group incidents by host/tag/root dependency within a time window. |
+| Notification delivery logs | P1 | S | Debugging failed alerts is operationally important. | Store channel, attempt time, status, response/error, retry count. |
+| Snooze/silence | P1 | S | Faster than creating a maintenance window. | Snooze check/tag for 1h/4h/24h/custom with audit entry. |
 
-| Feature | Who Has It | Priority | Effort | Notes |
-|--------|-----------|:--------:|:------:|-------|
-| **Uptime calendar heatmap** | BetterStack, Datadog | 🟡 MEDIUM | S | 90-day grid, each day colored by worst status. Already have the data. Frontend-only |
-| **Response time trend charts** | All | 🟡 MEDIUM | S | Historical latency chart per check. Already collecting data, needs frontend chart |
-| **Service dependency map** | Datadog, Zabbix | 🟢 LOW | L | Visual graph of which services depend on which. Complex to build |
-| **Infrastructure map / geo** | Site24x7, Zabbix | 🟢 LOW | L | World map with check locations. Mostly visual |
-| **Scheduled email reports** | Zabbix, Site24x7, Datadog | 🟡 MEDIUM | M | Weekly/monthly digest: uptime %, incidents, top errors. Send to management |
-| **Custom dashboards** | Grafana, Datadog | 🟢 LOW | XL | Drag-and-drop widget builder. Too complex, Grafana integration is better answer |
-| **Check result export (CSV)** | Most | 🟡 MEDIUM | XS | Already have export endpoint, add CSV format |
+This phase matters more than advanced channels. A single noisy week can make users remove a monitoring tool.
 
----
+### Phase 3: Customer Communication
 
-### 9. Developer Experience
+Goal: replace basic Statuspage/UptimeRobot status pages.
 
-| Feature | Who Has It | Priority | Effort | Notes |
-|--------|-----------|:--------:|:------:|-------|
-| **CLI tool** | Datadog, New Relic | 🟡 MEDIUM | M | `healthops checks list`, `healthops incidents ack <id>`. Single binary, great for ops teams |
-| **OpenAPI spec** | Datadog, New Relic | ✓ we have | — | Already done |
-| **SDKs (Go, Python, JS)** | Datadog, New Relic | 🟢 LOW | XL | Generate from OpenAPI spec. Low priority |
-| **Webhook delivery logs** | UptimeRobot, PagerDuty | 🟡 MEDIUM | S | Show recent webhook attempts, status codes, retry count. Debug notification failures |
-| **Check import from Datadog/UptimeRobot** | — | 🟡 MEDIUM | M | Migration tool. Import checks via JSON or competitor API. Huge for adoption |
-| **Bulk check management** | All | 🟡 MEDIUM | S | Select multiple checks → enable/disable/delete/tag |
-| **Check templates** | — | 🟡 MEDIUM | S | Pre-built check configs: "Standard web app", "MySQL server", "Redis instance". One-click add |
+| Feature | Priority | Effort | Why it matters | MVP scope |
+|---|---:|---:|---|---|
+| Public status page | P0 | M | Visible customer trust feature; easy to understand. | Unauthenticated `/status`, components, current state, active incident banner, 90-day history. |
+| Component mapping | P0 | S | Users need "API", "Dashboard", "Database", not raw check names only. | Map checks to components; component status follows worst mapped check. |
+| Incident history timeline | P0 | S | Basic expectation for status pages. | Public resolved incidents with start/end/duration and public summary. |
+| Scheduled maintenance posts | P1 | S | Needed for credible customer communication. | Public maintenance entries tied to maintenance windows. |
+| Uptime calendar | P1 | S | Visual SLA proof for customers and management. | 90-day grid by component/check. |
+| Status badge | P1 | XS | Useful in README and customer docs. | SVG badge endpoint: passing/degraded/down. |
+| Email subscribers | P2 | M | Valuable but adds deliverability and unsubscribe complexity. | Double opt-in, unsubscribe, incident/maintenance notifications. |
+| Custom domain | P2 | S | Expected by serious users. | Document reverse proxy config first; automate later. |
+| Private status page | P2 | S | Useful for internal services. | Password or token-gated status page. |
 
----
+Do not start with audience-specific pages, custom CSS/JS, subscriber analytics, or white-labeling. Those are enterprise Statuspage features, not first-order HealthOps value.
 
-### 10. Security & Compliance
+### Phase 4: Team Adoption
 
-| Feature | Who Has It | Priority | Effort | Notes |
-|--------|-----------|:--------:|:------:|-------|
-| **2FA / TOTP** | Zabbix, Datadog | 🟡 MEDIUM | S | TOTP (Google Authenticator compatible). Important once multi-user lands |
-| **IP allowlisting** | Datadog, New Relic | 🟢 LOW | S | Restrict dashboard access to corporate IP ranges |
-| **Secrets management** | Zabbix (external vault) | 🟡 MEDIUM | S | Store DSNs/passwords in external vault (HashiCorp Vault, AWS Secrets Manager). Already have smtpPassEnv pattern, extend it |
-| **SOC2 / HIPAA mode** | Datadog, New Relic | 🟢 LOW | XL | Compliance certifications. Self-hosted already wins here — data never leaves |
-| **Credential rotation alerts** | — | 🟡 MEDIUM | S | Alert when API key / cert / password was last rotated > N days ago. Unique feature |
+Goal: make HealthOps safe for a team, not just one operator.
+
+| Feature | Priority | Effort | Why it matters | MVP scope |
+|---|---:|---:|---|---|
+| Multi-user accounts | P0 | M | Blocks team adoption. | Users, password hash, sessions, invitation or admin-created users. |
+| RBAC | P0 | M | Prevents read-only users from changing checks/secrets. | Admin, operator, read-only, API token. |
+| TOTP 2FA | P1 | S | Important once multiple users exist. | TOTP enrollment/recovery codes. |
+| API tokens | P1 | S | Needed for automation/importers. | Per-user or service token, scopes, last-used, revoke. |
+| Escalation policies | P1 | M | Replaces basic PagerDuty/Opsgenie behavior. | Channel/person sequence, delays, stop on ack. |
+| On-call schedules | P1 | M | Needed for real paging. | Weekly rotation, overrides, current on-call, timezone support. |
+| Slack/Teams interactive ack | P1 | M | Operators live in chat during incidents. | Ack/resolve buttons or slash commands; audit trail. |
+| Runbooks on alerts | P1 | S | Makes alerts actionable. | Markdown runbook per check/tag included in incident and notification. |
+| Microsoft Teams channel | P1 | S | Required for many business teams. | Adaptive card webhook with ack link. |
+
+Team adoption is the point where HealthOps can start claiming it replaces basic PagerDuty/Opsgenie for small teams. Before this phase, it replaces monitoring tools, not on-call tools.
+
+### Phase 5: HealthOps-Specific Leverage
+
+Goal: build features that are hard for generic uptime tools to copy.
+
+| Feature | Priority | Effort | Why it matters | MVP scope |
+|---|---:|---:|---|---|
+| AI postmortem generation | P1 | S | Directly uses incident timeline and evidence. | Generate summary, impact, timeline, root cause, detection, resolution, follow-ups. |
+| Evidence-based AI output | P1 | M | Prevents generic AI fluff. | AI response must cite check result IDs, MySQL metrics, SSH metrics, log excerpts, and timestamps. |
+| Similar incident lookup | P1 | M | Repeated outages become faster to solve. | Search previous incidents by check, error text, tags, AI category. |
+| Approved remediation execution | P2 | M | Automation engine exists; execution creates real differentiation. | Only approved commands, scoped targets, dry run, timeout, audit log, rollback notes. |
+| AI-generated runbook draft | P2 | M | Converts RCA into reusable operational knowledge. | Suggest runbook after incident; user edits and saves. |
+| UptimeRobot/Healthchecks import | P2 | M | Reduces switching friction. | Import monitor exports/API data into HealthOps checks. |
+| Opsgenie import | P2 | M | Timely because Opsgenie support ends in 2027. | Import schedules/escalation policies if Team Adoption phase exists. |
+| Alertmanager ingestion | P2 | S | Lets Prometheus users centralize incidents. | Webhook receiver, label mapping, dedup key, incident creation. |
 
 ---
 
 ## Feature Impact Matrix
 
-Scoring: Impact (1–5) × Effort (inverse, 1–5) = Priority Score
+Score = impact x effort leverage. Effort leverage: 5 means cheap, 1 means expensive.
 
-| Feature | Impact | Effort | Score | Replace |
-|---------|:------:|:------:|:-----:|---------|
-| SSL cert monitoring | 5 | 5 | 25 | $15–50/mo cert tools |
-| Domain expiry monitoring | 4 | 5 | 20 | Manual tracking |
-| Ping / ICMP check | 4 | 5 | 20 | Basic infra check |
-| Cron / heartbeat monitoring | 5 | 4 | 20 | Cronitor ($25/mo) |
-| Maintenance windows | 5 | 4 | 20 | Built into all tools |
-| Flapping / dedup protection | 5 | 4 | 20 | Alert fatigue killer |
-| Public status page | 5 | 3 | 15 | Statuspage ($79–299/mo) |
-| AI post-mortem generation | 4 | 4 | 16 | PagerDuty ($30/user/mo) |
-| Escalation policies | 5 | 3 | 15 | PagerDuty / OpsGenie |
-| SLO tracking + error budget | 4 | 3 | 12 | Datadog SLOs |
-| Multi-user + RBAC | 5 | 3 | 15 | Required for teams |
-| Two-way Slack ack | 4 | 3 | 12 | PagerDuty pattern |
-| Runbooks on alerts | 4 | 4 | 16 | PagerDuty feature |
-| On-call rotation | 4 | 3 | 12 | OpsGenie ($9/user/mo) |
-| DNS monitoring | 3 | 4 | 12 | Security + reliability |
-| Redis monitoring | 4 | 3 | 12 | Unique advantage |
-| PostgreSQL monitoring | 4 | 3 | 12 | Extend MySQL pattern |
-| Automated remediation exec | 5 | 4 | 20 | Engine exists, needs wiring |
-| Uptime calendar heatmap | 3 | 4 | 12 | Visual SLA proof |
-| Scheduled email reports | 3 | 3 | 9 | Mgmt visibility |
-| Jira integration | 3 | 4 | 12 | Ops workflow |
-| CLI tool | 3 | 3 | 9 | DX improvement |
-| Microsoft Teams | 3 | 4 | 12 | Enterprise channel |
-| 2FA / TOTP | 4 | 4 | 16 | Security |
-| MCP server | 3 | 3 | 9 | AI agent access |
-| Check templates | 3 | 4 | 12 | Onboarding speed |
-| Bulk check management | 3 | 4 | 12 | Ops efficiency |
+| Feature | Impact | Effort leverage | Score | Why |
+|---|---:|---:|---:|---|
+| SSL certificate monitoring | 5 | 5 | 25 | High anxiety, low implementation cost. |
+| Heartbeat/cron monitoring | 5 | 4 | 20 | Replaces dedicated tools and catches silent failures. |
+| Maintenance windows | 5 | 4 | 20 | Standard expectation and large noise reducer. |
+| Consecutive failure/recovery thresholds | 5 | 5 | 25 | Tiny implementation, major trust improvement. |
+| Domain expiry monitoring | 4 | 4 | 16 | Strong practical value, slightly messy parsing. |
+| DNS monitoring | 4 | 4 | 16 | Common outage cause and easy to explain. |
+| Public status page | 5 | 3 | 15 | Converts HealthOps from internal tool to customer-facing trust layer. |
+| Flapping suppression | 5 | 3 | 15 | Reduces alert fatigue. |
+| Multi-user/RBAC | 5 | 3 | 15 | Required for team adoption. |
+| Runbooks attached to alerts | 4 | 4 | 16 | Makes every alert more actionable. |
+| AI postmortem generation | 4 | 4 | 16 | Leverages existing AI and incident timeline. |
+| Escalation policies | 5 | 3 | 15 | Needed to replace on-call tools. |
+| Slack/Teams ack | 4 | 3 | 12 | Matches modern incident workflow. |
+| Uptime calendar/status badge | 3 | 5 | 15 | Cheap trust feature. |
+| Notification delivery logs | 4 | 4 | 16 | Helps debug alerting, prevents silent notification failures. |
+| API tokens | 4 | 4 | 16 | Enables automation and importers. |
+| Redis monitoring | 4 | 3 | 12 | Natural extension of deep DB monitoring. |
+| Postgres monitoring | 4 | 2 | 8 | Valuable but more work to do well. |
+| Approved remediation execution | 5 | 2 | 10 | Powerful but needs security controls. |
+| Browser transaction monitoring | 3 | 1 | 3 | Expensive to run and maintain; defer. |
+| Custom dashboard builder | 2 | 1 | 2 | Grafana already solves this. |
 
 ---
 
-## Competitive Replacement Map
+## Replacement Map
 
-What HealthOps can fully replace after building these features:
-
-| Tool | Monthly Cost | What to Build | Status |
-|------|-------------|--------------|--------|
-| UptimeRobot | $8–64/mo | SSL, domain, ping, DNS, heartbeat, status page | 🟡 5 features away |
-| Cronitor | $25/mo | Cron/heartbeat monitoring | 🟡 1 feature away |
-| Healthchecks.io | $0–16/mo | Heartbeat monitoring | 🟡 1 feature away |
-| Statuspage (Atlassian) | $79–299/mo | Public status page | 🟡 1 feature away |
-| BetterStack | $25–80/mo | Status page + escalation + SSL | 🟡 3 features away |
-| PagerDuty | $21–50/user/mo | On-call rotation + escalation + post-mortems | 🔴 Medium effort |
-| OpsGenie | $9–29/user/mo | On-call rotation + escalation | 🔴 Medium effort |
-| Datadog (basic) | $15/host/mo | SLOs + multi-user + dashboards | 🔴 Larger effort |
-| New Relic | $25/user/mo | SLOs + multi-user | 🔴 Larger effort |
-
-**Combined cost of replacing all basic tiers: $200–500/month per team.**
-
----
-
-## What Competitors Can Never Match
-
-Features that HealthOps uniquely offers that SaaS tools structurally cannot:
-
-| HealthOps Advantage | Why Competitors Can't Copy |
-|--------------------|---------------------------|
-| **BYOK AI with local Ollama** | SaaS tools can't send your incident data to your local GPU |
-| **SSH server health (no agent)** | SaaS can't SSH into private servers without VPN/agent |
-| **Zero data egress** | All monitoring data stays in your infra — HIPAA/SOC2 trivially |
-| **$6/month total cost** | SaaS has per-seat/per-host pricing that compounds |
-| **Full customization** | Open source → fork, extend, adapt. SaaS is a closed box |
-| **Air-gapped deployment** | Disconnected environments: factory floors, government, banking |
-| **Custom check types** | `command` type runs any shell command — infinite extensibility |
+| Tool/category | Can HealthOps replace today? | After Phase 1-2 | After Phase 3-4 | Notes |
+|---|---|---|---|---|
+| Basic HTTP/TCP uptime monitoring | Partial | Yes | Yes | Missing common check types today. |
+| UptimeRobot | No | Mostly | Yes for small teams | Multi-location/global probes remain a SaaS advantage. |
+| Healthchecks.io | No | Yes | Yes | Heartbeat MVP is enough for many teams. |
+| Cronitor | No | Mostly | Yes | Automatic reports and richer job logs can come later. |
+| Atlassian Statuspage public page | No | No | Basic replacement | Subscribers/private/audience-specific pages are later. |
+| Better Stack | No | Partial | Partial | Better Stack remains stronger for SaaS on-call/status workflows; HealthOps wins on self-hosted privacy and local evidence. |
+| PagerDuty basic on-call | No | No | Basic replacement | Needs schedules, escalation, ack, reliable SMS/voice story. |
+| Opsgenie | No | No | Basic replacement | Migration tooling would matter because support ends 2027-04-05. |
+| Uptime Kuma | Partial | Competitive | Stronger for RCA | Uptime Kuma already has more check/status basics. HealthOps wins only after closing basics and emphasizing incidents/AI/MySQL/SSH. |
+| OneUptime | No | Partial | Niche replacement | OneUptime is broader. HealthOps should be simpler and deeper for server/database incident triage. |
+| Datadog/New Relic/Grafana Cloud | No | No | No | Do not claim full replacement. Claim lower-cost alternative for teams that do not need APM/log/traces/RUM. |
+| Zabbix/Nagios | Partial | Stronger for small teams | Stronger for small teams | Zabbix remains broader; HealthOps should win on UX, deployment, and AI-assisted triage. |
 
 ---
 
-## Decision Framework
+## What Not To Build Yet
 
-When evaluating what to build next, ask:
-
-1. **Does it eliminate a separate paid tool?** → High priority (saves real money)
-2. **Does it reduce alert fatigue?** → High priority (ops teams hate noise)
-3. **Does it enable team adoption?** → High priority (multi-user blocks team use)
-4. **Does it strengthen our unique position?** → Medium priority (AI, SSH, self-hosted)
-5. **Does it match what SaaS does better?** → Low priority (don't compete where we're weak)
-
----
-
-## Skip List (Why)
-
-Features that sound good but are wrong for HealthOps:
-
-| Feature | Why Skip |
-|---------|----------|
-| **Real User Monitoring (RUM)** | Entirely different product. Requires JS SDK, session storage, replay infrastructure. Not monitoring — it's analytics. |
-| **Distributed tracing / APM** | Requires instrumentation SDKs in every app. Grafana Tempo + OpenTelemetry does this better, HealthOps should integrate not compete. |
-| **Browser transaction monitoring** | Headless Chrome infrastructure, massive ops burden. Only worth it if you're Pingdom. |
-| **SNMP monitoring** | Legacy network gear niche. Low demand, high complexity. |
-| **Cloud cost management** | Separate category entirely (Datadog has it but it's a stretch even for them). |
-| **Terraform provider** | Nice but only after the core features are stable. Medium-term. |
-| **Mobile app** | SaaS benefit. Web PWA with push notifications is 80% of value. |
-| **Custom dashboard builder** | Grafana integration is the right answer. Don't rebuild Grafana. |
+| Feature | Decision | Why |
+|---|---|---|
+| Real User Monitoring | Skip | Different product: JS SDK, session volume, privacy, replay, frontend analytics. |
+| Distributed tracing/APM | Skip | Requires app instrumentation and high-volume ingestion. Integrate with OpenTelemetry/Grafana instead. |
+| Browser transaction monitoring | Defer | Headless browser infra, screenshots, artifacts, worker scaling, and flake management are a product by themselves. |
+| SNMP/network device suite | Defer | Useful for enterprise/network teams but not the current wedge. |
+| Kubernetes topology map | Defer | High complexity and pushes HealthOps toward Datadog/Grafana territory. |
+| Native mobile app | Skip for now | PWA plus push/Slack/Teams is enough until on-call usage is proven. |
+| Custom dashboard builder | Skip | Grafana is the right dashboard answer. |
+| Terraform provider | Defer | Useful only after API and check schema stabilize. |
+| Marketplace/integration directory | Skip | Build the 5 integrations users actually need first. |
+| Generic AI chat | Defer | AI should be tied to incident evidence and runbooks, not a broad chatbot. |
 
 ---
 
-## Summary: The 10 Features That Would Make HealthOps Dominate
+## MVP Specs That Would Make A Difference
 
-In rough priority order, these 10 features close 80% of the gap against all competitors:
+### Heartbeat Monitoring
 
-1. **SSL cert + domain expiry checks** — eliminates cert monitoring tools, ~200 lines
-2. **Heartbeat / cron monitoring** — eliminates Cronitor + Healthchecks.io, ~200 lines
-3. **Maintenance windows** — standard feature every ops team expects
-4. **Flapping/dedup protection** — biggest complaint about basic monitoring tools
-5. **Public status page** — eliminates Statuspage at $79–299/mo, team's biggest ask
-6. **Multi-user + RBAC** — required before any team can actually adopt HealthOps
-7. **Escalation policies** — route alerts up the chain when no one acks
-8. **SLO tracking + error budget** — management loves uptime numbers
-9. **AI post-mortem generator** — leverages our BYOK advantage, generates structured docs
-10. **Automated remediation execution** — the automation engine is built, just needs to run the commands
+Minimum useful version:
 
-Build these 10 → HealthOps replaces UptimeRobot + Cronitor + Statuspage + basic PagerDuty for any team.
-That's **$150–400/month per team** replaced by a $6 VPS.
+- `GET` and `POST /api/v1/heartbeats/{token}` unauthenticated ping endpoint.
+- Expected interval plus grace period.
+- Optional job state: success, fail, start, complete.
+- Optional text/log payload with size limit.
+- Last ping, next expected ping, current state, and missed count.
+- Incident opens when no ping arrives within interval + grace.
+- Notifications include "last seen", "expected every", and last payload summary.
+
+This replaces many Healthchecks/Cronitor use cases without complex scheduling UI.
+
+### Status Page
+
+Minimum useful version:
+
+- Public unauthenticated route.
+- Components mapped to checks.
+- Component state: operational, degraded, major outage, maintenance.
+- Active incident banner.
+- Resolved incident history.
+- 90-day uptime per component.
+- Scheduled maintenance announcements.
+- SVG status badge.
+
+Do not start with subscribers, private pages, custom CSS, or custom domains. Those are second iteration features.
+
+### Alert Noise Control
+
+Minimum useful version:
+
+- `failuresToOpen` per check.
+- `successesToResolve` per check.
+- `notificationCooldown`.
+- `maintenanceWindowIds` or tag-based maintenance scope.
+- Flapping detector: if check changes state more than N times in M minutes, suppress repeated notifications and show "flapping" in UI.
+- Group incidents by shared `groupKey` such as host, tag, component, or dependency.
+
+This directly improves trust. It is more valuable than adding another notification channel.
+
+### Team/RBAC
+
+Minimum useful version:
+
+- Admin can create/invite users.
+- Roles: admin, operator, read-only.
+- API tokens with scopes.
+- TOTP for admins/operators.
+- Audit log for check changes, auth changes, incident actions, and secret changes.
+
+This is enough for small team adoption without building enterprise SSO.
+
+---
+
+## Positioning
+
+### Recommended one-liner
+
+HealthOps is a self-hosted monitoring and incident triage platform for small teams that need uptime checks, server/database context, and private BYOK AI RCA without SaaS observability bills.
+
+### Best homepage comparison
+
+| Need | Typical stack | HealthOps answer |
+|---|---|---|
+| Website/API uptime | UptimeRobot/Better Stack | HTTP, TCP, ping, DNS, SSL, domain checks |
+| Cron job failures | Healthchecks/Cronitor | Heartbeat checks |
+| Public communication | Statuspage | Built-in status page |
+| Basic incident workflow | PagerDuty/Opsgenie | Incidents, ack/resolve, escalation, runbooks |
+| Server triage | SSH + manual commands | Agentless SSH evidence |
+| Database triage | Manual MySQL inspection | MySQL metrics, rules, evidence snapshots |
+| RCA help | Human investigation or SaaS AI add-on | BYOK/local AI with incident evidence |
+
+### Claims to avoid
+
+- Do not claim HealthOps is the only AI monitoring product.
+- Do not claim HealthOps is the only SSH monitoring product.
+- Do not claim HealthOps fully replaces Datadog/New Relic/Grafana.
+- Do not lead with "$6 VPS replaces everything" without qualifying the use case.
+
+### Claims that are defensible
+
+- Self-hosted, open-source monitoring with predictable infrastructure cost.
+- BYOK and local AI options for incident RCA.
+- Agentless SSH server context without installing a host agent.
+- Deep MySQL evidence captured at incident time.
+- Designed to replace the small-team uptime, heartbeat, status page, and basic on-call stack.
+
+---
+
+## Recommended Next 10 Features
+
+In order:
+
+1. Consecutive failure/recovery thresholds.
+2. Maintenance windows.
+3. SSL certificate monitoring.
+4. Heartbeat/cron monitoring.
+5. Domain expiry monitoring.
+6. DNS monitoring.
+7. Public status page with components and incident history.
+8. Multi-user accounts plus RBAC.
+9. Notification delivery logs.
+10. AI postmortem generation from incident timeline and evidence.
+
+This order is intentionally practical. It first fixes trust and monitoring coverage, then adds customer-facing value, then team adoption, then AI leverage.
+
+---
+
+## Source Index
+
+- UptimeRobot pricing and feature matrix: https://uptimerobot.com/pricing/
+- Better Stack pricing and feature matrix: https://betterstack.com/pricing
+- Healthchecks.io pricing: https://healthchecks.io/pricing/
+- Cronitor pricing: https://cronitor.io/pricing
+- Atlassian Statuspage pricing: https://www.atlassian.com/software/statuspage
+- PagerDuty pricing: https://www.pagerduty.com/pricing/
+- Opsgenie end-of-sale/support and historical pricing: https://www.atlassian.com/software/opsgenie/pricing
+- incident.io pricing: https://incident.io/pricing
+- FireHydrant pricing: https://firehydrant.com/pricing/
+- Rootly pricing: https://rootly.com/pricing
+- Datadog pricing list: https://www.datadoghq.com/pricing/list/
+- New Relic usage plan: https://docs.newrelic.com/docs/licenses/license-information/usage-plans/new-relic-usage-plan/
+- Grafana Cloud pricing: https://grafana.com/pricing/
+- Checkly pricing and AI RCA: https://www.checklyhq.com/pricing/
+- Uptime Kuma GitHub feature list: https://github.com/louislam/uptime-kuma
+- OneUptime pricing: https://oneuptime.com/pricing
+- Zabbix agentless SSH checks: https://www.zabbix.com/documentation/6.4/en/manual/config/items/itemtypes/ssh_checks
+- Prometheus Alertmanager docs: https://prometheus.io/docs/alerting/latest/alertmanager/

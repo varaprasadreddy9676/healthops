@@ -62,15 +62,81 @@ export function incidentStatusLabel(status: string): string {
   }
 }
 
+export function incidentMessageSummary(message: string): string {
+  if (!message) return 'No incident details recorded.'
+
+  const details = message.match(/(?:^|\|\s*)Details:\s*([^|]+)/i)?.[1]?.trim()
+  if (details) return humanizeIncidentMessage(details)
+
+  const withoutRuleParts = message
+    .split('|')
+    .map(part => part.trim())
+    .filter(part => !/^(rule|check|status|description)\s*:/i.test(part))
+    .join(' | ')
+    .trim()
+
+  return humanizeIncidentMessage(withoutRuleParts || message)
+}
+
+export function humanizeIncidentMessage(message: string): string {
+  const trimmed = message.trim()
+  if (!trimmed) return trimmed
+
+  const lookupHost = trimmed.match(/lookup\s+([a-z0-9._-]+)(?:\s+on\s+[^:]+:\d+)?:\s+no such host/i)?.[1]
+  if (lookupHost) return `Could not resolve ${lookupHost}`
+
+  const statusCode = trimmed.match(/unexpected status code\s+(\d{3})/i)?.[1]
+  if (statusCode) return `Unexpected HTTP status ${statusCode}`
+
+  const slowAPI = trimmed.match(/slow api response:\s*([0-9.]+)\s*ms/i)?.[1]
+  if (slowAPI) return `Slow API response (${slowAPI} ms)`
+
+  const duration = trimmed.match(/\bduration:\s*([0-9.]+\s*(?:ms|s|m))/i)?.[1]
+  if (duration) return `Check exceeded latency threshold (${duration.replace(/\s+/g, '')})`
+
+  const processName = trimmed.match(/process\s+"([^"]+)"\s+not found/i)?.[1]
+  if (processName) return `Process "${processName}" is not running`
+
+  const staleSeconds = trimmed.match(/log heartbeat stale:\s*last update\s*(\d+)s\s*ago/i)?.[1]
+  if (staleSeconds) return `Log stream stale for ${formatDuration(Number(staleSeconds) * 1000)}`
+
+  if (/no heartbeat ping received yet/i.test(trimmed)) {
+    return 'No heartbeat ping has been received yet'
+  }
+
+  const cpu = trimmed.match(/cpu high:\s*([0-9.]+)%/i)?.[1]
+  if (cpu) return `CPU usage high (${cpu}%)`
+
+  const connectionRefused = trimmed.match(/connect:\s*connection refused/i)
+  if (connectionRefused) return 'Connection refused by target'
+
+  if (/i\/o timeout|context deadline exceeded|timed out/i.test(trimmed)) {
+    return 'Connection timed out'
+  }
+
+  return sentenceCase(trimmed)
+}
+
+function sentenceCase(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return trimmed
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
+}
+
 export function checkTypeLabel(type: string): string {
   const labels: Record<string, string> = {
     api: 'API',
     tcp: 'TCP',
     process: 'Process',
     command: 'Command',
-    log: 'Log',
+    log: 'Log file',
     mysql: 'MySQL',
     ssh: 'SSH',
+    ssl: 'SSL/TLS',
+    dns: 'DNS',
+    ping: 'Ping',
+    domain: 'Domain',
+    heartbeat: 'Heartbeat',
   }
   return labels[type] ?? type
 }

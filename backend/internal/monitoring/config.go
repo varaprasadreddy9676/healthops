@@ -150,6 +150,16 @@ func (c *CheckConfig) applyDefaults() {
 	if c.Server == "" {
 		c.Server = "default"
 	}
+	if c.FailuresToOpen <= 0 {
+		c.FailuresToOpen = 1
+	}
+	if c.SuccessesToResolve <= 0 {
+		c.SuccessesToResolve = 1
+	}
+	// Delegate defaults for plugin-registered check types.
+	if exec, ok := LookupCheckExecutor(c.Type); ok {
+		exec.ApplyDefaults(c)
+	}
 }
 
 func (c *CheckConfig) validate(cfg *Config) error {
@@ -171,95 +181,11 @@ func (c *CheckConfig) validate(cfg *Config) error {
 		return fmt.Errorf("cooldownSeconds must be >= 0 (got %d)", c.CooldownSeconds)
 	}
 
-	switch c.Type {
-	case "api":
-		if c.Target == "" {
-			return fmt.Errorf("target is required for api checks")
-		}
-	case "tcp":
-		if c.Port <= 0 {
-			return fmt.Errorf("port is required for tcp checks")
-		}
-		if c.Host == "" && c.Target == "" {
-			return fmt.Errorf("host or target is required for tcp checks")
-		}
-	case "process":
-		if c.Target == "" {
-			return fmt.Errorf("target is required for process checks")
-		}
-	case "command":
-		if c.Command == "" {
-			return fmt.Errorf("command is required for command checks")
-		}
-		if !cfg.AllowCommandChecks {
-			// SECURITY: Command checks are disabled by default to prevent command injection.
-			// They must be explicitly enabled via "allowCommandChecks": true in config.
-			// Command checks execute arbitrary shell commands and should only be used
-			// in trusted environments with carefully controlled config files.
-			return fmt.Errorf("command checks are disabled for security; set allowCommandChecks=true to enable (use with caution)")
-		}
-	case "log":
-		if c.Path == "" {
-			return fmt.Errorf("path is required for log checks")
-		}
-		if c.FreshnessSeconds <= 0 {
-			return fmt.Errorf("freshnessSeconds is required for log checks")
-		}
-	case "ssh":
-		if c.SSH == nil {
-			return fmt.Errorf("ssh config block is required for ssh checks")
-		}
-		if c.SSH.Host == "" {
-			return fmt.Errorf("ssh.host is required for ssh checks")
-		}
-		if c.SSH.User == "" {
-			return fmt.Errorf("ssh.user is required for ssh checks")
-		}
-		hasKey := c.SSH.KeyPath != "" || c.SSH.KeyEnv != ""
-		hasPassword := c.SSH.Password != "" || c.SSH.PasswordEnv != ""
-		if !hasKey && !hasPassword {
-			return fmt.Errorf("ssh auth required: set keyPath/keyEnv or password/passwordEnv")
-		}
-		if c.SSH.Port <= 0 {
-			c.SSH.Port = 22
-		}
-	case "mysql":
-		if c.MySQL == nil {
-			return fmt.Errorf("mysql config block is required for mysql checks")
-		}
-		hasDirect := c.MySQL.Host != "" && c.MySQL.Username != ""
-		hasEnv := c.MySQL.DSNEnv != ""
-		if !hasDirect && !hasEnv {
-			return fmt.Errorf("mysql config requires either host+username or dsnEnv")
-		}
-		if c.MySQL.Port <= 0 {
-			c.MySQL.Port = 3306
-		}
-		if c.MySQL.ConnectTimeoutSeconds <= 0 {
-			c.MySQL.ConnectTimeoutSeconds = 3
-		}
-		if c.MySQL.QueryTimeoutSeconds <= 0 {
-			c.MySQL.QueryTimeoutSeconds = 5
-		}
-		if c.MySQL.ProcesslistLimit <= 0 {
-			c.MySQL.ProcesslistLimit = 50
-		}
-		if c.MySQL.StatementLimit <= 0 {
-			c.MySQL.StatementLimit = 20
-		}
-		if c.MySQL.HostUserLimit <= 0 {
-			c.MySQL.HostUserLimit = 20
-		}
-		if c.IntervalSeconds <= 0 {
-			c.IntervalSeconds = 15
-		}
-		if c.TimeoutSeconds <= 0 {
-			c.TimeoutSeconds = 10
-		}
-	default:
+	exec, ok := LookupCheckExecutor(c.Type)
+	if !ok {
 		return fmt.Errorf("unsupported type %q", c.Type)
 	}
-	return nil
+	return exec.Validate(c, cfg)
 }
 
 func (c CheckConfig) IsEnabled() bool {

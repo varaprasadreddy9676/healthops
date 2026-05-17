@@ -259,6 +259,48 @@ func main() {
 	incidentManager := monitoring.NewIncidentManager(incidentRepo, logger)
 	service.SetIncidentManager(incidentManager)
 
+	// Initialize heartbeat API (unauthenticated ping endpoints for cron jobs)
+	heartbeatAPI := monitoring.NewHeartbeatAPIHandler()
+	service.SetHeartbeatAPI(heartbeatAPI)
+	logger.Printf("Heartbeat monitoring initialized (ping endpoint: /api/v1/heartbeats/{token})")
+
+	// Initialize maintenance windows
+	maintenanceStore, err := monitoring.NewMaintenanceStore(filepath.Join(dataDir, "maintenance_windows.json"))
+	if err != nil {
+		logger.Printf("Warning: Failed to init maintenance store: %v", err)
+	} else {
+		service.SetMaintenanceStore(maintenanceStore)
+		logger.Printf("Maintenance windows initialized")
+	}
+
+	// Initialize custom dashboard builder
+	dashboardStore, err := monitoring.NewCustomDashboardStore(filepath.Join(dataDir, "custom_dashboards.json"))
+	if err != nil {
+		logger.Printf("Warning: Failed to init custom dashboard store: %v", err)
+	} else {
+		service.SetCustomDashboardStore(dashboardStore)
+		logger.Printf("Custom dashboard builder initialized")
+	}
+
+	// Initialize status pages
+	statusPageStore, err := monitoring.NewStatusPageStore(filepath.Join(dataDir, "status_pages.json"))
+	if err != nil {
+		logger.Printf("Warning: Failed to init status page store: %v", err)
+	} else {
+		service.SetStatusPageStore(statusPageStore)
+		logger.Printf("Status pages initialized")
+	}
+
+	// Initialize AI chat (provider wired later after AI service init)
+	chatStore, err := monitoring.NewChatStore(filepath.Join(dataDir, "chat_conversations.json"))
+	if err != nil {
+		logger.Printf("Warning: Failed to init chat store: %v", err)
+	} else {
+		// AI provider will be nil initially; set after AI service is ready
+		service.SetAIChatStore(chatStore, nil)
+		logger.Printf("AI chat initialized (provider pending)")
+	}
+
 	// Start MongoDB health monitor — creates incidents when MongoDB goes down
 	if hybridStore != nil && mongoURI != "" {
 		stopMongoMonitor := make(chan struct{})
@@ -706,6 +748,12 @@ func main() {
 		autoHandler := automation.NewHandler(store, incidentRepo, autoAICall, logger)
 		service.SetAutomationRoutes(autoHandler)
 		logger.Printf("Automation engine initialized (AI available: %v)", autoAICall != nil)
+	}
+
+	// Wire AI provider into chat handler now that AI service is available
+	if aiService != nil && chatStore != nil {
+		service.SetAIChatStore(chatStore, monitoring.ChatProvider(aiService.CallProvider))
+		logger.Printf("AI chat provider connected")
 	}
 
 	stopRetention := make(chan struct{})

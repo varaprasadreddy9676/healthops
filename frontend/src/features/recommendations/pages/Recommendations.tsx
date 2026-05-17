@@ -14,6 +14,7 @@ import {
     ChevronUp,
 } from 'lucide-react'
 import { recommendationsApi, type Recommendation } from '../api/recommendations'
+import { useAIAvailability } from '@/features/ai/hooks/useAIAvailability'
 
 const CATEGORY_META: Record<string, { label: string; icon: typeof AlertTriangle; color: string }> = {
     threshold: { label: 'Threshold Tuning', icon: TrendingUp, color: 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-950/40' },
@@ -97,6 +98,7 @@ function RecommendationCard({ rec, onDismiss }: { rec: Recommendation; onDismiss
 export default function Recommendations() {
     const [filter, setFilter] = useState<string>('')
     const queryClient = useQueryClient()
+    const { isAIAvailable } = useAIAvailability()
 
     const { data, isLoading } = useQuery({
         queryKey: ['recommendations', filter],
@@ -117,6 +119,12 @@ export default function Recommendations() {
     const highCount = recs.filter((r) => r.priority === 'high').length
     const medCount = recs.filter((r) => r.priority === 'medium').length
     const lowCount = recs.filter((r) => r.priority === 'low').length
+    const subtitle = isAIAvailable
+        ? 'Threshold, coverage, and stuck-check suggestions. Add AI context when incidents need a second pass.'
+        : 'Threshold, coverage, and stuck-check suggestions.'
+    const emptyDescription = isAIAvailable
+        ? 'Refresh rules after adding checks, or add AI context when incidents need a second pass.'
+        : 'Refresh rules after adding checks.'
 
     return (
         <div className="flex h-full flex-col">
@@ -128,8 +136,8 @@ export default function Recommendations() {
                             <Eye className="h-5 w-5" />
                         </div>
                         <div>
-                            <h1 className="text-lg font-bold text-slate-800 dark:text-white">Recommendations</h1>
-                            <p className="text-xs text-slate-500">AI-powered tuning suggestions for your infrastructure</p>
+                            <h1 className="text-lg font-bold text-slate-800 dark:text-white">Monitor Tuning</h1>
+                            <p className="text-xs text-slate-500">{subtitle}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -139,16 +147,18 @@ export default function Recommendations() {
                             className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
                         >
                             <RefreshCw className={`h-3.5 w-3.5 ${generateMutation.isPending ? 'animate-spin' : ''}`} />
-                            Refresh
+                            Refresh Rules
                         </button>
-                        <button
-                            onClick={() => generateMutation.mutate(true)}
-                            disabled={generateMutation.isPending}
-                            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
-                        >
-                            <Sparkles className="h-3.5 w-3.5" />
-                            AI Enrich
-                        </button>
+                        {isAIAvailable && (
+                            <button
+                                onClick={() => generateMutation.mutate(true)}
+                                disabled={generateMutation.isPending}
+                                className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
+                            >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Add AI Context
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -209,8 +219,8 @@ export default function Recommendations() {
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-50 dark:bg-green-950/30">
                             <Shield className="h-6 w-6 text-green-500" />
                         </div>
-                        <p className="mt-3 text-sm font-medium text-slate-700 dark:text-slate-300">All looking good!</p>
-                        <p className="mt-1 text-xs text-slate-500">No recommendations at this time. Your monitoring is well-configured.</p>
+                        <p className="mt-3 text-sm font-medium text-slate-700 dark:text-slate-300">No tuning recommendations right now</p>
+                        <p className="mt-1 text-xs text-slate-500">{emptyDescription}</p>
                     </div>
                 ) : (
                     <div className="space-y-3">
