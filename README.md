@@ -2,22 +2,40 @@
 
 # HealthOps
 
-**Self-hosted infrastructure monitoring with automatic AI root-cause analysis.**
+**Open-source, self-hosted infrastructure monitoring with AI-assisted incident investigation.**
 
 [![License](https://img.shields.io/github/license/varaprasadreddy9676/healthops?style=flat-square)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.23-00ADD8?style=flat-square&logo=go&logoColor=white)](https://golang.org)
-[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
-[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/varaprasadreddy9676/healthops/pkgs/container/healthops)
-[![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=flat-square&logo=mongodb&logoColor=white)](https://www.mongodb.com)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go&logoColor=white)](backend/go.mod)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](frontend/package.json)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&logo=vite&logoColor=white)](frontend/package.json)
+[![MongoDB](https://img.shields.io/badge/MongoDB-required-47A248?style=flat-square&logo=mongodb&logoColor=white)](compose.yaml)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](compose.yaml)
 
-Monitor servers, APIs, databases, and services. Get alerted when things break.
-**AI writes the root-cause analysis and auto-heal fixes the problem before you open the dashboard.**
+Monitor APIs, ports, Linux servers, MySQL, logs, SSL, DNS, domains, and heartbeat jobs.
+When something breaks, HealthOps creates an incident, collects evidence, generates an AI incident brief, and keeps the RCA trail tied back to concrete signals.
 
-One `docker compose up`. No agents. No per-host fees. No seat limits.
+One Docker command for production. One Docker command for a realistic demo.
 
-[Try the Demo](#try-the-demo) · [Production Setup](#production-setup) · [API Docs](backend/docs/api-reference.md) · [Deployment Guide](docs/deployment-guide.md)
+[Quick Start](#quick-start) | [Demo Scenarios](#demo-scenarios) | [AI Features](#ai-native-incident-workflow) | [API Docs](backend/docs/api-reference.md) | [Deployment Guide](docs/deployment-guide.md)
 
 </div>
+
+---
+
+## What HealthOps Is
+
+HealthOps is for teams that want a practical monitoring stack they can run themselves:
+
+- Synthetic HTTP/API checks with latency thresholds and expected body matching
+- TCP, ping, DNS, SSL, domain expiry, log freshness, command, process, and heartbeat checks
+- Agentless Linux server monitoring over SSH
+- MySQL monitoring with connection, thread, process list, status variable, and query evidence
+- Incident lifecycle management with acknowledgements, resolution, MTTA, and MTTR
+- AI incident briefs with evidence citations, confidence factors, and an evidence ledger
+- RCA reports, recommendations, remediation actions, notification routing, and audit logs
+- MongoDB-backed persistence for checks, results, incidents, users, AI config, queues, and audit data
+
+HealthOps is not a hosted SaaS. You own the data, deployment, keys, retention, and upgrade process.
 
 ---
 
@@ -26,278 +44,402 @@ One `docker compose up`. No agents. No per-host fees. No seat limits.
 <table>
 <tr>
 <td width="50%"><img src="docs/screenshots/dashboard.png" alt="Dashboard" /></td>
-<td width="50%"><img src="docs/screenshots/checks.png" alt="Health Checks" /></td>
+<td width="50%"><img src="docs/screenshots/checks.png" alt="Health checks" /></td>
 </tr>
 <tr>
-<td><b>Dashboard</b> — real-time overview of all checks, servers, and incidents</td>
-<td><b>Health Checks</b> — severity-sorted list with response time indicators</td>
+<td><b>Dashboard</b><br />Live health summary, incidents, response time, and recent activity.</td>
+<td><b>Checks</b><br />Severity-sorted checks with status, latency, tags, and quick actions.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/screenshots/incidents.png" alt="Incidents" /></td>
-<td width="50%"><img src="docs/screenshots/ai-analysis.png" alt="AI Analysis" /></td>
+<td width="50%"><img src="docs/screenshots/ai-analysis.png" alt="AI analysis" /></td>
 </tr>
 <tr>
-<td><b>Incidents</b> — lifecycle management with MTTA/MTTR metrics</td>
-<td><b>AI Analysis</b> — automatic root-cause analysis on every incident</td>
+<td><b>Incidents</b><br />Open, acknowledge, resolve, and inspect incident evidence.</td>
+<td><b>AI Analysis</b><br />AI-assisted RCA, recommendations, and evidence-backed summaries.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/screenshots/servers.png" alt="Servers" /></td>
-<td width="50%"><img src="docs/screenshots/mysql.png" alt="MySQL Monitoring" /></td>
+<td width="50%"><img src="docs/screenshots/mysql.png" alt="MySQL monitoring" /></td>
 </tr>
 <tr>
-<td><b>Servers</b> — agentless SSH monitoring (CPU, memory, disk, load)</td>
-<td><b>MySQL</b> — deep monitoring with 30+ status variables and 9 alert rules</td>
+<td><b>Servers</b><br />Agentless SSH metrics for CPU, memory, disk, load, uptime, and processes.</td>
+<td><b>MySQL</b><br />Database health, threads, connections, process list, samples, and alert rules.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/screenshots/analytics.png" alt="Analytics" /></td>
 <td width="50%"><img src="docs/screenshots/settings.png" alt="Settings" /></td>
 </tr>
 <tr>
-<td><b>Analytics</b> — uptime, response time trends, failure rate analysis</td>
-<td><b>Settings</b> — checks, users, AI providers, notifications, alert rules</td>
+<td><b>Analytics</b><br />Uptime, failures, response time, incidents, and trend views.</td>
+<td><b>Settings</b><br />Users, checks, AI providers, notifications, retention, and alert rules.</td>
 </tr>
 </table>
 
 ---
 
-## Why HealthOps
-
-| | Datadog | New Relic | Nagios/Zabbix | **HealthOps** |
-|---|:---:|:---:|:---:|:---:|
-| HTTP / API checks | Yes | Yes | Yes | Yes |
-| MySQL deep monitoring | Agent | Agent | Limited | **Agentless** |
-| SSH server monitoring | No | No | Complex | **Modern UI** |
-| Auto AI root-cause analysis | Enterprise | Enterprise | No | **Free (BYOK)** |
-| Auto-remediation | Enterprise | No | Plugin-based | **Built-in** |
-| Self-hosted | No | No | Yes | **Yes** |
-| Cost (5-person team) | $300-500/mo | $250/mo | Your time | **$6-10/mo** |
-
----
-
 ## Quick Start
 
-### Try the Demo
+### Production
+
+Run HealthOps with MongoDB and persistent Docker volumes:
 
 ```bash
-git clone https://github.com/varaprasadreddy9676/healthops.git
-cd healthops
+HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD='change-this-to-a-strong-password' \
+docker compose up -d --build
+```
+
+Open:
+
+```text
+http://localhost:8080
+```
+
+Login:
+
+```text
+username: admin
+password: the password you set above
+```
+
+Health check:
+
+```bash
+curl http://localhost:8080/healthz
+```
+
+Stop without deleting data:
+
+```bash
+docker compose down
+```
+
+Delete local production data:
+
+```bash
+docker compose down -v
+```
+
+### Demo
+
+Run a full demo environment with seeded checks, Linux SSH targets, MySQL, Redis, nginx, a checkout API, log emitter, workload generator, and local mock AI provider:
+
+```bash
 docker compose -f compose.demo.yaml up -d --build
 ```
 
-Open **http://localhost:18080** — log in with `admin` / `healthops-demo-admin`
+Open:
 
-The demo spins up a full stack: HealthOps + MongoDB + MySQL + Redis + nginx + 2 Linux SSH targets + a controllable API + log emitter + **local AI provider** (no API key needed).
+```text
+http://localhost:18080
+```
+
+Login:
+
+```text
+username: admin
+password: healthops-demo-admin
+```
+
+Run the smoke test:
 
 ```bash
-# Trigger failure scenarios
-scripts/demo-scenario.sh api-down     # API outage → incident + AI analysis
-scripts/demo-scenario.sh mysql-load   # MySQL stress → alert + AI diagnosis
-scripts/demo-scenario.sh recover      # Everything recovers, resolution alerts fire
+scripts/demo-scenario.sh smoke
+```
 
-# Stop and clean up
+Stop and delete demo data:
+
+```bash
 docker compose -f compose.demo.yaml down -v
 ```
 
-### Production Setup
+---
+
+## Demo Scenarios
+
+The demo is designed to show realistic operational failure modes, not just green dashboards.
 
 ```bash
-# 1. Configure
-cat > .env << 'EOF'
-HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD=choose-a-strong-password
-# HEALTHOPS_PUBLIC_URL=https://healthops.yourcompany.com
-EOF
+# Basic validation
+scripts/demo-scenario.sh smoke
+scripts/demo-scenario.sh persistence
+scripts/demo-scenario.sh mongo-outage
 
-# 2. Start
-docker compose up -d --build
+# API incidents
+scripts/demo-scenario.sh api-slow
+scripts/demo-scenario.sh api-down
+scripts/demo-scenario.sh api-flaky
+scripts/demo-scenario.sh recover
 
-# 3. Verify
-curl http://localhost:8080/healthz
-# → {"success":true,"data":{"status":"ok"}}
+# AI incident workflow
+scripts/demo-scenario.sh rca
+
+# Logs and security evidence
+scripts/demo-scenario.sh log-spike
+scripts/demo-scenario.sh log-storm
+scripts/demo-scenario.sh crash-logs
+scripts/demo-scenario.sh sshd-bruteforce
+scripts/demo-scenario.sh disk-pressure
+scripts/demo-scenario.sh cert-expiry
+
+# MySQL evidence
+scripts/demo-scenario.sh mysql-load
 ```
 
-Open **http://localhost:8080**, log in with `admin` / your password.
+The default demo uses a local mock OpenAI-compatible provider, so no external AI key is required.
 
-See the [Deployment Guide](docs/deployment-guide.md) for TLS, reverse proxy, and production hardening.
+To test a real OpenRouter provider and Slack notification path:
+
+```bash
+SLACK_WEBHOOK_URL='https://hooks.slack.com/services/...' \
+OPENROUTER_API_KEY='sk-or-...' \
+OPENROUTER_MODEL='openai/gpt-4o-mini' \
+scripts/demo-scenario.sh configure-real-integrations
+
+scripts/demo-scenario.sh real-incident
+```
+
+Real AI provider keys are stored through the HealthOps API/UI and encrypted at rest in the Mongo-backed AI configuration store. Do not commit real keys to `.env`, compose files, or source control.
 
 ---
 
-## Check Types
+## AI-Native Incident Workflow
+
+HealthOps treats AI as part of incident handling, but keeps the AI grounded in evidence.
+
+```text
+Check/log/metric fails
+  -> incident opens or updates
+  -> evidence providers collect bounded context
+  -> AI analysis queue runs
+  -> incident brief is generated
+  -> evidence ledger shows what supports, contradicts, or is missing
+  -> RCA and remediation workflows keep the audit trail
+```
+
+Implemented AI features:
+
+- Automatic incident analysis through BYOK providers
+- OpenAI, Anthropic, Google Gemini, Ollama, and custom OpenAI-compatible providers
+- OpenRouter support through the custom provider type
+- AES-256-GCM encryption for provider API keys at rest
+- Incident evidence collection from checks, MySQL snapshots, server metrics, audit events, and incident history
+- AI Incident Brief with likely cause, impact, next actions, timeline, confidence factors, and citations
+- Evidence ledger with `supported`, `unsupported`, `contradicted`, and `missing` signal categories
+- RCA report generation for incidents
+- AI recommendations and remediation workflows
+- Graceful evidence-only briefs when AI is not configured or temporarily unavailable
+
+The evidence ledger is intentionally deterministic. It helps operators see whether an AI claim is backed by collected signals, contradicted by healthy signals, unsupported because evidence was capped, or missing because a provider had no data.
+
+---
+
+## Supported Checks
 
 | Type | What it monitors | Example |
-|------|-----------------|---------|
-| `api` | HTTP/HTTPS endpoints — status code, body, latency | `https://api.myapp.com/health` |
+|------|------------------|---------|
+| `api` | HTTP/HTTPS status, body matching, latency | `https://api.example.com/health` |
 | `tcp` | Port connectivity and response time | `db.internal:5432` |
-| `process` | Process existence by name | `nginx` |
-| `command` | Shell command exit code and output | `df -h \| awk '$5>90'` |
-| `log` | Log file modification recency | `/var/log/app.log` |
-| `mysql` | 30+ MySQL status variables, delta rates, 9 alert rules | DSN via env var |
-| `ssh` | Remote server CPU, memory, disk, load over SSH | Host + SSH key |
-| `ssl` | SSL certificate expiry and chain validity | `example.com` |
+| `ping` | ICMP reachability and latency | `10.0.0.10` |
 | `dns` | DNS record resolution and TTL | `api.example.com` |
-| `ping` | ICMP reachability and latency | `10.0.0.1` |
-| `domain` | Domain registration and expiry | `example.com` |
-| `heartbeat` | Cron / job liveness via inbound ping | Ping URL |
+| `ssl` | Certificate expiry and TLS chain validity | `api.example.com:443` |
+| `domain` | Domain registration expiry | `example.com` |
+| `heartbeat` | Cron/job liveness through inbound pings | Backup job ping URL |
+| `log` | Log file freshness | `/var/log/app.log` |
+| `process` | Process existence over SSH | `nginx` |
+| `command` | Command exit status over SSH | `systemctl is-active nginx` |
+| `ssh` | Linux CPU, memory, disk, load, uptime, processes | SSH target |
+| `mysql` | MySQL status variables, connections, threads, process evidence | DSN via environment variable |
+
+Command checks and remediation actions are intentionally controlled because they can execute commands on monitored systems.
 
 ---
 
-## AI Root-Cause Analysis
+## Notifications
 
-Every incident automatically triggers AI analysis — no manual action needed.
+HealthOps supports:
 
-```
-Check fails → Incident created → Evidence captured → AI enqueued
-    → AI reads check type, failure message, metrics, evidence snapshot
-    → AI produces: what failed, probable root cause, what to fix
-    → Analysis ready in the UI before you open the dashboard
-```
+- Slack
+- Email/SMTP
+- Discord
+- Telegram
+- PagerDuty
+- Generic webhooks
 
-### Bring any AI provider
+Notification features:
 
-| Provider | Cost | Privacy |
-|----------|------|---------|
-| **Ollama** | Free | 100% local — no data leaves your server |
-| OpenAI | ~$0.01-0.05/analysis | OpenAI's policy |
-| Anthropic | ~$0.01-0.05/analysis | Anthropic's policy |
-| Google Gemini | ~$0.01/analysis | Google's policy |
-| Custom | Varies | Any OpenAI-compatible API |
-
-API keys are encrypted with AES-256-GCM at rest.
-MySQL and SSH passwords can be stored inline (encrypted at rest) or via environment variables.
-
-**Set up Ollama (free, local):**
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull llama3
-# In HealthOps: Settings → AI → Add Provider → Ollama → http://localhost:11434
-```
-
-### What the AI sees
-
-When an incident fires, the AI receives full context: check type and target, the exact error message, response latency vs baseline, a snapshot of system state at failure time (MySQL variables, process list, disk usage), and historical patterns. It produces targeted analysis — not generic "check your logs" advice.
-
-**MySQL example:**
-```
-Connections: 245/256 (95.7%)     ← near max_connections
-Slow queries: 847/sec            ← 400x normal
-Lock wait time: 12,400ms avg     ← writes blocking reads
-Buffer pool hit: 62%             ← cache thrashing (normally 98%)
-```
-
-AI output: *"Connection pool near exhaustion. Long-running transaction holding locks causing downstream queries to pile up. Run SHOW PROCESSLIST to identify the blocking query."*
+- Severity filters
+- Tag filters
+- Cooldown windows
+- Resolve notifications
+- Test-send before saving
+- Notification history and audit trails
 
 ---
 
-## SSH Server Monitoring
+## Persistence Model
 
-**Agentless** — nothing installed on the target. If you can SSH in, you can monitor it.
+MongoDB is required.
 
-Collected every interval:
-- CPU usage (from `/proc/stat`)
-- Memory (total, used, %)
-- Disk (total, used, %)
-- Load averages (1m, 5m, 15m)
-- Top 15 processes by memory
-- Disk I/O (read/write IOPS)
-- Uptime
+HealthOps stores runtime state in MongoDB:
 
-Built-in thresholds: CPU >80% = warning, >95% = critical. Memory >85% = warning. Disk >85% = warning. All configurable.
+- users and sessions
+- checks and servers
+- check results
+- incidents and incident snapshots
+- notification channels and delivery logs
+- AI providers, AI queue, and AI outputs
+- RCA reports, recommendations, remediation actions, and audit logs
 
----
+`backend/config/default.json` and `backend/config/demo.json` are seed configs. After the first run, checks and runtime configuration are managed through MongoDB by the API/UI and survive restarts.
 
-## Alerting & Notifications
-
-**6 channels:** Slack, Email, Discord, Telegram, PagerDuty, Webhooks
-
-- Smart deduplication — one alert per incident, not one per check run
-- Severity-based routing and tag filters
-- Cooldown periods to prevent alert fatigue
-- Resolution alerts when incidents clear
-- Test button to verify before going live
-
-**Slack setup (3 steps):**
-1. Create an Incoming Webhook at [api.slack.com/apps](https://api.slack.com/apps)
-2. In HealthOps: Notifications → Add Channel → Slack → paste URL
-3. Click **Test** → **Save**
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    React Frontend                        │
-│         (Vite + TypeScript + Tailwind + Recharts)        │
-└───────────────────────┬─────────────────────────────────┘
-                        │ REST API + SSE
-┌───────────────────────┴─────────────────────────────────┐
-│                    Go Backend                            │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────┐  │
-│  │Scheduler │  │ Runner   │  │ Incident │  │  AI    │  │
-│  │(per-check│  │(7 types) │  │ Manager  │  │Service │  │
-│  │ timers)  │  │          │  │          │  │(BYOK)  │  │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └───┬────┘  │
-│       └──────────────┴─────────────┴─────────────┘       │
-│  ┌───────────────────────────────────────────────────┐   │
-│  │                  MongoDB Store                    │   │
-│  └───────────────────────────────────────────────────┘   │
-│  JWT Auth · Users · Notifications · Alert Rules           │
-│  Audit · Prometheus · AI Queue · Deduplication            │
-└─────────────────────────────────────────────────────────┘
-```
-
-| Layer | Technology |
-|-------|-----------|
-| Backend | Go 1.23, `net/http` stdlib |
-| Frontend | React 19, TypeScript, Vite 6, Tailwind CSS, Recharts |
-| State | TanStack React Query |
-| Storage | MongoDB |
-| Observability | Prometheus metrics (`/metrics`), SSE real-time updates |
-| Container | Docker multi-stage build |
-
----
-
-## Resource Usage
-
-| Setup | RAM | CPU (idle) | Disk/month |
-|-------|-----|-----------|------------|
-| 20 checks | ~60 MB | <1% | <100 MB |
-| 50 checks + MongoDB | ~120 MB | <2% | ~1 GB |
-| 100 checks + MongoDB | ~180 MB | <3% | ~2 GB |
-
-A $6/month VPS (Hetzner CX11, DigitalOcean Droplet, Linode Nanode) runs 100+ checks with room to spare.
+There is no JSON/JSONL production persistence path.
 
 ---
 
 ## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` | — | Admin password for first run |
-| `HEALTHOPS_PUBLIC_URL` | — | Public URL (required for email links) |
-| `MONGODB_URI` | — | MongoDB connection string |
-| `MONGODB_DATABASE` | `healthops` | Database name |
-| `DATA_DIR` | `data/` | Encryption keys and JWT secrets |
-| `CORS_ORIGIN` | — | CORS origin for custom domains |
+Production compose uses these key variables:
 
-See the [Deployment Guide](docs/deployment-guide.md) for all options.
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` | Yes, first run | empty | Initial admin password |
+| `HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL` | No | `admin@healthops.local` | Admin email |
+| `HEALTHOPS_BOOTSTRAP_ADMIN_RESET` | No | `false` | Reset admin password on startup; keep false in production |
+| `HEALTHOPS_PORT` | No | `8080` | Host port for the dashboard |
+| `HEALTHOPS_BIND` | No | `0.0.0.0` | Bind address; use `127.0.0.1` behind a local reverse proxy |
+| `HEALTHOPS_PUBLIC_URL` | No | empty | Public URL used in notification links |
+| `MONGODB_DATABASE` | No | `healthops` | Mongo database name |
+| `MONGODB_COLLECTION_PREFIX` | No | `healthops` | Mongo collection prefix |
+| `MYSQL_DSN` | No | empty | External MySQL DSN for monitored MySQL targets |
+| `HEALTHOPS_SMTP_PASS` | No | empty | SMTP password for email notifications |
+
+See [.env.example](.env.example) and [Deployment Guide](docs/deployment-guide.md) for the full list.
+
+AI providers are normally configured in **Settings -> AI**. Bootstrap AI environment variables exist for demos and automation, but real keys should be kept out of committed files.
+
+---
+
+## Production Checklist
+
+Before putting HealthOps on a real network:
+
+- Set a strong `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` on first run
+- Put HealthOps behind TLS, either through your reverse proxy or ingress
+- Set `HEALTHOPS_PUBLIC_URL`
+- Keep MongoDB on a private network
+- Back up Docker volumes or MongoDB directly
+- Configure at least one notification channel
+- Configure AI provider keys through Settings, not committed files
+- Keep `HEALTHOPS_BOOTSTRAP_ADMIN_RESET=false`
+- Restrict command checks and remediation permissions to trusted operators
+- Review SSH host key fingerprints for monitored servers
+- Run `scripts/demo-scenario.sh smoke` against demo before exposing production
+
+Backup and restore helpers:
+
+```bash
+scripts/healthops-mongo-backup.sh --help
+scripts/healthops-mongo-restore.sh --help
+```
+
+---
+
+## Architecture
+
+```text
+Browser
+  |
+  | REST + SSE
+  v
+Go backend
+  |-- scheduler and check runners
+  |-- incident manager
+  |-- evidence providers
+  |-- AI queue and provider adapters
+  |-- notification engine
+  |-- remediation registry
+  |-- Prometheus metrics
+  v
+MongoDB
+```
+
+| Layer | Technology | Why |
+|-------|------------|-----|
+| Backend | Go 1.25 | Single static service, low memory use, simple deployment |
+| HTTP | Go `net/http` | Minimal dependency surface and predictable behavior |
+| Frontend | React 19 + TypeScript | Typed, component-based dashboard UI |
+| Build | Vite 8 | Fast frontend builds and dev server |
+| Styling | Tailwind CSS | Consistent utility-first product UI |
+| Server state | TanStack Query | Cache, loading, retry, and invalidation for API data |
+| Charts | Recharts | Uptime, latency, and trend visualizations |
+| Icons | Lucide React | Consistent operational icon set |
+| Storage | MongoDB 7 | Document model for checks, incidents, evidence, AI config, and audit data |
+| Runtime | Docker Compose | One-command local, demo, and production deployments |
+| Observability | `/metrics`, `/healthz`, SSE | Prometheus scraping, health checks, live UI updates |
+
+---
+
+## Resource Usage
+
+Typical small deployment estimates:
+
+| Setup | RAM | CPU idle | Disk/month |
+|-------|-----|----------|------------|
+| 20 checks + MongoDB | ~100-200 MB | <2% | <1 GB |
+| 50 checks + MongoDB | ~200-400 MB | <3% | ~1-2 GB |
+| 100 checks + MongoDB | ~400-700 MB | <5% | ~2-5 GB |
+
+Actual usage depends on retention, check interval, MySQL snapshot volume, log ingestion volume, and AI/RCA frequency.
 
 ---
 
 ## Project Layout
 
-```
+```text
 healthops/
-├── backend/               # Go service (cmd/healthops = entrypoint)
-│   ├── cmd/healthops/     # main.go
-│   ├── internal/          # Core packages
-│   ├── config/            # Seed configs
-│   └── docs/              # API reference
-├── frontend/              # React + TypeScript + Vite
-├── docker/                # Demo containers, init scripts
-├── docs/                  # Guides, ADRs, screenshots, OpenAPI spec
-├── compose.yaml           # Production
-├── compose.demo.yaml      # Demo with full stack
-└── Dockerfile             # Multi-stage build
+|-- backend/                 Go service
+|   |-- cmd/healthops/       Service entrypoint
+|   |-- internal/monitoring/ Core monitoring, AI, incidents, repositories
+|   |-- config/              First-run seed configs
+|   `-- docs/                Backend API reference
+|-- frontend/                React + TypeScript dashboard
+|-- docker/                  Demo API, demo AI provider, Linux SSH targets, MySQL workload
+|-- docs/                    Deployment, runbook, ADRs, OpenAPI, roadmap
+|-- scripts/                 Demo scenarios and Mongo backup/restore helpers
+|-- compose.yaml             Production compose
+|-- compose.demo.yaml        Realistic demo compose
+`-- Dockerfile               Multi-stage app build
+```
+
+---
+
+## Development
+
+Backend:
+
+```bash
+cd backend
+go test ./...
+go fmt ./...
+go run ./cmd/healthops
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run typecheck
+npm run build
+npm run dev
+```
+
+Full app through Docker:
+
+```bash
+docker compose up -d --build
+docker compose -f compose.demo.yaml up -d --build
 ```
 
 ---
@@ -306,42 +448,29 @@ healthops/
 
 | Document | Description |
 |----------|-------------|
-| [Deployment Guide](docs/deployment-guide.md) | Docker, bare metal, TLS, reverse proxy, SSH, MySQL |
-| [API Reference](backend/docs/api-reference.md) | 62+ REST endpoints with examples |
-| [OpenAPI Spec](docs/openapi.yaml) | Machine-readable OpenAPI 3.0 |
-| [Runbook](docs/runbook.md) | Operations, backup/restore, performance tuning |
+| [Deployment Guide](docs/deployment-guide.md) | Docker, TLS, reverse proxy, production operations |
+| [API Reference](backend/docs/api-reference.md) | REST API reference |
+| [OpenAPI Spec](docs/openapi.yaml) | Machine-readable API spec |
+| [Runbook](docs/runbook.md) | Backups, restore, maintenance, troubleshooting |
+| [AI-Native Operations Roadmap](docs/ai-native-operations-roadmap.md) | Longer-term AI-native platform plan |
 | [Architecture Decisions](docs/decisions/) | ADRs for persistence, auth, incidents, AI |
 
 ---
 
 ## Security
 
-- JWT auth with role-based access (admin / ops)
-- Bcrypt passwords, login rate-limited (10 attempts/min per IP)
-- Security headers (CSP, X-Frame-Options, HSTS, Referrer-Policy)
+- JWT authentication
+- Role-based access for admin and ops users
+- Bcrypt password hashing
+- Login rate limiting
+- Security headers
 - AES-256-GCM encryption for AI API keys and inline credentials at rest
-- SSH host key fingerprint verification
-- Command checks disabled by default
-- Remediation actions are registry-gated to prevent RCE
+- SSH host key fingerprint support
+- Command checks disabled unless explicitly allowed
+- Registry-gated remediation actions
+- MongoDB-backed audit trail
 
 Found a vulnerability? See [SECURITY.md](SECURITY.md).
-
----
-
-## Development
-
-```bash
-# Backend
-cd backend && go test ./... -race
-cd backend && go fmt ./...
-
-# Frontend
-cd frontend && npm run typecheck
-```
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) — we welcome new check types, notification channels, AI prompt improvements, and bug fixes.
 
 ---
 
