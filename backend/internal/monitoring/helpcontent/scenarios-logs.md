@@ -138,4 +138,4 @@ relatedTopics: log-events,api-quickstart
 - **Batch.** One POST per log line is wasteful. 25-100 events per batch is normal.
 - **Strip IDs from `message`.** Keep request IDs and user IDs in `meta` so pattern clustering works.
 - **Sample noisy categories.** Send 1 in 100 INFO logs, all WARN, all ERROR. Otherwise log ingestion dominates your disk.
-- **Retention.** Log ingestion can dwarf every other category on disk. Tune `LOG_RETENTION_DAYS` early.
+- **Retention.** Log ingestion can dwarf every other category on disk. Tune log-event retention early.

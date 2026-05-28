@@ -17,12 +17,11 @@ relatedTopics: users,security
 HealthOps does not ship with a default username and password. The very first admin user is created from environment variables set on the first start:
 
 ```bash
-HEALTHOPS_BOOTSTRAP_ADMIN_USERNAME=admin
 HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD=<a strong password>
 HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
 ```
 
-After the user store has at least one admin, these envs are ignored. You can (and should) remove them from the running configuration after the first sign-in.
+The username is always `admin`. After the user store has at least one admin, the password env is ignored unless `HEALTHOPS_BOOTSTRAP_ADMIN_RESET=true`. You can remove the bootstrap password from the running configuration after the first sign-in.
 
 ## Day-to-Day Login
 
@@ -43,7 +42,7 @@ On success, HealthOps issues a JWT token (stored in browser local storage as `he
 You cannot reset your own password if you are locked out (HealthOps does not send "forgot password" emails today). To recover:
 
 1. Have another admin reset your password from **Users → your account → Reset password**.
-2. If no other admin exists, restart HealthOps with the bootstrap envs again and create a new admin. The existing one is preserved.
+2. If no other admin exists, restart HealthOps once with `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD=<new-password>` and `HEALTHOPS_BOOTSTRAP_ADMIN_RESET=true` to reset the fixed `admin` account. Disable reset again after access is restored.
 
 ## Service Accounts
 

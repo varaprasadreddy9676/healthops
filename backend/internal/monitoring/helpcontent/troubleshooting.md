@@ -14,8 +14,8 @@ relatedTopics: faq,getting-started
 
 ## I cannot log in
 
-- Check that the bootstrap admin envs were set on first start: `HEALTHOPS_BOOTSTRAP_ADMIN_USERNAME`, `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD`.
-- If the user already exists, the bootstrap envs are ignored. Reset the password via another admin, or drop the users collection in MongoDB and restart (you will lose all users).
+- Check that `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` was set on first start. The bootstrap username is always `admin`.
+- If the user already exists, the bootstrap password is ignored unless `HEALTHOPS_BOOTSTRAP_ADMIN_RESET=true`. Reset the password via another admin, or restart once with a new bootstrap password plus reset enabled.
 - If you see "authentication required" on every page, your JWT may have expired. Sign in again.
 
 ## The frontend loads but the API returns 401
@@ -68,7 +68,7 @@ relatedTopics: faq,getting-started
 
 ## Disk is filling up
 
-- The biggest contributors are MongoDB collections for check results, MySQL samples, and server metrics. Reduce retention in **Settings**, or set per-category retention envs. See **Data Retention**.
+- The biggest contributors are MongoDB collections for check results, MySQL samples, and server metrics. Reduce result retention in **Settings** and use MongoDB backups/archival for longer retention. See **Data Retention**.
 - Logs to stdout are not stored by HealthOps — your container runtime stores those.
 
 ## High CPU on the HealthOps process

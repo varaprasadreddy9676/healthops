@@ -128,6 +128,8 @@ Run a full demo environment with seeded checks, Linux SSH targets, MySQL, Redis,
 docker compose -f compose.demo.yaml up -d --build
 ```
 
+The demo binds to localhost by default because it uses known demo credentials. Set `HEALTHOPS_DEMO_BIND=0.0.0.0` only on a trusted network.
+
 Open:
 
 ```text
@@ -188,7 +190,7 @@ scripts/demo-scenario.sh mysql-load
 
 The default demo uses a local mock OpenAI-compatible provider, so no external AI key is required.
 
-To test a real OpenRouter provider and Slack notification path:
+To test a real OpenRouter provider and Slack notification path, pass the key only to the helper process. The script stores it through the HealthOps API, and the backend encrypts it in MongoDB:
 
 ```bash
 SLACK_WEBHOOK_URL='https://hooks.slack.com/services/...' \
@@ -199,7 +201,7 @@ scripts/demo-scenario.sh configure-real-integrations
 scripts/demo-scenario.sh real-incident
 ```
 
-Real AI provider keys are stored through the HealthOps API/UI and encrypted at rest in the Mongo-backed AI configuration store. Do not commit real keys to `.env`, compose files, or source control.
+Do not place real AI provider keys in `.env`, compose files, or source control.
 
 ---
 
@@ -312,7 +314,7 @@ Production compose uses these key variables:
 | `MONGODB_DATABASE` | No | `healthops` | Mongo database name |
 | `MONGODB_COLLECTION_PREFIX` | No | `healthops` | Mongo collection prefix |
 | `MYSQL_DSN` | No | empty | External MySQL DSN for monitored MySQL targets |
-| `HEALTHOPS_SMTP_PASS` | No | empty | SMTP password for email notifications |
+| `HEALTHOPS_SMTP_PASS` | No | empty | Optional SMTP password env consumed by email notification channels that use `smtpPassEnv` |
 
 See [.env.example](.env.example) and [Deployment Guide](docs/deployment-guide.md) for the full list.
 

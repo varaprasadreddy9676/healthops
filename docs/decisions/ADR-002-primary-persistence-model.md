@@ -1,13 +1,15 @@
 # ADR 002: Primary Persistence Model
 
-Status: Accepted
-Related: ADR 005 clarifies this decision for AI-native operations data and supersedes any production runtime use of best-effort MongoDB mirroring or file-store fallback.
+Status: Superseded by ADR 005 for runtime persistence
+Related: ADR 005 finalizes MongoDB as the required runtime persistence layer and supersedes any production use of best-effort MongoDB mirroring or file-store fallback.
 
 ## Context
-The existing prototype of Medics Health Check relies on a blob-style state model, writing to a local JSON file (`data/state.json`) with an optional full-state mirror to MongoDB. This approach requires rewriting large mutable snapshots and syncing full state, which is not scalable or safe for a production environment.
+The initial prototype relied on a blob-style local state model with an optional full-state mirror to MongoDB. This approach required rewriting large mutable snapshots and syncing full state, which was not scalable or safe for a production environment.
 
 ## Decision
-We will use **MongoDB as the primary persistence model** in production. We will persist discrete domain models (e.g., CheckDefinition, CheckRun, CheckLatestStatus). The local fallback storage (file store) will be restricted to local development and testing purposes only. 
+We will use **MongoDB as the primary persistence model** in production. We will persist discrete domain models such as check definitions, check runs, latest status, users, incidents, AI config, AI queues, notifications, and audit records.
+
+ADR 005 supersedes this ADR's earlier allowance for local file persistence. The current runtime requires MongoDB and fails fast when `MONGODB_URI` is not configured or MongoDB is unavailable.
 
 ## Consequences
 **Positive:**

@@ -17,8 +17,9 @@ import (
 //     Target/Host/Port.
 //
 // The registry is the single source of truth for all check types.
-// Built-in types (api, tcp, process, command, log, mysql, ssh) are
-// registered via init() functions in their respective check_*.go files.
+// Built-in types (api, tcp, process, command, log, mysql, ssh, ssl, dns,
+// ping, domain, heartbeat) are registered via init() functions in their
+// respective check_*.go files.
 type CheckExecutor interface {
 	// Type returns the lowercase string used in CheckConfig.Type (e.g. "ssl").
 	// Must be stable and unique across the binary.

@@ -29,11 +29,11 @@ The Settings page is split into tabs along the left edge:
 ## What Lives Where
 
 - AI provider keys, prompt templates → **AI Providers** tab.
-- JWT TTL, login rate limits, audit retention → environment variables (not editable in UI).
+- JWT TTL and login rate limits are fixed backend controls today; audit retention should be handled through export/backup policy.
 - Data retention (days to keep results, incidents) → **General** tab.
 - Notification channels → standalone **Notifications** page or the relevant tab.
 - Webhook integrations → **Integrations** (legacy section); newer integrations use the Notifications page.
-- Workspace name/branding → not yet exposed in the UI; edit `data/state.json` directly if you must.
+- Workspace name/branding → not yet exposed in the UI.
 
 ## AI Configuration
 

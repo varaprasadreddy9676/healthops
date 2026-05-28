@@ -1,7 +1,7 @@
 # ADR 001: V1 Scope
 
 ## Context
-The Medics Health Check system is being transitioned from a legacy Node.js implementation to a production-grade Go backend. We need to clearly define the product scope for V1 to prevent scope creep and ensure timely delivery of a reliable system.
+HealthOps is a self-hosted monitoring product with a Go backend, React/Vite frontend, MongoDB persistence, JWT/RBAC authentication, and AI-assisted incident workflows. We need to keep the V1 product boundary clear so the open-source baseline remains deployable and understandable.
 
 ## Decision
 We have decided to target a **single-tenant scope** for V1 operations. The product will be an internal operations tool rather than a multi-tenant SaaS offering.

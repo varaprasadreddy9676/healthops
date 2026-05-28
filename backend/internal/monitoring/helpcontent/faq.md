@@ -18,7 +18,7 @@ The scheduler runs every check on its own interval. Most defaults are 60 seconds
 
 ## Do I need MongoDB?
 
-No. HealthOps works fully with the local file store. Mongo is an optional mirror for resilience and for shared deployments. If `MONGODB_URI` is not set, the file store is the single source of truth.
+Yes. MongoDB is the runtime source of truth for production and Docker deployments. If `MONGODB_URI` is not set, HealthOps exits at startup instead of falling back to local files.
 
 ## Do I need AI?
 
@@ -26,7 +26,7 @@ No. AI is optional. Without a configured AI provider, the AI surfaces (Root Caus
 
 ## I changed `config/default.json` but my change is ignored. Why?
 
-`default.json` is only read on the **very first run**, to seed `data/state.json`. After that, the file store and API are the source of truth. Manage checks via the UI or `POST /api/v1/checks`. To re-seed from scratch, stop the service, delete `data/state.json`, then start again.
+`default.json` is only read on the **very first run**, to seed MongoDB. After that, MongoDB and the API/UI are the source of truth. Manage checks via the UI or `POST /api/v1/checks`. To re-seed from scratch, start with a new Mongo database or collection prefix.
 
 ## How do I add a check via the API?
 
@@ -42,7 +42,7 @@ Incidents only resolve when the **successes-to-resolve** threshold is crossed. O
 
 ## Where are my secrets stored?
 
-API keys for AI providers are AES-256-GCM encrypted at rest in `data/ai_config.json`. The encryption key lives in `data/.ai_enc_key`. Database DSNs are read from environment variables you reference by name in the check config — they are never stored or logged.
+API keys for AI providers are AES-256-GCM encrypted in MongoDB. The encryption key lives in `data/.ai_enc_key`; back it up if you use AI. Database DSNs are read from environment variables you reference by name in the check config — they are never stored or logged.
 
 ## How do I forward HealthOps logs to my own log system?
 

@@ -16,18 +16,18 @@ HealthOps generates a lot of data. The retention job prunes daily. Defaults are 
 
 ## Categories and Defaults
 
-| Category | Default | Env override | Where stored |
-| -------- | ------- | ------------ | ------------ |
-| Check results | `retentionDays` from config (default 7) | `RETENTION_DAYS` | MongoDB |
-| MySQL samples + deltas | 14 days | `RETENTION_SNAPSHOTS_DAYS` | MongoDB |
-| Incident snapshots | 14 days | `RETENTION_SNAPSHOTS_DAYS` | MongoDB |
-| Server metrics | 14 days | `RETENTION_SNAPSHOTS_DAYS` | MongoDB |
-| Notifications outbox | 30 days | `RETENTION_NOTIFICATIONS_DAYS` | MongoDB |
-| AI queue | 7 days | `RETENTION_AI_QUEUE_DAYS` | MongoDB |
-| AI results | tracked per-incident, follow incident retention | — | MongoDB |
-| Incidents | 90 days | `RETENTION_INCIDENT_DAYS` | MongoDB |
-| Audit log | indefinite by default — export externally | — | MongoDB |
-| Log events | 7 days | `LOG_RETENTION_DAYS` | MongoDB |
+| Category | Default | How to change | Where stored |
+| -------- | ------- | ------------- | ------------ |
+| Check results | `retentionDays` from config (default 7) | Settings → General | MongoDB |
+| MySQL samples + deltas | 14 days | Config/API retention settings as implemented for the collector | MongoDB |
+| Incident snapshots | 14 days | Config/API retention settings as implemented for the collector | MongoDB |
+| Server metrics | 14 days | Config/API retention settings as implemented for the collector | MongoDB |
+| Notifications outbox | 30 days | Notification retention settings / cleanup job | MongoDB |
+| AI queue | 7 days | AI queue cleanup settings | MongoDB |
+| AI results | tracked per-incident, follow incident retention | Export/archive externally for long-term retention | MongoDB |
+| Incidents | 90 days | Incident retention cleanup settings | MongoDB |
+| Audit log | indefinite by default — export externally | Export to your SIEM or backup archive | MongoDB |
+| Log events | 7 days | Log retention settings / cleanup job | MongoDB |
 
 ## How the Pruner Works
 
@@ -36,12 +36,12 @@ A background job runs daily. For each category it deletes entries older than the
 ## When to Increase
 
 - **Compliance** requires N-year audit retention → ship audit to your SIEM and keep a sane local window.
-- **Incident review** requires longer than 14 days of snapshots → raise `RETENTION_SNAPSHOTS_DAYS` to 30 or 60.
-- **Trend analysis** requires longer than 7 days of results → raise `RETENTION_DAYS` to 30. Watch disk.
+- **Incident review** requires longer than 14 days of snapshots → increase snapshot retention in the retention configuration or archive snapshots externally.
+- **Trend analysis** requires longer than 7 days of results → raise result retention in Settings. Watch disk.
 
 ## When to Decrease
 
-- **Disk pressure** → lower categories that grow fastest, usually `LOG_RETENTION_DAYS` and `RETENTION_DAYS`.
+- **Disk pressure** → lower categories that grow fastest, usually log-event and check-result retention.
 - **GDPR / "right to forget" workflows** → shorter retention reduces exposure.
 
 ## Disk Budget Estimation

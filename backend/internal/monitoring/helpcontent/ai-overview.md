@@ -52,7 +52,7 @@ HealthOps does not ship an AI provider, a hosted key, or a default model. You co
 
 You bring the API key. HealthOps:
 
-- Stores the key **AES-256-GCM encrypted** at rest in `data/ai_config.json`.
+- Stores the key **AES-256-GCM encrypted** at rest in MongoDB.
 - Keeps the encryption key in `data/.ai_enc_key` (mode 600, never logged).
 - **Masks the key** in every API response and UI surface — there is no "show key" button.
 - Supports rotating both the API key and the encryption key (see `cmd/rotate-ai-keys`).
@@ -116,7 +116,7 @@ Every enabled AI surface costs API calls. Sensible defaults:
 | Remediation needs operator approval | Prevents AI-driven incidents-on-incidents |
 | AI output is never treated as truth | Operators validate, evidence is canonical |
 | AI surfaces hidden until provider is configured + healthy | No phantom UI |
-| Every AI call logged in `data/ai_results.jsonl` | Full audit trail |
+| Every AI call persisted in MongoDB | Full audit trail |
 | Encryption key in `.ai_enc_key` (mode 600) | Standard secret hygiene |
 | Provider key never returned by API | Even admins cannot exfiltrate it via the UI |
 

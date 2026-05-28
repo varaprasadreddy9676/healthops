@@ -6,7 +6,7 @@
 
 ### Prerequisites
 
-- **Go 1.19+** installed
+- **Go 1.25+** installed for source builds
 - **MongoDB** - required for the production Docker stack and primary persistence
 - **Basic tools:** `curl`, `ps`, `netstat`
 
@@ -21,10 +21,8 @@
 | `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` | Yes on first Mongo-backed deployment | - | Strong temporary password used to create/reset the Mongo-backed `admin` user |
 | `HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL` | No | `admin@healthops.local` | Admin email used during bootstrap |
 | `HEALTHOPS_BOOTSTRAP_ADMIN_RESET` | No | `false` | Set to `true` only when intentionally resetting the admin password |
-| `AUTH_USERNAME` | No | - | Basic auth username (if auth enabled) |
-| `AUTH_PASSWORD` | No | - | Basic auth password (if auth enabled) |
 
-For Docker/Mongo deployments, set `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` before the first start. HealthOps does not create an insecure `admin/admin` Mongo user automatically.
+For Docker/Mongo deployments, set `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` before the first start. HealthOps does not create default admin credentials automatically.
 
 ### Start the Service
 
@@ -33,11 +31,13 @@ For Docker/Mongo deployments, set `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` before th
 cd backend
 
 # Start the monitoring service
+MONGODB_URI=mongodb://localhost:27017 \
+HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD='change-this-strong-password' \
 go run ./cmd/healthops
 
 # Alternative: Build and run
 go build -o healthops ./cmd/healthops
-./healthops
+MONGODB_URI=mongodb://localhost:27017 ./healthops
 ```
 
 ### Verify Startup
@@ -193,13 +193,14 @@ Each check can have individual scheduling parameters:
 
 ```bash
 # Check service logs
-tail -f backend/data/state.json
+docker compose logs -f healthops
 
 # Docker deployment logs
 docker compose logs -f healthops
 
-# Check audit log (if enabled)
-cat data/audit.json
+# Check audit log in MongoDB
+mongosh "$MONGODB_URI/healthops" \
+  --eval 'db.healthops_audit.find().sort({timestamp:-1}).limit(20).pretty()'
 
 # Run verbose mode (if available)
 go run ./cmd/healthops -v
@@ -308,7 +309,8 @@ grep -A 10 "alertRules" config/default.json
 
 ```bash
 # Check audit log for alert attempts
-grep "alert" data/audit.json
+mongosh "$MONGODB_URI/healthops" \
+  --eval 'db.healthops_audit.find({action:/alert|notification/}).sort({timestamp:-1}).limit(20).pretty()'
 
 # Manual alert test
 curl -X POST http://localhost:8080/api/v1/runs \
@@ -398,12 +400,13 @@ The service automatically resolves incidents when the underlying check recovers:
 
 ## 6. Backup and Restore
 
-### State File Location
+### Persistence Location
 
-- **MongoDB:** primary persistence for production deployments
-- **State file:** `backend/data/state.json` or `/app/data/state.json` in Docker, used as local fallback/runtime state
-- **Audit log:** `backend/data/audit.json`
-- **Config file:** `backend/config/default.json`
+- **MongoDB:** required primary persistence for production deployments
+- **Audit log:** MongoDB collection named `<prefix>_audit`
+- **AI provider config:** MongoDB collection named `<prefix>_ai_config`; provider keys are encrypted
+- **Data directory:** contains only local secrets such as `.jwt_secret` and `.ai_enc_key`
+- **Config file:** `backend/config/default.json` is a first-run seed; after seeding, use the API/UI
 
 ### Backup Procedure
 
@@ -414,11 +417,12 @@ mkdir -p /backup/health-monitor/$(date +%Y%m%d)
 # Copy configuration files
 cp backend/config/default.json /backup/health-monitor/$(date +%Y%m%d)/config.json
 
-# Copy state files
-cp -r backend/data/ /backup/health-monitor/$(date +%Y%m%d)/
+# Copy local cryptographic keys
+cp backend/data/.jwt_secret /backup/health-monitor/$(date +%Y%m%d)/ 2>/dev/null || true
+cp backend/data/.ai_enc_key /backup/health-monitor/$(date +%Y%m%d)/ 2>/dev/null || true
 
 # Backup MongoDB primary persistence
-mongodump --uri="$MONGODB_URI" --db=healthops --out /backup/health-monitor/$(date +%Y%m%d)/mongodb
+mongodump --uri="$MONGODB_URI" --db=healthops --archive=/backup/health-monitor/$(date +%Y%m%d)/mongodb.archive
 
 # Verify backup
 ls -la /backup/health-monitor/$(date +%Y%m%d)/
@@ -433,14 +437,15 @@ pkill healthops
 # Restore config
 cp /backup/health-monitor/YYYYMMDD/config.json backend/config/default.json
 
-# Restore state
-cp -r /backup/health-monitor/YYYYMMDD/data/ backend/
+# Restore local cryptographic keys
+cp /backup/health-monitor/YYYYMMDD/.jwt_secret backend/data/ 2>/dev/null || true
+cp /backup/health-monitor/YYYYMMDD/.ai_enc_key backend/data/ 2>/dev/null || true
 
 # Restore MongoDB primary persistence
-mongorestore --uri="$MONGODB_URI" /backup/health-monitor/YYYYMMDD/mongodb/healthops
+mongorestore --uri="$MONGODB_URI" --archive=/backup/health-monitor/YYYYMMDD/mongodb.archive --drop
 
 # Start the service
-cd backend && go run ./cmd/healthops
+cd backend && MONGODB_URI="$MONGODB_URI" go run ./cmd/healthops
 ```
 
 ### Automated Backup Script
@@ -456,7 +461,9 @@ mkdir -p "$BACKUP_DIR/$DATE"
 
 # Backup files
 cp -r config/ "$BACKUP_DIR/$DATE/"
-cp -r data/ "$BACKUP_DIR/$DATE/"
+cp data/.jwt_secret "$BACKUP_DIR/$DATE/" 2>/dev/null || true
+cp data/.ai_enc_key "$BACKUP_DIR/$DATE/" 2>/dev/null || true
+mongodump --uri="$MONGODB_URI" --db=healthops --archive="$BACKUP_DIR/$DATE/mongodb.archive"
 
 # Keep only last 7 days
 cd "$BACKUP_DIR"
@@ -529,22 +536,7 @@ echo "Backup completed: $BACKUP_DIR/$DATE"
 
 ### Authentication Setup
 
-```json
-{
-  "auth": {
-    "enabled": true,
-    "username": "admin",
-    "password": "securepassword123"
-  }
-}
-```
-
-### Environment Variables for Auth
-
-```bash
-export AUTH_USERNAME=admin
-export AUTH_PASSWORD=securepassword123
-```
+HealthOps uses JWT bearer authentication. On the first Mongo-backed start, set `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` and log in as the fixed `admin` user. Keep `HEALTHOPS_BOOTSTRAP_ADMIN_RESET=false` unless you are intentionally resetting the admin password.
 
 ### Command Checks Security
 
@@ -666,23 +658,23 @@ curl http://localhost:8080/api/v1/runs \
 ```bash
 # Error: 401 Unauthorized
 # Solution: Check authentication
-curl -u admin:password http://localhost:8080/api/v1/checks
+TOKEN="$(curl -fsS -X POST http://localhost:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"<admin-password>"}' | jq -r '.data.token')"
+
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/checks
 ```
 
 **Fix:**
 ```bash
-# Enable auth in config
-{
-  "auth": {
-    "enabled": true,
-    "username": "admin",
-    "password": "password123"
-  }
-}
+# If the admin password was lost, reset it once through bootstrap envs.
+export HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD='<new-strong-password>'
+export HEALTHOPS_BOOTSTRAP_ADMIN_RESET=true
+systemctl restart healthops
 
-# Set environment variables
-export AUTH_USERNAME=admin
-export AUTH_PASSWORD=password123
+# After login works, disable reset and restart again.
+export HEALTHOPS_BOOTSTRAP_ADMIN_RESET=false
+systemctl restart healthops
 ```
 
 ### "Command Checks Disabled"
@@ -810,12 +802,11 @@ ls -la backend/data/
 ### Data Corruption
 
 ```bash
-# Restore from backup
-cp backup/last-good/data/state.json backend/data/
+# Restore MongoDB from last good backup
+mongorestore --uri="$MONGODB_URI" --archive=backup/last-good/mongodb.archive --drop
 
-# Reset state
-rm backend/data/state.json
-touch backend/data/state.json
+# Preserve or restore backend/data/.jwt_secret and backend/data/.ai_enc_key
+# Losing .ai_enc_key prevents existing encrypted AI provider keys from decrypting.
 ```
 
 ### High CPU Usage

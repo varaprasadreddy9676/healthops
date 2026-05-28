@@ -35,6 +35,6 @@
 ## Security & Configuration Tips
 - Do not hardcode credentials, webhook URLs, or passwords in source files.
 - Keep secrets in environment variables or deployment config, never in `backend/config/default.json`.
-- AI provider API keys are AES-256-GCM encrypted at rest in `data/ai_config.json` and always masked in API responses.
+- AI provider API keys are AES-256-GCM encrypted at rest in MongoDB; `backend/data/.ai_enc_key` is the local encryption key and must be backed up.
 - MySQL DSNs are read from environment variables referenced by `dsnEnv` in check config.
 - Review config changes carefully because they directly control alerting and monitoring scope.

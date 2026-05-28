@@ -19,8 +19,7 @@ Users are the human accounts that log into HealthOps. Each user has a role that 
 | Role | Read | Write | Admin actions |
 | ---- | ---- | ----- | -------------- |
 | **Admin** | Everything | Everything | Add users, edit roles, change settings, install integrations |
-| **Operator** | Everything | Acknowledge/resolve incidents, run checks, write status updates | No |
-| **Read-only** | Everything | No | No |
+| **Ops** | Everything | Limited operational actions where allowed by the API | No |
 
 Roles are global today. Per-resource ACLs are not implemented.
 
@@ -30,7 +29,7 @@ Admins create users from the Users page or via `POST /api/v1/users`. A first-tim
 
 ## First Admin (Bootstrap)
 
-On the very first run, HealthOps reads `HEALTHOPS_BOOTSTRAP_ADMIN_USERNAME` and `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` from the environment and creates an admin. After that, those env vars are ignored — manage users from the UI.
+On the very first run, HealthOps creates the `admin` user from `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` and `HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL`. If `HEALTHOPS_BOOTSTRAP_ADMIN_RESET=true`, the same env can reset the admin password on startup. Keep reset disabled in normal production operation.
 
 ## Password Reset
 
@@ -53,4 +52,4 @@ Every user-management action (create, delete, role change, password reset, login
 
 - **"I cannot demote myself."** That is intentional — at least one admin must exist. Create another admin first.
 - **"User logged in successfully but every API call returns 401."** Their account role may not permit the page they are on, or the JWT secret rotated and they need to sign back in.
-- **"Forgot the admin password."** Stop the service, delete `data/users.json`, restart with bootstrap envs. You lose all users, so back up first.
+- **"Forgot the admin password."** Restart once with `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD=<new-password>` and `HEALTHOPS_BOOTSTRAP_ADMIN_RESET=true`, then disable reset again after access is restored.

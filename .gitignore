@@ -48,3 +48,9 @@ backend/healthops-bin
 
 # Runtime data (root level)
 data/
+
+# Local/customer configs and generated logs
+backend/config/local*.json
+backend/config/*local*.json
+backend/config/medics*.json
+backend/*.log

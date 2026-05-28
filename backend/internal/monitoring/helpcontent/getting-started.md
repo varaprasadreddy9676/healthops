@@ -57,7 +57,7 @@ Every screen in the product is a view onto this loop. Nothing else is happening.
 
 | Minute | Do this | Why |
 | ------ | ------- | --- |
-| 0–1 | **Log in** with the bootstrap admin (set via env vars `HEALTHOPS_BOOTSTRAP_ADMIN_USERNAME` / `_PASSWORD` on first start) | You cannot do anything without auth |
+| 0–1 | **Log in** with the fixed `admin` user and the first-run `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` | You cannot do anything without auth |
 | 1–3 | **Open the Dashboard** | See the layout; understand "healthy now" vs "currently broken" |
 | 3–5 | **Open Checks** → click any seeded demo check | Understand the per-monitor view: history, last 50 results, current config |
 | 5–7 | **Open Incidents** → click an open one (or recently resolved) | See evidence collection, state machine, snapshots |
@@ -106,7 +106,7 @@ If the test never arrives:
 
 - Check the **Notifications** page (outbox) — every dispatch attempt is logged with status and error.
 - Webhook failed? Confirm the URL is reachable from the HealthOps host and returns HTTP 2xx.
-- Email failed? Check your SMTP env vars and the outbox `lastError`.
+- Email failed? Check the email channel's SMTP host/user/password-env settings and the outbox `lastError`.
 
 ## What You Do **Not** Need on Day One
 

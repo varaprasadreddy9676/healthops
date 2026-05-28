@@ -1,77 +1,75 @@
-# Production Release Checklist (Execution)
+# Production Release Checklist
 
-## How To Use
-1. Execute each command in order.
-2. Mark checkbox only after command output is validated.
-3. Record links or logs in the `Evidence` field.
-4. Release gate is blocked until all required sections pass.
+Use this checklist before tagging or announcing a public production release.
 
-## 1) Backend Verification
-- [x] `go test ./...` passes
-Evidence: 2026-04-18 `ok  	health-ops/backend/internal/monitoring	46.026s`
+## 1. Required Automated Verification
 
-- [x] `go test -race ./internal/monitoring -run 'Test(AllMutatingEndpointsRequireAuth|E2E_FullIncidentLifecycle|POSTChecksContract|MetricsEndpoint)$' -count=1` passes
-Evidence: 2026-04-18 `ok  	health-ops/backend/internal/monitoring	1.796s`
+- [ ] Backend tests pass:
+  ```bash
+  cd backend && go test ./...
+  ```
 
-- [x] Contract tests pass:
-`go test ./internal/monitoring -run 'Test(GET|POST|PUT|DELETE|ResponseEnvelope|ErrorResponses|FieldType|IncidentEndpointsUnAvailable|AuditEndpointsUnAvailable)' -count=1`
-Evidence: 2026-04-18 `ok  	health-ops/backend/internal/monitoring	0.520s`
+- [ ] Frontend typecheck passes:
+  ```bash
+  cd frontend && npm run typecheck
+  ```
 
-- [x] E2E core flows pass:
-`go test ./internal/monitoring -run 'TestE2E_(FullIncidentLifecycle|AlertDeduplication|CooldownEnforcement|RecoveryAutoResolve|AuditTrail|AuthEnforcement)$' -count=1`
-Evidence: 2026-04-18 `ok  	health-ops/backend/internal/monitoring	1.364s`
+- [ ] Frontend production build passes:
+  ```bash
+  cd frontend && npm run build
+  ```
 
-## 2) Security Verification
-- [x] Security audit suite passes:
-`go test ./internal/monitoring -run 'Test(AllMutatingEndpointsRequireAuth|InvalidAuthRejected|ValidAuthAccepted|ReadEndpointsBypassAuth|NoSecretsInAPIResponses|InputValidation|TimingAttackResistance|SecurityHeaders|RateLimitingStatus|CSRFProtectionStatus|SecretsInLogsStatus)$' -count=1`
-Evidence: 2026-04-18 `ok  	health-ops/backend/internal/monitoring	0.409s`
+- [ ] OpenAPI YAML parses:
+  ```bash
+  ruby -e 'require "yaml"; YAML.load_file("docs/openapi.yaml"); puts "openapi yaml ok"'
+  ```
 
-- [x] Mutating APIs return `401` without valid auth.
-Evidence: 2026-04-18 live check on auth-enabled instance: `POST /api/v1/checks` -> `401` (without auth), `201` (with `admin:secret`).
+- [ ] Public docs do not contain stale persistence or auth guidance:
+  ```bash
+  rg -n "Authorization: Basic|state\\.json|data/ai_config\\.json|users\\.json|STATE_PATH|file store is the source" README.md docs backend/docs backend/internal/monitoring/helpcontent --glob '!backend/docs/release-checklist.md'
+  ```
 
-- [x] Command checks disabled by default (`allowCommandChecks=false`).
-Evidence: `backend/config/default.json` contains `"allowCommandChecks": false`.
+- [ ] No obvious committed API keys:
+  ```bash
+  rg -n "sk-or-|sk-[A-Za-z0-9_-]{20,}|xox[baprs]-|ghp_[A-Za-z0-9_]{20,}" .
+  ```
 
-- [x] Security report reviewed: `backend/docs/security-audit.md`
-Evidence: Reviewed during final gate execution on 2026-04-18.
+## 2. Docker Verification
 
-## 3) Load & Performance Verification
-- [x] Query load scenario passes:
-`go run ./cmd/loadtest -scenario=query -duration=20s -checks=20 -queries=20 -workers=10 -memory-growth-max=400 -goroutine-limit=5000`
-Evidence: 2026-04-18 PASS, p95=2ms, failures=0, queries=1817.
+- [ ] Production compose boots:
+  ```bash
+  HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD='change-this-strong-password' docker compose up -d --build
+  curl http://localhost:8080/healthz
+  docker compose down
+  ```
 
-- [ ] Scheduler scenario passes target thresholds for your environment.
-Evidence: 2026-04-18 FAIL, `scheduler lag p95 (16m38.921784s) exceeds threshold (5s)`.
+- [ ] Demo compose boots:
+  ```bash
+  docker compose -f compose.demo.yaml up -d --build
+  scripts/demo-scenario.sh smoke
+  scripts/demo-scenario.sh rca
+  docker compose -f compose.demo.yaml down -v
+  ```
 
-- [ ] Memory scenario (>=30m) shows no leak trend.
-Evidence: 2026-04-18 INCONCLUSIVE/FAIL. Long-run memory scenario showed severe execution stalls and did not complete in expected wall-clock cadence.
+## 3. Security Verification
 
-- [x] Load report updated: `backend/docs/load-test-report.md`
-Evidence: Updated with final gate rerun outcomes on 2026-04-18.
+- [ ] `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD` is set only through deployment secrets or environment.
+- [ ] `HEALTHOPS_BOOTSTRAP_ADMIN_RESET=false` for normal production operation.
+- [ ] MongoDB is private to the host/network and backed up.
+- [ ] `data/.jwt_secret` and `data/.ai_enc_key` are backed up securely.
+- [ ] TLS is terminated by a reverse proxy or load balancer.
+- [ ] At least one notification channel is configured and tested.
+- [ ] AI provider keys are configured through Settings/API and never committed.
+- [ ] Any key pasted into chat, issues, docs, screenshots, or demos is rotated before release.
 
-## 4) Deployment Readiness
-- [ ] Docker build passes (`Dockerfile`)
-Evidence: 2026-04-18 FAIL (environment): Docker daemon unavailable (`/Users/sai/.docker/run/docker.sock`).
+## 4. Release Sign-Off
 
-- [ ] `compose.yaml` boot test passes
-Evidence: 2026-04-18 FAIL (environment): Cannot connect to Docker daemon.
-
-- [x] `.env.example` validated against runtime config
-Evidence: File exists and includes server/auth/scheduler/security keys used by runtime (`SERVER_ADDR`, `STATE_PATH`, `AUTH_*`, `CHECK_INTERVAL_SECONDS`, `ALLOW_COMMAND_CHECKS`).
-
-- [x] Runbook reviewed: `docs/runbook.md`
-Evidence: Reviewed during gate run on 2026-04-18.
-
-## 5) Release Sign-Off
-- [ ] Engineering sign-off
-Name / Date:
-
-- [ ] QA sign-off
-Name / Date:
-
-- [ ] Security sign-off
-Name / Date:
+- [ ] Engineering sign-off:
+- [ ] QA sign-off:
+- [ ] Security sign-off:
+- [ ] Version tag created:
+- [ ] Changelog/release notes published:
 
 ## Release Gate
-- Required sections for production cut: `1`, `2`, `3`, `5`
-- Any unchecked required item blocks release.
+
+All items in sections 1, 2, and 3 must pass for a production release.

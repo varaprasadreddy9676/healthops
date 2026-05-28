@@ -130,4 +130,4 @@ Every MySQL recipe needs a DSN in an environment variable on the HealthOps host.
 - **Read-only user.** Never give HealthOps write privileges. It does not need them.
 - **One check per DSN.** Each MySQL check runs its own sampler. Do not create dozens of overlapping checks against the same database.
 - **Beware of `SHOW PROCESSLIST` cost** on huge servers. The default sampler interval (60s) is fine; do not drop below 30s.
-- **Snapshots are gold during post-mortem.** Set `RETENTION_SNAPSHOTS_DAYS` long enough that you can investigate week-old incidents.
+- **Snapshots are gold during post-mortem.** Keep snapshot retention long enough that you can investigate week-old incidents, or archive them externally.

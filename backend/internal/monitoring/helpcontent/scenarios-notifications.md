@@ -36,17 +36,13 @@ relatedTopics: notifications,integrations
 
 **Steps:**
 
-1. Configure SMTP on the HealthOps host:
+1. Put the SMTP password in the HealthOps process environment:
    ```
-   SMTP_HOST=smtp.example.com
-   SMTP_PORT=587
-   SMTP_USERNAME=healthops@example.com
-   SMTP_PASSWORD=<vault-managed>
-   SMTP_FROM="HealthOps <healthops@example.com>"
+   HEALTHOPS_SMTP_PASS=<vault-managed-password>
    ```
    Restart HealthOps.
 2. **Settings → Notification Channels → Add → Email**.
-3. Address: `oncall@example.com`.
+3. Enter SMTP host, port, username, sender, recipient, and set the password env field to `HEALTHOPS_SMTP_PASS`.
 4. **Test** — confirm an email arrives. If it does not, check the HealthOps logs for SMTP errors.
 5. Attach the channel to the checks you care about.
 

@@ -32,8 +32,8 @@ This page documents the security guarantees and the things you must do to keep t
 
 | Secret | Where it lives | How it is protected |
 | ------ | -------------- | ------------------- |
-| User passwords | `data/users.json` | bcrypt-hashed, never returned by API |
-| AI provider API keys | `data/ai_config.json` | AES-256-GCM encrypted, masked in API |
+| User passwords | MongoDB users collection | bcrypt-hashed, never returned by API |
+| AI provider API keys | MongoDB AI config collection | AES-256-GCM encrypted, masked in API |
 | AI encryption key | `data/.ai_enc_key` | Filesystem permissions only — protect with disk encryption |
 | JWT signing secret | `data/.jwt_secret` | Filesystem permissions only |
 | MySQL DSNs | Environment variables | Never logged, never returned by API |
@@ -82,8 +82,8 @@ Everything else requires a valid JWT.
 - [ ] AI encryption key on encrypted disk
 - [ ] User passwords meet your length/complexity policy (currently no built-in enforcement — coming)
 - [ ] Audit log shipped to external storage with longer retention
-- [ ] Mongo (if used) on encrypted disk and authenticated network
-- [ ] Backup `data/` directory to off-host storage
+- [ ] MongoDB on encrypted disk and authenticated private network
+- [ ] Back up MongoDB plus `data/.jwt_secret` and `data/.ai_enc_key`
 - [ ] Restrict outbound network so only required webhook destinations are reachable
 - [ ] Use a dedicated service account user (admin role) for automation
 - [ ] Monitor HealthOps itself with a second monitoring system or external uptime check

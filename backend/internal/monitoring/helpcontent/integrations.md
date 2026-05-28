@@ -30,7 +30,7 @@ Mattermost, Rocket.Chat, and other Slack-API-compatible tools use the same chann
 
 1. **Settings → Notification Channels → Add → Email**.
 2. Enter the destination address (or distribution list).
-3. SMTP credentials must be configured at the workspace level (envs: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`). Without SMTP, email channels fail delivery.
+3. Enter SMTP host, port, username, sender, and a password environment variable such as `HEALTHOPS_SMTP_PASS`. HealthOps reads the secret from the server environment through the channel's `smtpPassEnv` field.
 4. Test. If it lands in spam, add SPF/DKIM/DMARC records for the sending domain.
 
 ### Webhook (custom)

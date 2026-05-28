@@ -248,18 +248,13 @@ go test -v ./internal/monitoring/ai/repositories -run TestKeyRotation
 
 ## Migration Guide
 
-If migrating from an older version with file-based AI config (`data/ai_config.json`):
+HealthOps now stores AI provider configuration in MongoDB. The local `data/.ai_enc_key` file remains required because it encrypts and decrypts provider API keys stored in MongoDB.
 
-1. **Set up MongoDB**:
-   ```bash
-   export MONGODB_URI="mongodb://localhost:27017"
-   ```
+If you are upgrading from an older file-backed AI configuration, migrate provider records into MongoDB before relying on key rotation. After the providers exist in MongoDB:
 
-2. **Existing keys will be marked with KeyVersion: 0** (legacy)
-   - They'll be decrypted with the current key
-   - First rotation will upgrade them to KeyVersion: 1
-
-3. **No manual migration required** - the system handles legacy keys automatically
+1. Existing keys may be marked with `KeyVersion: 0` (legacy).
+2. The first rotation upgrades them to `KeyVersion: 1`.
+3. Future rotations continue from the latest key version.
 
 ### From Single Key to Versioned Keys
 

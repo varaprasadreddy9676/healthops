@@ -33,12 +33,12 @@ MongoDB is the sole persistence backend. The service requires a MongoDB connecti
 
 ## Key Features
 
-- **Health Checks**: `api`, `tcp`, `process`, `command`, `log`, `mysql`, `ssh` check types
+- **Health Checks**: `api`, `tcp`, `process`, `command`, `log`, `mysql`, `ssh`, `ssl`, `dns`, `ping`, `domain`, `heartbeat` check types
 - **Server Management**: Add remote servers, SSH-based health checks for process/command/connectivity
 - **MySQL Monitoring**: Collects `SHOW GLOBAL STATUS/VARIABLES`, computes deltas, 9 default alert rules
 - **Incidents**: Auto-created from alert rules, acknowledge/resolve lifecycle, evidence snapshots
 - **Alert Rules**: 5 default rules out of the box. Configurable thresholds, cooldowns, consecutive breaches, per-check or global.
-- **JWT Authentication**: Token-based auth with admin/viewer roles. Default credentials: `admin` / `admin`
+- **JWT Authentication**: Token-based auth with admin/ops roles. The first `admin` user is bootstrapped from `HEALTHOPS_BOOTSTRAP_ADMIN_PASSWORD`.
 - **User Management**: Create, update, delete users with role-based access control
 - **Notification Channels**: 6 channel types (email, Slack, Discord, Telegram, webhooks, PagerDuty) with smart filters (severity, check IDs, check types, servers, tags). Professional HTML email templates with incident stats and dashboard links. Incident-level deduplication prevents alert storms.
 - **BYOK AI Analysis**: Configure OpenAI/Anthropic/Google/Ollama/Custom providers from the UI. API keys AES-256-GCM encrypted at rest. Auto-analyzes incidents with configurable prompt templates.

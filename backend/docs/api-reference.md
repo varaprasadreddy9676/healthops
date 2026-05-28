@@ -1,7 +1,7 @@
 # HealthOps API Reference
 
-> **Version**: v1  
-> **Base URL**: `http://localhost:8080`  
+> **Version**: v1
+> **Base URL**: `http://localhost:8080`
 > **Content-Type**: `application/json` (unless noted)
 
 ---
@@ -28,6 +28,7 @@
 - [Notifications](#notifications)
 - [AI Queue](#ai-queue)
 - [BYOK AI Service](#byok-ai-service)
+- [Evidence & AI Incident Briefs](#evidence--ai-incident-briefs)
 - [Data Export](#data-export)
 - [Prometheus Metrics](#prometheus-metrics)
 
@@ -37,11 +38,49 @@
 
 | Property | Value |
 |----------|-------|
-| **Type** | HTTP Basic Auth |
-| **Header** | `Authorization: Basic base64(username:password)` |
-| **Read endpoints (GET)** | No auth required |
-| **Write endpoints (POST/PUT/PATCH/DELETE)** | Auth required when `auth.enabled = true` |
-| **401 Response Header** | `WWW-Authenticate: Basic realm="HealthOps"` |
+| **Type** | JWT bearer token |
+| **Login endpoint** | `POST /api/v1/auth/login` |
+| **Header** | `Authorization: Bearer <token>` |
+| **Public endpoints** | Health probes, login, embedded help, public status pages, and heartbeat ping tokens |
+| **Protected endpoints** | All `/api/v1/*` operational endpoints except login/help/heartbeat ping |
+
+### POST /api/v1/auth/login
+
+Exchange username/password for a JWT.
+
+**Auth**: No
+
+**Request Body**
+
+```json
+{
+  "username": "admin",
+  "password": "your-admin-password"
+}
+```
+
+**Response** `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "token": "eyJhbGciOi...",
+    "user": {
+      "id": "admin",
+      "username": "admin",
+      "role": "admin"
+    }
+  }
+}
+```
+
+Use the returned token:
+
+```bash
+curl http://localhost:8080/api/v1/checks \
+  -H "Authorization: Bearer $TOKEN"
+```
 
 ---
 
@@ -98,6 +137,12 @@ Every API response follows this envelope:
 | `command` | Shell command execution check |
 | `log` | Log file freshness check |
 | `mysql` | MySQL database monitoring |
+| `ssh` | SSH connectivity and command check |
+| `ssl` | TLS certificate expiry check |
+| `dns` | DNS resolution check |
+| `ping` | ICMP reachability check |
+| `domain` | Domain registration expiry check |
+| `heartbeat` | Dead-man switch check |
 
 ### Check Result Status
 
@@ -216,7 +261,7 @@ Readiness probe with service status.
 
 List all configured checks (lightweight view).
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `CheckListItem[]`
 
@@ -243,7 +288,7 @@ List all configured checks (lightweight view).
 
 Create a new check.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Request Body** — `CheckConfig`
 
@@ -273,7 +318,7 @@ Create a new check.
 |-------|------|----------|---------|-------------|
 | `id` | string | No | auto-generated | Unique identifier (pattern: `^[a-z0-9-]+$`) |
 | `name` | string | **Yes** | — | Human-readable name |
-| `type` | string | **Yes** | — | Check type: `api\|tcp\|process\|command\|log\|mysql` |
+| `type` | string | **Yes** | — | Check type: `api\|tcp\|process\|command\|log\|mysql\|ssh\|ssl\|dns\|ping\|domain\|heartbeat` |
 | `server` | string | No | `"default"` | Server grouping |
 | `application` | string | No | — | Application grouping |
 | `target` | string | No | — | Target URL (api) or process name (process) |
@@ -293,7 +338,17 @@ Create a new check.
 | `enabled` | bool | No | `true` | Whether check is active |
 | `tags` | string[] | No | — | Arbitrary tags |
 | `metadata` | object | No | — | Key-value metadata |
+| `serverId` | string | No | — | Managed server ID for remote checks |
+| `notificationChannelIds` | string[] | No | — | Notification channels attached to this check |
 | `mysql` | object | No | — | MySQL-specific config (required when type=mysql) |
+| `ssh` | object | No | — | SSH auth/host config for `ssh` checks or remote collection |
+| `ssl` | object | No | — | TLS certificate expiry config |
+| `dns` | object | No | — | DNS record query config |
+| `ping` | object | No | — | Ping reachability config |
+| `domain` | object | No | — | Domain registration expiry config |
+| `heartbeat` | object | No | — | Dead-man switch token and timing config |
+| `failuresToOpen` | int | No | `1` | Consecutive failures required before opening an incident |
+| `successesToResolve` | int | No | `1` | Consecutive successes required before auto-resolving an incident |
 
 **MySQL Config (`mysql` field)**
 
@@ -316,6 +371,12 @@ Create a new check.
 | `command` | `command` | `allowCommandChecks` must be `true` in config |
 | `log` | `path`, `freshnessSeconds > 0` | — |
 | `mysql` | `mysql` block with `dsnEnv` | Defaults: `intervalSeconds=15`, `timeoutSeconds=10` |
+| `ssh` | `ssh.host`, `ssh.user`, and key/password auth | Set `hostKeyFingerprint` in production |
+| `ssl` | host via `ssl.host`, `host`, or `target` | `criticalDays` must be <= `warningDays` |
+| `dns` | `dns.name` | `recordType` defaults to `A` |
+| `ping` | host via `ping.host`, `host`, or `target` | Packet loss above threshold is critical |
+| `domain` | `domain.domain` | Uses RDAP/WHOIS expiry data |
+| `heartbeat` | `heartbeat.expectedIntervalSeconds` | Token is generated when omitted |
 
 </details>
 
@@ -327,7 +388,7 @@ Create a new check.
 
 Get detailed view of a single check with uptime, recent results, and open incidents.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `CheckDetail`
 
@@ -362,8 +423,8 @@ Get detailed view of a single check with uptime, recent results, and open incide
 
 Update an existing check.
 
-**Auth**: Yes  
-**Request Body**: `CheckConfig` (path `id` overrides body `id`)  
+**Auth**: JWT bearer token (admin role for write operations)
+**Request Body**: `CheckConfig` (path `id` overrides body `id`)
 **Response** `200 OK` — `data`: updated `CheckConfig`
 
 ---
@@ -372,7 +433,7 @@ Update an existing check.
 
 Delete a check and remove from scheduler.
 
-**Auth**: Yes  
+**Auth**: JWT bearer token (admin role for write operations)
 **Response**: `204 No Content`
 
 ---
@@ -383,7 +444,7 @@ Delete a check and remove from scheduler.
 
 Trigger an immediate check run.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Request Body** (optional)
 
@@ -465,7 +526,7 @@ Trigger an immediate check run.
 
 Get current health summary.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `Summary`
 
@@ -497,7 +558,7 @@ Get current health summary.
 
 Get historical check results.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -514,16 +575,16 @@ Optimized read-only endpoints that prefer MongoDB snapshot when available.
 
 ### GET /api/v1/dashboard/checks
 
-**Auth**: No — **Response**: `CheckListItem[]`
+**Auth**: JWT bearer token — **Response**: `CheckListItem[]`
 
 ### GET /api/v1/dashboard/summary
 
-**Auth**: No — **Response**: `Summary`
+**Auth**: JWT bearer token — **Response**: `Summary`
 
 ### GET /api/v1/dashboard/results
 
-**Auth**: No  
-**Query Params**: `checkId`, `days` (same as `/api/v1/results`)  
+**Auth**: JWT bearer token
+**Query Params**: `checkId`, `days` (same as `/api/v1/results`)
 **Response**: `CheckResult[]`
 
 ---
@@ -534,7 +595,7 @@ Optimized read-only endpoints that prefer MongoDB snapshot when available.
 
 List incidents with filtering and pagination.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -584,8 +645,8 @@ List incidents with filtering and pagination.
 
 Get a single incident.
 
-**Auth**: No  
-**Response** `200 OK` — `data`: `Incident`  
+**Auth**: JWT bearer token
+**Response** `200 OK` — `data`: `Incident`
 **Status Codes**: `200`, `404`, `503` (incident manager not configured)
 
 ---
@@ -594,7 +655,7 @@ Get a single incident.
 
 Acknowledge an incident.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Request Body**
 
@@ -612,7 +673,7 @@ Acknowledge an incident.
 
 Resolve an incident.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Request Body**
 
@@ -630,7 +691,7 @@ Resolve an incident.
 
 Get evidence snapshots captured at incident creation.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `IncidentSnapshot[]`
 
@@ -664,7 +725,7 @@ Get evidence snapshots captured at incident creation.
 
 Query audit events.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -706,7 +767,7 @@ Query audit events.
 
 Get uptime statistics for checks.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -738,7 +799,7 @@ Get uptime statistics for checks.
 
 Get response time distribution over time with percentiles.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -769,7 +830,7 @@ Get response time distribution over time with percentiles.
 
 Get chronological status changes for a check.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -795,7 +856,7 @@ Get chronological status changes for a check.
 
 Get failure rates grouped by server, application, or type.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -821,7 +882,7 @@ Get failure rates grouped by server, application, or type.
 
 Get incident analytics with MTTA and MTTR.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `IncidentStats`
 
@@ -848,7 +909,7 @@ Get incident analytics with MTTA and MTTR.
 
 Dashboard hero card data — single call for top-level metrics.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `OverviewStats`
 
@@ -883,7 +944,7 @@ Dashboard hero card data — single call for top-level metrics.
 
 Get current runtime configuration (credentials are never exposed).
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `SafeConfigView`
 
@@ -913,7 +974,7 @@ Get current runtime configuration (credentials are never exposed).
 
 Update runtime configuration.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Request Body** — `ConfigUpdate`
 
@@ -935,7 +996,7 @@ All fields are optional. Only provided fields are updated.
 | `workers` | int | 1 | 100 | Parallel check workers |
 | `allowCommandChecks` | bool | — | — | Enable shell command checks |
 
-**Response** `200 OK` — `data`: updated `SafeConfigView`  
+**Response** `200 OK` — `data`: updated `SafeConfigView`
 **Status Codes**: `200`, `400` (validation failed), `401` (unauthorized)
 
 ---
@@ -946,7 +1007,7 @@ All fields are optional. Only provided fields are updated.
 
 List all alert rules.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `AlertRule[]`
 
@@ -1017,8 +1078,8 @@ List all alert rules.
 
 Create a new alert rule.
 
-**Auth**: Yes  
-**Request Body**: `AlertRule`  
+**Auth**: JWT bearer token (admin role for write operations)
+**Request Body**: `AlertRule`
 **Response** `201 Created` — `data`: created `AlertRule`
 
 ---
@@ -1027,9 +1088,9 @@ Create a new alert rule.
 
 Update an existing alert rule.
 
-**Auth**: Yes  
-**Request Body**: `AlertRule` (path `id` overrides body `id`)  
-**Response** `200 OK` — `data`: updated `AlertRule`  
+**Auth**: JWT bearer token (admin role for write operations)
+**Request Body**: `AlertRule` (path `id` overrides body `id`)
+**Response** `200 OK` — `data`: updated `AlertRule`
 **Status Codes**: `200`, `404`
 
 ---
@@ -1038,7 +1099,7 @@ Update an existing alert rule.
 
 Delete an alert rule.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Response** `200 OK`
 
@@ -1059,7 +1120,7 @@ Delete an alert rule.
 
 Live event stream for real-time dashboard updates.
 
-**Auth**: No  
+**Auth**: JWT bearer token
 **Response**: `text/event-stream`
 
 **Headers**
@@ -1096,7 +1157,7 @@ data: {"type":"snapshot","timestamp":"2026-04-19T10:30:00Z","summary":{"totalChe
 
 Get current authentication info.
 
-**Auth**: No (returns info about the caller)
+**Auth**: JWT bearer token (returns info about the caller)
 
 **Response** `200 OK` — `data`: `AuthInfo`
 
@@ -1110,7 +1171,7 @@ Get current authentication info.
 }
 ```
 
-> Without credentials: `username` is `"unknown"` (when auth enabled) or `"system"` (when auth disabled)
+> Without a valid bearer token, authenticated user fields are absent or returned as anonymous/system context depending on endpoint.
 
 ---
 
@@ -1120,7 +1181,7 @@ Get current authentication info.
 
 Get raw MySQL metric samples.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -1162,7 +1223,7 @@ Get raw MySQL metric samples.
 
 Get computed deltas between consecutive MySQL samples.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -1203,7 +1264,7 @@ Get computed deltas between consecutive MySQL samples.
 
 Get MySQL health summary card for a check.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -1235,7 +1296,7 @@ Get MySQL health summary card for a check.
 
 Get MySQL metrics as time-series data for charting.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -1271,7 +1332,7 @@ Get MySQL metrics as time-series data for charting.
 
 List pending notifications.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -1299,8 +1360,8 @@ List pending notifications.
 
 Mark a notification as successfully sent.
 
-**Auth**: Yes  
-**Request Body**: none  
+**Auth**: JWT bearer token (admin role for write operations)
+**Request Body**: none
 **Response** `200 OK`
 
 ```json
@@ -1313,7 +1374,7 @@ Mark a notification as successfully sent.
 
 Mark a notification as failed.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Request Body**
 
@@ -1333,7 +1394,7 @@ Mark a notification as failed.
 
 Get notification delivery statistics.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `NotificationStats`
 
@@ -1354,7 +1415,7 @@ Get notification delivery statistics.
 
 List pending AI analysis queue items.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -1379,7 +1440,7 @@ List pending AI analysis queue items.
 
 Complete AI analysis for an incident.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Request Body** — `AIAnalysisResult`
 
@@ -1407,7 +1468,7 @@ Complete AI analysis for an incident.
 
 Mark AI analysis as failed.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Request Body**
 
@@ -1427,7 +1488,7 @@ Mark AI analysis as failed.
 
 Get AI queue statistics.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `AIQueueStats`
 
@@ -1451,7 +1512,7 @@ Bring Your Own Key AI layer. Configure AI providers (OpenAI, Anthropic, Google G
 
 Get AI service configuration (API keys masked).
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `SafeAIConfigView`
 
@@ -1498,7 +1559,7 @@ Get AI service configuration (API keys masked).
 
 Update AI service settings.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Request Body** — partial update (all fields optional)
 
@@ -1532,7 +1593,7 @@ Update AI service settings.
 
 List all configured AI providers (API keys masked).
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `SafeAIProviderView[]`
 
@@ -1542,7 +1603,7 @@ List all configured AI providers (API keys masked).
 
 Add a new AI provider.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Request Body** — `AIProviderConfig`
 
@@ -1591,7 +1652,7 @@ Add a new AI provider.
 
 Update an existing provider. If `apiKey` is empty or contains `****`, the existing key is preserved.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Response** `200 OK` — updated `SafeAIProviderView`
 
@@ -1601,7 +1662,7 @@ Update an existing provider. If `apiKey` is empty or contains `****`, the existi
 
 Remove a provider.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Response** `200 OK`
 
@@ -1615,7 +1676,7 @@ Remove a provider.
 
 List all prompt templates (including defaults).
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `AIPromptTemplate[]`
 
@@ -1667,7 +1728,7 @@ List all prompt templates (including defaults).
 
 Create a custom prompt template.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Request Body** — `AIPromptTemplate`
 
@@ -1701,7 +1762,7 @@ Create a custom prompt template.
 
 Update a prompt template.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Response** `200 OK` — updated `AIPromptTemplate`
 
@@ -1711,7 +1772,7 @@ Update a prompt template.
 
 Delete a prompt template.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Response** `200 OK`
 
@@ -1725,7 +1786,7 @@ Delete a prompt template.
 
 Manually trigger AI analysis for a specific incident.
 
-**Auth**: Yes
+**Auth**: JWT bearer token (admin role for write operations)
 
 **Request Body** (optional)
 
@@ -1762,7 +1823,7 @@ Manually trigger AI analysis for a specific incident.
 
 Check connectivity to all configured AI providers.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `ProviderHealth[]`
 
@@ -1791,7 +1852,7 @@ Check connectivity to all configured AI providers.
 
 Get AI analysis results for a specific incident.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 **Response** `200 OK` — `data`: `AIAnalysisResult[]`
 
@@ -1809,13 +1870,166 @@ Get AI analysis results for a specific incident.
 
 ---
 
+## Evidence & AI Incident Briefs
+
+Evidence endpoints expose the evidence backbone used by AI Incident Briefs. Briefs are safe to generate without an AI provider: HealthOps returns a deterministic evidence-only brief when AI is not configured or temporarily unavailable.
+
+### GET /api/v1/evidence/incidents/{incidentId}/timeline
+
+Get the incident evidence timeline.
+
+**Auth**: JWT bearer token
+
+**Response** `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "incidentId": "inc-123",
+    "events": [
+      {
+        "id": "evt-1",
+        "incidentId": "inc-123",
+        "type": "check_failed",
+        "timestamp": "2026-05-28T08:00:00Z",
+        "source": "check_runner",
+        "message": "Checkout API returned 503",
+        "signalIds": ["check_checkout-api_1716883200"],
+        "attributes": {
+          "checkId": "checkout-api"
+        }
+      }
+    ],
+    "count": 1
+  }
+}
+```
+
+---
+
+### GET /api/v1/evidence/incidents/{incidentId}/brief
+
+Get the latest persisted AI Incident Brief for an incident.
+
+**Auth**: JWT bearer token
+
+**Response** `200 OK`
+
+If no brief has been generated yet, the response is `{"success":true,"data":null}`. Use the `POST` endpoint to generate one.
+
+```json
+{
+  "success": true,
+  "data": {
+    "incidentId": "inc-123",
+    "generatedAt": "2026-05-28T08:03:00Z",
+    "likelyCause": "Checkout API is returning 503 responses after dependency timeouts.",
+    "confidence": {
+      "score": 0.72,
+      "band": "medium",
+      "breakdown": {
+        "hasDeploymentCorrelation": false,
+        "hasMetricAnomaly": true,
+        "hasLogFingerprintSpike": true,
+        "hasSimilarPastIncident": false,
+        "evidenceCount": 8,
+        "evidenceCountNormalized": 0.8,
+        "availableCategories": 3,
+        "totalPossibleCategories": 5
+      }
+    },
+    "evidenceSummary": [
+      {
+        "category": "checks",
+        "description": "api check 'Checkout API': critical - HTTP 503",
+        "signalId": "check_checkout-api_1716883200",
+        "timestamp": "2026-05-28T08:00:00Z"
+      }
+    ],
+    "evidenceLedger": [
+      {
+        "id": "ledger_checks_failing-check_1",
+        "claim": "The incident is supported by failing or degraded check results",
+        "status": "supported",
+        "category": "checks",
+        "confidenceImpact": "positive",
+        "evidenceIds": ["check_checkout-api_1716883200"],
+        "rationale": "1 check signal(s) were warning or critical in the incident window."
+      },
+      {
+        "id": "ledger_mysql_missing_0",
+        "claim": "MySQL evidence was not available for this incident window",
+        "status": "missing",
+        "category": "mysql",
+        "confidenceImpact": "neutral",
+        "rationale": "The provider returned no evidence, so the brief cannot use this signal category to support or reject a hypothesis."
+      }
+    ],
+    "evidenceLedgerSummary": {
+      "supported": 1,
+      "unsupported": 0,
+      "contradicted": 0,
+      "missing": 1
+    },
+    "nextActions": [
+      "Inspect checkout API logs around the incident start time",
+      "Verify downstream payment-gateway latency"
+    ],
+    "impactSummary": "Checkout requests may fail or take longer than expected.",
+    "timeline": [
+      {
+        "time": "08:00:00",
+        "description": "api check 'Checkout API': critical - HTTP 503"
+      }
+    ],
+    "metadata": {
+      "availableCategories": ["checks", "server_metrics"],
+      "missingCategories": ["mysql"],
+      "evidenceCount": 8,
+      "evidenceCap": 50,
+      "wasCapped": false,
+      "durationMs": 136
+    }
+  }
+}
+```
+
+Ledger statuses:
+
+| Status | Meaning |
+|--------|---------|
+| `supported` | Collected evidence supports this operational claim |
+| `unsupported` | Evidence exists but does not directly prove the claim, or was omitted by the evidence cap |
+| `contradicted` | Collected evidence weakens or contradicts the claim |
+| `missing` | The evidence provider had no data for that category |
+
+---
+
+### POST /api/v1/evidence/incidents/{incidentId}/brief
+
+Generate and persist a fresh AI Incident Brief for an incident.
+
+**Auth**: JWT bearer token
+
+**Response** `200 OK` — same shape as `GET /api/v1/evidence/incidents/{incidentId}/brief`.
+
+Legacy alias:
+
+```text
+GET /api/v1/evidence/brief/{incidentId}
+POST /api/v1/evidence/brief/{incidentId}
+```
+
+---
+
 ## Data Export
 
 ### GET /api/v1/export/mysql/samples
 
 Export MySQL samples as CSV or JSON.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -1835,7 +2049,7 @@ CSV columns: `sampleId, checkId, timestamp, connections, maxConnections, threads
 
 Export all incidents as CSV or JSON.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -1849,7 +2063,7 @@ Export all incidents as CSV or JSON.
 
 Export check results as CSV or JSON.
 
-**Auth**: No
+**Auth**: JWT bearer token
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -1867,7 +2081,7 @@ Export check results as CSV or JSON.
 
 Prometheus metrics endpoint.
 
-**Auth**: No  
+**Auth**: JWT bearer token
 **Response**: `text/plain` (Prometheus exposition format)
 
 **Available Metrics**

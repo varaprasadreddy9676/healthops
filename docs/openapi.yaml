@@ -48,26 +48,30 @@ tags:
     description: AI analysis queue management
   - name: ai
     description: BYOK AI service configuration and analysis
+  - name: evidence
+    description: Evidence timeline and AI Incident Brief endpoints
   - name: export
     description: Data export (CSV / JSON)
   - name: metrics
     description: Prometheus metrics
 
-security: []
+security:
+  - bearerAuth: []
 
 components:
   securitySchemes:
-    basicAuth:
+    bearerAuth:
       type: http
-      scheme: basic
-      description: HTTP Basic Auth. Write endpoints require auth when `auth.enabled = true`.
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT bearer token returned by `POST /api/v1/auth/login`.
 
   schemas:
     # ─── Enums ───────────────────────────────────────────────────────────────
 
     CheckType:
       type: string
-      enum: [api, tcp, process, command, log, mysql]
+      enum: [api, tcp, process, command, log, mysql, ssh, ssl, dns, ping, domain, heartbeat]
       description: |
         - `api` — HTTP endpoint health check
         - `tcp` — TCP port connectivity check
@@ -75,6 +79,12 @@ components:
         - `command` — Shell command execution check
         - `log` — Log file freshness check
         - `mysql` — MySQL database monitoring
+        - `ssh` — SSH connectivity and command check
+        - `ssl` — TLS certificate expiry check
+        - `dns` — DNS resolution check
+        - `ping` — ICMP reachability check
+        - `domain` — Domain registration expiry check
+        - `heartbeat` — Dead-man switch check
 
     CheckStatus:
       type: string
@@ -183,6 +193,115 @@ components:
           type: integer
           default: 20
 
+    SSHCheckConfig:
+      type: object
+      properties:
+        host:
+          type: string
+        port:
+          type: integer
+          default: 22
+        user:
+          type: string
+        keyPath:
+          type: string
+        keyEnv:
+          type: string
+        password:
+          type: string
+          writeOnly: true
+        passwordEnv:
+          type: string
+        hasPassword:
+          type: boolean
+          readOnly: true
+        hostKeyFingerprint:
+          type: string
+          description: SSH SHA-256 host-key fingerprint.
+        metrics:
+          type: array
+          items:
+            type: string
+
+    SSLCheckConfig:
+      type: object
+      properties:
+        host:
+          type: string
+        port:
+          type: integer
+          default: 443
+        serverName:
+          type: string
+        warningDays:
+          type: integer
+          default: 30
+        criticalDays:
+          type: integer
+          default: 7
+        insecureSkipVerify:
+          type: boolean
+
+    DNSCheckConfig:
+      type: object
+      properties:
+        name:
+          type: string
+        recordType:
+          type: string
+          enum: [A, AAAA, CNAME, TXT, MX, NS]
+          default: A
+        resolver:
+          type: string
+        expected:
+          type: array
+          items:
+            type: string
+        mustNotContain:
+          type: array
+          items:
+            type: string
+
+    PingCheckConfig:
+      type: object
+      properties:
+        host:
+          type: string
+        count:
+          type: integer
+          default: 3
+        maxPacketLossPercent:
+          type: integer
+          default: 50
+        maxAvgLatencyMs:
+          type: integer
+
+    DomainCheckConfig:
+      type: object
+      properties:
+        domain:
+          type: string
+        warningDays:
+          type: integer
+          default: 30
+        criticalDays:
+          type: integer
+          default: 7
+        rdapEndpoint:
+          type: string
+
+    HeartbeatCheckConfig:
+      type: object
+      properties:
+        token:
+          type: string
+          readOnly: true
+        expectedIntervalSeconds:
+          type: integer
+        graceSeconds:
+          type: integer
+          default: 60
+
     CheckConfig:
       type: object
       required: [name, type]
@@ -261,8 +380,36 @@ components:
           type: object
           additionalProperties: true
           description: Arbitrary key-value metadata
+        serverId:
+          type: string
+          description: Optional managed server ID for remote checks.
+        notificationChannelIds:
+          type: array
+          items:
+            type: string
+          description: Notification channel IDs attached directly to this check.
         mysql:
           $ref: "#/components/schemas/MySQLCheckConfig"
+        ssh:
+          $ref: "#/components/schemas/SSHCheckConfig"
+        ssl:
+          $ref: "#/components/schemas/SSLCheckConfig"
+        dns:
+          $ref: "#/components/schemas/DNSCheckConfig"
+        ping:
+          $ref: "#/components/schemas/PingCheckConfig"
+        domain:
+          $ref: "#/components/schemas/DomainCheckConfig"
+        heartbeat:
+          $ref: "#/components/schemas/HeartbeatCheckConfig"
+        failuresToOpen:
+          type: integer
+          default: 1
+          description: Consecutive failed runs required before opening an incident.
+        successesToResolve:
+          type: integer
+          default: 1
+          description: Consecutive successful runs required before auto-resolving an incident.
 
     CheckListItem:
       type: object
@@ -1192,6 +1339,198 @@ components:
         isDefault:
           type: boolean
 
+    # ─── Evidence & AI Incident Brief ─────────────────────────────────────────
+
+    ConfidenceBreakdown:
+      type: object
+      properties:
+        hasDeploymentCorrelation:
+          type: boolean
+        hasMetricAnomaly:
+          type: boolean
+        hasLogFingerprintSpike:
+          type: boolean
+        hasSimilarPastIncident:
+          type: boolean
+        evidenceCount:
+          type: integer
+        evidenceCountNormalized:
+          type: number
+          format: double
+        availableCategories:
+          type: integer
+        totalPossibleCategories:
+          type: integer
+
+    ConfidenceScore:
+      type: object
+      properties:
+        score:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        band:
+          type: string
+          enum: [low, medium, high]
+        breakdown:
+          $ref: "#/components/schemas/ConfidenceBreakdown"
+
+    EvidenceCitation:
+      type: object
+      properties:
+        category:
+          type: string
+          example: checks
+        description:
+          type: string
+        signalId:
+          type: string
+        timestamp:
+          type: string
+
+    EvidenceLedgerItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: ledger_checks_failing-check_1
+        claim:
+          type: string
+        status:
+          type: string
+          enum: [supported, unsupported, contradicted, missing]
+        category:
+          type: string
+          example: server_metrics
+        confidenceImpact:
+          type: string
+          enum: [positive, negative, neutral]
+        evidenceIds:
+          type: array
+          items:
+            type: string
+        rationale:
+          type: string
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+
+    EvidenceLedgerSummary:
+      type: object
+      properties:
+        supported:
+          type: integer
+        unsupported:
+          type: integer
+        contradicted:
+          type: integer
+        missing:
+          type: integer
+
+    BriefTimelineEntry:
+      type: object
+      properties:
+        time:
+          type: string
+        description:
+          type: string
+
+    BriefMetadata:
+      type: object
+      properties:
+        availableCategories:
+          type: array
+          items:
+            type: string
+        missingCategories:
+          type: array
+          items:
+            type: string
+        evidenceCount:
+          type: integer
+        evidenceCap:
+          type: integer
+        wasCapped:
+          type: boolean
+        durationMs:
+          type: integer
+
+    IncidentBrief:
+      type: object
+      properties:
+        incidentId:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        likelyCause:
+          type: string
+        confidence:
+          $ref: "#/components/schemas/ConfidenceScore"
+        evidenceSummary:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceCitation"
+        evidenceLedger:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceLedgerItem"
+        evidenceLedgerSummary:
+          $ref: "#/components/schemas/EvidenceLedgerSummary"
+        nextActions:
+          type: array
+          items:
+            type: string
+        impactSummary:
+          type: string
+        timeline:
+          type: array
+          items:
+            $ref: "#/components/schemas/BriefTimelineEntry"
+        metadata:
+          $ref: "#/components/schemas/BriefMetadata"
+        rawAiResponse:
+          type: string
+
+    IncidentTimelineEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        incidentId:
+          type: string
+        type:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        source:
+          type: string
+        message:
+          type: string
+        signalIds:
+          type: array
+          items:
+            type: string
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+
+    IncidentTimelineResponse:
+      type: object
+      properties:
+        incidentId:
+          type: string
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/IncidentTimelineEvent"
+        count:
+          type: integer
+
     # ─── Auth ─────────────────────────────────────────────────────────────────
 
     AuthInfo:
@@ -1202,6 +1541,46 @@ components:
           example: admin
         authEnabled:
           type: boolean
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          example: admin
+        password:
+          type: string
+          format: password
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        role:
+          type: string
+          enum: [admin, ops]
+        displayName:
+          type: string
+        email:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/AuthUser"
 
   responses:
     Unauthorized:
@@ -1281,6 +1660,7 @@ paths:
       tags: [health]
       summary: Liveness probe
       operationId: getLiveness
+      security: []
       responses:
         "200":
           description: Service is alive
@@ -1298,6 +1678,7 @@ paths:
       tags: [health]
       summary: Readiness probe
       operationId: getReadiness
+      security: []
       responses:
         "200":
           description: Service is ready
@@ -1313,6 +1694,33 @@ paths:
                   lastRunAt: "2026-04-19T10:30:00Z"
 
   # ─── Auth ────────────────────────────────────────────────────────────────────
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Exchange username and password for a JWT
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: JWT and authenticated user
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/LoginResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /api/v1/auth/me:
     get:
@@ -1331,6 +1739,8 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/AuthInfo"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   # ─── Checks ──────────────────────────────────────────────────────────────────
 
@@ -1359,7 +1769,7 @@ paths:
       summary: Create a new check
       operationId: createCheck
       security:
-        - basicAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -1416,7 +1826,7 @@ paths:
       summary: Update an existing check
       operationId: updateCheck
       security:
-        - basicAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -1447,7 +1857,7 @@ paths:
       summary: Delete a check and remove from scheduler
       operationId: deleteCheck
       security:
-        - basicAuth: []
+        - bearerAuth: []
       responses:
         "204":
           description: Check deleted
@@ -1467,7 +1877,7 @@ paths:
         If `checkId` is provided, runs a single check and returns `CheckResult`.
         If omitted, runs all checks and returns a `RunSummary`.
       security:
-        - basicAuth: []
+        - bearerAuth: []
       requestBody:
         required: false
         content:
@@ -1669,7 +2079,7 @@ paths:
       summary: Acknowledge an incident
       operationId: acknowledgeIncident
       security:
-        - basicAuth: []
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
@@ -1710,7 +2120,7 @@ paths:
       summary: Resolve an incident
       operationId: resolveIncident
       security:
-        - basicAuth: []
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
@@ -1772,6 +2182,169 @@ paths:
                           $ref: "#/components/schemas/IncidentSnapshot"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  # ─── Evidence Backbone & AI Incident Brief ──────────────────────────────────
+
+  /api/v1/evidence/incidents/{id}/timeline:
+    get:
+      tags: [evidence]
+      summary: Get an incident evidence timeline
+      operationId: getIncidentEvidenceTimeline
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Incident ID
+      responses:
+        "200":
+          description: Evidence timeline for the incident
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/IncidentTimelineResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/evidence/incidents/{id}/brief:
+    get:
+      tags: [evidence]
+      summary: Get the latest AI Incident Brief for an incident
+      operationId: getIncidentBrief
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Incident ID
+      responses:
+        "200":
+          description: "Latest incident brief, including evidence citations and ledger. Returns `data: null` if no brief has been generated yet."
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: "#/components/schemas/IncidentBrief"
+                        nullable: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [evidence]
+      summary: Generate a new AI Incident Brief for an incident
+      operationId: generateIncidentBrief
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Incident ID
+      responses:
+        "200":
+          description: Generated incident brief. If no AI provider is configured, returns an evidence-only brief.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/IncidentBrief"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: Evidence or brief generation is unavailable
+
+  /api/v1/evidence/brief/{id}:
+    get:
+      tags: [evidence]
+      summary: Get the latest AI Incident Brief for an incident
+      operationId: getIncidentBriefLegacy
+      deprecated: true
+      description: Legacy alias for `GET /api/v1/evidence/incidents/{id}/brief`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Incident ID
+      responses:
+        "200":
+          description: "Latest incident brief, including evidence citations and ledger. Returns `data: null` if no brief has been generated yet."
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: "#/components/schemas/IncidentBrief"
+                        nullable: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: Evidence or brief generation is unavailable
+
+    post:
+      tags: [evidence]
+      summary: Generate a new AI Incident Brief for an incident
+      operationId: generateIncidentBriefLegacy
+      deprecated: true
+      description: Legacy alias for `POST /api/v1/evidence/incidents/{id}/brief`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Incident ID
+      responses:
+        "200":
+          description: Generated incident brief. If no AI provider is configured, returns an evidence-only brief.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/IncidentBrief"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: Evidence or brief generation is unavailable
 
   # ─── Audit ────────────────────────────────────────────────────────────────────
 
@@ -1998,7 +2571,7 @@ paths:
       summary: Update runtime configuration
       operationId: updateConfig
       security:
-        - basicAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -2049,7 +2622,7 @@ paths:
       summary: Create a new alert rule
       operationId: createAlertRule
       security:
-        - basicAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -2087,7 +2660,7 @@ paths:
       summary: Update an existing alert rule
       operationId: updateAlertRule
       security:
-        - basicAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -2116,7 +2689,7 @@ paths:
       summary: Delete an alert rule
       operationId: deleteAlertRule
       security:
-        - basicAuth: []
+        - bearerAuth: []
       responses:
         "200":
           description: Alert rule deleted
@@ -2327,7 +2900,7 @@ paths:
       summary: Mark a notification as successfully sent
       operationId: markNotificationSent
       security:
-        - basicAuth: []
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
@@ -2351,7 +2924,7 @@ paths:
       summary: Mark a notification as failed
       operationId: markNotificationFailed
       security:
-        - basicAuth: []
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
@@ -2431,7 +3004,7 @@ paths:
       summary: Complete AI analysis for an incident
       operationId: completeAIAnalysis
       security:
-        - basicAuth: []
+        - bearerAuth: []
       parameters:
         - name: incidentId
           in: path
@@ -2460,7 +3033,7 @@ paths:
       summary: Mark AI analysis as failed
       operationId: failAIAnalysis
       security:
-        - basicAuth: []
+        - bearerAuth: []
       parameters:
         - name: incidentId
           in: path
@@ -2512,7 +3085,7 @@ paths:
       summary: Update AI service settings
       operationId: updateAIConfig
       security:
-        - basicAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -2561,7 +3134,7 @@ paths:
       summary: Add a new AI provider
       operationId: createAIProvider
       security:
-        - basicAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -2599,7 +3172,7 @@ paths:
       summary: Update an existing AI provider
       operationId: updateAIProvider
       security:
-        - basicAuth: []
+        - bearerAuth: []
       description: |
         If `apiKey` is empty or contains `****`, the existing encrypted key is preserved.
       requestBody:
@@ -2630,7 +3203,7 @@ paths:
       summary: Remove an AI provider
       operationId: deleteAIProvider
       security:
-        - basicAuth: []
+        - bearerAuth: []
       responses:
         "200":
           description: Provider deleted
@@ -2676,7 +3249,7 @@ paths:
       summary: Create a custom prompt template
       operationId: createAIPrompt
       security:
-        - basicAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -2714,7 +3287,7 @@ paths:
       summary: Update a prompt template
       operationId: updateAIPrompt
       security:
-        - basicAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -2743,7 +3316,7 @@ paths:
       summary: Delete a prompt template
       operationId: deleteAIPrompt
       security:
-        - basicAuth: []
+        - bearerAuth: []
       responses:
         "200":
           description: Prompt template deleted
@@ -2770,7 +3343,7 @@ paths:
       summary: Manually trigger AI analysis for a specific incident
       operationId: triggerAIAnalysis
       security:
-        - basicAuth: []
+        - bearerAuth: []
       parameters:
         - name: incidentId
           in: path

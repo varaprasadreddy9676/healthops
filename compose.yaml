@@ -16,7 +16,7 @@
 #   HEALTHOPS_BOOTSTRAP_ADMIN_EMAIL - Admin user email (default: admin@healthops.local)
 #   MONGODB_DATABASE - MongoDB database name (default: healthops)
 #   MONGODB_COLLECTION_PREFIX - MongoDB collection prefix (default: healthops)
-#   HEALTHOPS_SMTP_PASS - SMTP password for email notifications
+#   HEALTHOPS_SMTP_PASS - Optional SMTP password env consumed by email notification channels
 #
 # See docs/deployment-guide.md for production deployment best practices.
 

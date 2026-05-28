@@ -25,12 +25,12 @@ go test -race ./internal/monitoring -run 'Test(AllMutatingEndpointsRequireAuth|E
 
 ## Results Summary
 - `PASS`: Mutating endpoint auth enforcement (`POST/PUT/PATCH/DELETE` now rejected without valid auth).
-- `PASS`: Invalid credentials rejected with `401` and `WWW-Authenticate` challenge.
+- `PASS`: Invalid credentials rejected with `401`.
 - `PASS`: Read-only endpoints accessible without auth when configured.
 - `PASS`: Command checks disabled by default and gated by config (`allowCommandChecks=false`).
 - `PASS`: Input validation paths verified for malformed/invalid payloads.
 - `PASS`: Audit trail written for key mutating actions (`check.*`, `incident.*`).
-- `PASS`: Constant-time credential comparison used for basic auth checks.
+- `PASS`: Passwords are bcrypt-hashed and JWTs are signed with the deployment secret.
 
 ## Key Fixes Applied During Audit Closure
 1. Added hard auth enforcement in mutating handlers (defense in depth, independent of middleware chain).
@@ -39,11 +39,11 @@ go test -race ./internal/monitoring -run 'Test(AllMutatingEndpointsRequireAuth|E
 4. Fixed scheduler reschedule behavior to avoid scheduling when scheduler is not running (prevented runaway background activity in tests).
 
 ## Residual Risks / Follow-Ups
-- Authentication mode is Basic Auth. Recommended next hardening for production internet exposure:
-  - move to token/JWT or mTLS,
-  - rotate credentials via secret manager,
-  - add brute-force protections.
-- Add explicit rate limiting middleware if external/untrusted network access is expected.
+- Authentication mode is JWT bearer token after `/api/v1/auth/login`.
+- Recommended next hardening for production internet exposure:
+  - rotate JWT signing secrets through a documented maintenance flow,
+  - add optional mTLS for high-trust internal deployments,
+  - enforce organization-specific password policy.
 - Add strict security headers policy (HSTS/CSP/etc.) when deployed behind reverse proxy.
 
 ## Audit Verdict
