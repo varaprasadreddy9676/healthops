@@ -414,6 +414,136 @@ func TestBriefGenerator_WithoutAIProvider(t *testing.T) {
 	}
 }
 
+func TestBriefGenerator_BuildsEvidenceLedgerWithoutAI(t *testing.T) {
+	now := time.Now().UTC()
+	store := &mockStore{
+		state: monitoring.State{
+			Checks: []monitoring.CheckConfig{
+				{ID: "chk1", Name: "Checkout API", Type: "api", Server: "api-1", Application: "checkout"},
+			},
+			Results: []monitoring.CheckResult{
+				{CheckID: "chk1", Status: "critical", Message: "connection refused", FinishedAt: now.Add(-5 * time.Minute), DurationMs: 1500},
+				{CheckID: "chk1", Status: "healthy", Message: "ok", FinishedAt: now.Add(-20 * time.Minute), DurationMs: 40},
+			},
+		},
+	}
+
+	incidentRepo := &mockIncidentRepo{
+		incidents: []monitoring.Incident{
+			{ID: "inc-1", CheckID: "chk1", CheckName: "Checkout API", Type: "api",
+				Status: "open", Severity: "critical", Message: "connection refused",
+				StartedAt: now.Add(-6 * time.Minute)},
+		},
+	}
+
+	registry := NewRegistry()
+	registry.Register(NewCheckProvider(store))
+	builder := NewContextBuilder(registry, nil)
+	generator := NewBriefGenerator(builder, incidentRepo, nil)
+
+	brief, err := generator.GenerateBrief(context.Background(), "inc-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(brief.EvidenceLedger) == 0 {
+		t.Fatal("expected evidence ledger entries")
+	}
+	if brief.EvidenceLedgerSummary.Supported == 0 {
+		t.Fatalf("expected at least one supported claim, got %+v", brief.EvidenceLedgerSummary)
+	}
+	for _, item := range brief.EvidenceLedger {
+		if item.ID == "" {
+			t.Errorf("ledger item %q has empty id", item.Claim)
+		}
+		if item.Claim == "" {
+			t.Errorf("ledger item %+v has empty claim", item)
+		}
+		if item.Status == LedgerStatusSupported && len(item.EvidenceIDs) == 0 {
+			t.Errorf("supported ledger item %q has no evidence ids", item.Claim)
+		}
+		if item.Rationale == "" {
+			t.Errorf("ledger item %q has empty rationale", item.Claim)
+		}
+	}
+}
+
+func TestBuildEvidenceLedgerMarksMissingCategories(t *testing.T) {
+	evidence := &CollectedEvidence{
+		Events:              []SignalEvent{},
+		ByCategory:          map[string][]SignalEvent{},
+		AvailableCategories: []string{},
+		MissingCategories:   []string{"mysql", "server_metrics"},
+	}
+
+	ledger, summary := buildEvidenceLedger(evidence)
+
+	if len(ledger) != 2 {
+		t.Fatalf("expected 2 missing-category ledger items, got %d", len(ledger))
+	}
+	if summary.Missing != 2 {
+		t.Fatalf("expected missing summary count 2, got %+v", summary)
+	}
+	for _, item := range ledger {
+		if item.Status != LedgerStatusMissing {
+			t.Errorf("expected missing status, got %q", item.Status)
+		}
+		if item.ConfidenceImpact != LedgerImpactNeutral {
+			t.Errorf("expected neutral confidence impact, got %q", item.ConfidenceImpact)
+		}
+	}
+}
+
+func TestBuildEvidenceLedgerUsesCappedEvidenceOnly(t *testing.T) {
+	now := time.Now().UTC()
+	included := SignalEvent{
+		ID:        "sig-check-critical",
+		Timestamp: now,
+		Severity:  "critical",
+		Message:   "checkout api critical",
+	}
+	omitted := SignalEvent{
+		ID:        "sig-mysql-info",
+		Timestamp: now.Add(-1 * time.Minute),
+		Severity:  "info",
+		Message:   "mysql snapshot",
+	}
+	evidence := &CollectedEvidence{
+		Events: []SignalEvent{included},
+		ByCategory: map[string][]SignalEvent{
+			"checks": {included},
+			"mysql":  {omitted},
+		},
+		AvailableCategories: []string{"checks", "mysql"},
+		MissingCategories:   []string{"server_metrics"},
+		WasCapped:           true,
+		TotalBeforeCap:      2,
+	}
+
+	ledger, summary := buildEvidenceLedger(evidence)
+
+	if summary.Supported != 1 {
+		t.Fatalf("expected one supported item from included evidence, got %+v", summary)
+	}
+	if summary.Unsupported != 1 {
+		t.Fatalf("expected one unsupported cap-omitted item, got %+v", summary)
+	}
+	if summary.Missing != 1 {
+		t.Fatalf("expected one missing item, got %+v", summary)
+	}
+
+	for _, item := range ledger {
+		if item.Category == "mysql" {
+			if item.Status != LedgerStatusUnsupported {
+				t.Fatalf("expected capped mysql evidence to be unsupported, got %q", item.Status)
+			}
+			if len(item.EvidenceIDs) != 0 {
+				t.Fatalf("expected capped mysql evidence to have no cited evidence ids, got %v", item.EvidenceIDs)
+			}
+		}
+	}
+}
+
 func TestBriefGenerator_WithMockAI(t *testing.T) {
 	now := time.Now().UTC()
 	store := &mockStore{

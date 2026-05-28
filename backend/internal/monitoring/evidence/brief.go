@@ -73,12 +73,15 @@ func (g *BriefGenerator) GenerateBrief(ctx context.Context, incidentID string) (
 
 	// Compute confidence score
 	confidence := ComputeConfidence(evidence)
+	evidenceLedger, evidenceLedgerSummary := buildEvidenceLedger(evidence)
 
 	// Build the brief
 	brief := &IncidentBrief{
-		IncidentID:  incidentID,
-		GeneratedAt: time.Now().UTC(),
-		Confidence:  confidence,
+		IncidentID:            incidentID,
+		GeneratedAt:           time.Now().UTC(),
+		Confidence:            confidence,
+		EvidenceLedger:        evidenceLedger,
+		EvidenceLedgerSummary: evidenceLedgerSummary,
 		Metadata: BriefMetadata{
 			AvailableCategories: evidence.AvailableCategories,
 			MissingCategories:   evidence.MissingCategories,
@@ -267,6 +270,241 @@ func buildEvidenceCitations(evidence *CollectedEvidence) []EvidenceCitation {
 		})
 	}
 	return citations
+}
+
+func buildEvidenceLedger(evidence *CollectedEvidence) ([]EvidenceLedgerItem, EvidenceLedgerSummary) {
+	var ledger []EvidenceLedgerItem
+	if evidence == nil {
+		return ledger, EvidenceLedgerSummary{}
+	}
+
+	categoryEvents := ledgerEventsByCategory(evidence)
+	for _, cat := range evidence.AvailableCategories {
+		events := categoryEvents[cat]
+		if len(events) == 0 {
+			if evidence.WasCapped && len(evidence.ByCategory[cat]) > 0 {
+				ledger = append(ledger, EvidenceLedgerItem{
+					ID:               ledgerID(cat, "cap-omitted", nil),
+					Claim:            fmt.Sprintf("%s evidence was collected but omitted by the evidence cap", humanCategory(cat)),
+					Status:           LedgerStatusUnsupported,
+					Category:         cat,
+					ConfidenceImpact: LedgerImpactNeutral,
+					Rationale:        "Evidence exists for this category, but it was outside the bounded context sent to the AI brief.",
+					Attributes: map[string]string{
+						"originalCount":  fmt.Sprintf("%d", len(evidence.ByCategory[cat])),
+						"includedCount":  fmt.Sprintf("%d", len(evidence.Events)),
+						"totalBeforeCap": fmt.Sprintf("%d", evidence.TotalBeforeCap),
+					},
+				})
+			}
+			continue
+		}
+		ledger = append(ledger, buildCategoryLedgerItems(cat, events)...)
+	}
+
+	for _, cat := range evidence.MissingCategories {
+		ledger = append(ledger, EvidenceLedgerItem{
+			ID:               ledgerID(cat, "missing", nil),
+			Claim:            fmt.Sprintf("%s evidence was not available for this incident window", humanCategory(cat)),
+			Status:           LedgerStatusMissing,
+			Category:         cat,
+			ConfidenceImpact: LedgerImpactNeutral,
+			Rationale:        "The provider returned no evidence, so the brief cannot use this signal category to support or reject a hypothesis.",
+		})
+	}
+
+	return ledger, summarizeLedger(ledger)
+}
+
+func ledgerEventsByCategory(evidence *CollectedEvidence) map[string][]SignalEvent {
+	if evidence == nil {
+		return map[string][]SignalEvent{}
+	}
+	if !evidence.WasCapped {
+		return evidence.ByCategory
+	}
+
+	allowedIDs := make(map[string]bool, len(evidence.Events))
+	for _, event := range evidence.Events {
+		if event.ID != "" {
+			allowedIDs[event.ID] = true
+		}
+	}
+
+	byCategory := make(map[string][]SignalEvent, len(evidence.AvailableCategories))
+	for _, category := range evidence.AvailableCategories {
+		for _, event := range evidence.ByCategory[category] {
+			if allowedIDs[event.ID] {
+				byCategory[category] = append(byCategory[category], event)
+			}
+		}
+	}
+	return byCategory
+}
+
+func buildCategoryLedgerItems(category string, events []SignalEvent) []EvidenceLedgerItem {
+	var critical, warning, info []SignalEvent
+	for _, event := range events {
+		switch event.Severity {
+		case "critical":
+			critical = append(critical, event)
+		case "warning":
+			warning = append(warning, event)
+		default:
+			info = append(info, event)
+		}
+	}
+
+	evidenceIDs := eventIDs(events)
+	var items []EvidenceLedgerItem
+	switch category {
+	case "checks":
+		if len(critical)+len(warning) > 0 {
+			items = append(items, EvidenceLedgerItem{
+				ID:               ledgerID(category, "failing-check", evidenceIDs),
+				Claim:            "The incident is supported by failing or degraded check results",
+				Status:           LedgerStatusSupported,
+				Category:         category,
+				ConfidenceImpact: LedgerImpactPositive,
+				EvidenceIDs:      eventIDs(append(critical, warning...)),
+				Rationale:        fmt.Sprintf("%d check signal(s) were warning or critical in the incident window.", len(critical)+len(warning)),
+			})
+		} else {
+			items = append(items, EvidenceLedgerItem{
+				ID:               ledgerID(category, "no-failing-check", evidenceIDs),
+				Claim:            "No failing check result was found in the collected window",
+				Status:           LedgerStatusContradicted,
+				Category:         category,
+				ConfidenceImpact: LedgerImpactNegative,
+				EvidenceIDs:      evidenceIDs,
+				Rationale:        "Only healthy or informational check results were collected, which weakens check-based root-cause claims.",
+			})
+		}
+	case "server_metrics":
+		if len(critical)+len(warning) > 0 {
+			items = append(items, EvidenceLedgerItem{
+				ID:               ledgerID(category, "resource-pressure", evidenceIDs),
+				Claim:            "Server resource pressure may be contributing to the incident",
+				Status:           LedgerStatusSupported,
+				Category:         category,
+				ConfidenceImpact: LedgerImpactPositive,
+				EvidenceIDs:      eventIDs(append(critical, warning...)),
+				Rationale:        fmt.Sprintf("%d server metric signal(s) crossed warning or critical thresholds.", len(critical)+len(warning)),
+			})
+		} else {
+			items = append(items, EvidenceLedgerItem{
+				ID:               ledgerID(category, "no-resource-pressure", evidenceIDs),
+				Claim:            "Collected server metrics do not show resource saturation",
+				Status:           LedgerStatusContradicted,
+				Category:         category,
+				ConfidenceImpact: LedgerImpactNegative,
+				EvidenceIDs:      evidenceIDs,
+				Rationale:        "CPU, memory, and disk evidence was available but did not cross warning thresholds.",
+			})
+		}
+	case "mysql":
+		items = append(items, EvidenceLedgerItem{
+			ID:               ledgerID(category, "mysql-evidence", evidenceIDs),
+			Claim:            "Database evidence is available for this incident",
+			Status:           LedgerStatusSupported,
+			Category:         category,
+			ConfidenceImpact: LedgerImpactPositive,
+			EvidenceIDs:      evidenceIDs,
+			Rationale:        fmt.Sprintf("%d MySQL evidence snapshot(s) can be inspected for connection, query, lock, or process pressure.", len(events)),
+		})
+	case "audit":
+		items = append(items, EvidenceLedgerItem{
+			ID:               ledgerID(category, "audit-evidence", evidenceIDs),
+			Claim:            "Recent operational changes or audit actions exist near the incident",
+			Status:           LedgerStatusSupported,
+			Category:         category,
+			ConfidenceImpact: LedgerImpactPositive,
+			EvidenceIDs:      evidenceIDs,
+			Rationale:        fmt.Sprintf("%d audit event(s) were found in the incident window.", len(events)),
+		})
+	case "incident_history":
+		items = append(items, EvidenceLedgerItem{
+			ID:               ledgerID(category, "incident-history", evidenceIDs),
+			Claim:            "Similar recent incidents exist for comparison",
+			Status:           LedgerStatusSupported,
+			Category:         category,
+			ConfidenceImpact: LedgerImpactPositive,
+			EvidenceIDs:      evidenceIDs,
+			Rationale:        fmt.Sprintf("%d historical incident signal(s) were found in the comparison window.", len(events)),
+		})
+	default:
+		items = append(items, EvidenceLedgerItem{
+			ID:               ledgerID(category, "available", evidenceIDs),
+			Claim:            fmt.Sprintf("%s evidence is available", humanCategory(category)),
+			Status:           LedgerStatusSupported,
+			Category:         category,
+			ConfidenceImpact: LedgerImpactPositive,
+			EvidenceIDs:      evidenceIDs,
+			Rationale:        fmt.Sprintf("%d evidence signal(s) were collected from this category.", len(events)),
+		})
+	}
+
+	if len(items) == 0 && len(info) > 0 {
+		items = append(items, EvidenceLedgerItem{
+			ID:               ledgerID(category, "informational-only", evidenceIDs),
+			Claim:            fmt.Sprintf("%s evidence is informational only", humanCategory(category)),
+			Status:           LedgerStatusUnsupported,
+			Category:         category,
+			ConfidenceImpact: LedgerImpactNeutral,
+			EvidenceIDs:      evidenceIDs,
+			Rationale:        "Evidence exists, but it does not directly support a failure hypothesis.",
+		})
+	}
+
+	return items
+}
+
+func summarizeLedger(ledger []EvidenceLedgerItem) EvidenceLedgerSummary {
+	var summary EvidenceLedgerSummary
+	for _, item := range ledger {
+		switch item.Status {
+		case LedgerStatusSupported:
+			summary.Supported++
+		case LedgerStatusUnsupported:
+			summary.Unsupported++
+		case LedgerStatusContradicted:
+			summary.Contradicted++
+		case LedgerStatusMissing:
+			summary.Missing++
+		}
+	}
+	return summary
+}
+
+func eventIDs(events []SignalEvent) []string {
+	ids := make([]string, 0, len(events))
+	for _, event := range events {
+		if event.ID != "" {
+			ids = append(ids, event.ID)
+		}
+	}
+	return ids
+}
+
+func ledgerID(category, claimType string, evidenceIDs []string) string {
+	return fmt.Sprintf("ledger_%s_%s_%x", category, claimType, len(evidenceIDs))
+}
+
+func humanCategory(category string) string {
+	switch category {
+	case "checks":
+		return "Check"
+	case "mysql":
+		return "MySQL"
+	case "server_metrics":
+		return "Server metric"
+	case "audit":
+		return "Audit"
+	case "incident_history":
+		return "Incident history"
+	default:
+		return category
+	}
 }
 
 func buildTimeline(evidence *CollectedEvidence) []TimelineEntry {

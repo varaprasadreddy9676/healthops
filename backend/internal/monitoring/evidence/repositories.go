@@ -207,17 +207,19 @@ func NewBriefRepository(client *mongo.Client, dbName, prefix string) (*BriefRepo
 func (r *BriefRepository) Save(ctx context.Context, brief *IncidentBrief) error {
 	id := fmt.Sprintf("brief_%s_%d", brief.IncidentID, brief.GeneratedAt.UnixMilli())
 	doc := bson.M{
-		"_id":             id,
-		"incidentId":      brief.IncidentID,
-		"generatedAt":     brief.GeneratedAt,
-		"likelyCause":     brief.LikelyCause,
-		"confidence":      brief.Confidence,
-		"evidenceSummary": brief.EvidenceSummary,
-		"nextActions":     brief.NextActions,
-		"impactSummary":   brief.ImpactSummary,
-		"timeline":        brief.Timeline,
-		"metadata":        brief.Metadata,
-		"rawAiResponse":   brief.RawAIResponse,
+		"_id":                   id,
+		"incidentId":            brief.IncidentID,
+		"generatedAt":           brief.GeneratedAt,
+		"likelyCause":           brief.LikelyCause,
+		"confidence":            brief.Confidence,
+		"evidenceSummary":       brief.EvidenceSummary,
+		"evidenceLedger":        brief.EvidenceLedger,
+		"evidenceLedgerSummary": brief.EvidenceLedgerSummary,
+		"nextActions":           brief.NextActions,
+		"impactSummary":         brief.ImpactSummary,
+		"timeline":              brief.Timeline,
+		"metadata":              brief.Metadata,
+		"rawAiResponse":         brief.RawAIResponse,
 	}
 	_, err := r.coll.ReplaceOne(ctx, bson.M{"_id": id}, doc, options.Replace().SetUpsert(true))
 	return err

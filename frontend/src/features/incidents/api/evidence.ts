@@ -26,6 +26,24 @@ export interface EvidenceCitation {
     timestamp?: string
 }
 
+export interface EvidenceLedgerItem {
+    id: string
+    claim: string
+    status: 'supported' | 'unsupported' | 'contradicted' | 'missing'
+    category: string
+    confidenceImpact: 'positive' | 'negative' | 'neutral'
+    evidenceIds?: string[]
+    rationale: string
+    attributes?: Record<string, string>
+}
+
+export interface EvidenceLedgerSummary {
+    supported: number
+    unsupported: number
+    contradicted: number
+    missing: number
+}
+
 export interface BriefTimelineEntry {
     time: string
     description: string
@@ -46,6 +64,8 @@ export interface IncidentBrief {
     likelyCause: string
     confidence: ConfidenceScore
     evidenceSummary: EvidenceCitation[]
+    evidenceLedger?: EvidenceLedgerItem[]
+    evidenceLedgerSummary?: EvidenceLedgerSummary
     nextActions: string[]
     impactSummary?: string
     timeline?: BriefTimelineEntry[]

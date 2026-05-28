@@ -42,5 +42,9 @@ backend/healthops-bin
 # Vite cache
 .vite/
 
+# Go local cache/temp directories
+.gocache/
+.gotmp/
+
 # Runtime data (root level)
 data/

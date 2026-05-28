@@ -78,16 +78,18 @@ type TimeWindow struct {
 
 // IncidentBrief is the structured output of the AI Incident Brief v1.
 type IncidentBrief struct {
-	IncidentID      string             `json:"incidentId" bson:"incidentId"`
-	GeneratedAt     time.Time          `json:"generatedAt" bson:"generatedAt"`
-	LikelyCause     string             `json:"likelyCause" bson:"likelyCause"`
-	Confidence      ConfidenceScore    `json:"confidence" bson:"confidence"`
-	EvidenceSummary []EvidenceCitation `json:"evidenceSummary" bson:"evidenceSummary"`
-	NextActions     []string           `json:"nextActions" bson:"nextActions"`
-	ImpactSummary   string             `json:"impactSummary,omitempty" bson:"impactSummary,omitempty"`
-	Timeline        []TimelineEntry    `json:"timeline,omitempty" bson:"timeline,omitempty"`
-	Metadata        BriefMetadata      `json:"metadata" bson:"metadata"`
-	RawAIResponse   string             `json:"rawAiResponse,omitempty" bson:"rawAiResponse,omitempty"`
+	IncidentID            string                `json:"incidentId" bson:"incidentId"`
+	GeneratedAt           time.Time             `json:"generatedAt" bson:"generatedAt"`
+	LikelyCause           string                `json:"likelyCause" bson:"likelyCause"`
+	Confidence            ConfidenceScore       `json:"confidence" bson:"confidence"`
+	EvidenceSummary       []EvidenceCitation    `json:"evidenceSummary" bson:"evidenceSummary"`
+	EvidenceLedger        []EvidenceLedgerItem  `json:"evidenceLedger,omitempty" bson:"evidenceLedger,omitempty"`
+	EvidenceLedgerSummary EvidenceLedgerSummary `json:"evidenceLedgerSummary,omitempty" bson:"evidenceLedgerSummary,omitempty"`
+	NextActions           []string              `json:"nextActions" bson:"nextActions"`
+	ImpactSummary         string                `json:"impactSummary,omitempty" bson:"impactSummary,omitempty"`
+	Timeline              []TimelineEntry       `json:"timeline,omitempty" bson:"timeline,omitempty"`
+	Metadata              BriefMetadata         `json:"metadata" bson:"metadata"`
+	RawAIResponse         string                `json:"rawAiResponse,omitempty" bson:"rawAiResponse,omitempty"`
 }
 
 // EvidenceCitation links a claim in the brief to specific evidence.
@@ -96,6 +98,48 @@ type EvidenceCitation struct {
 	Description string `json:"description" bson:"description"`
 	SignalID    string `json:"signalId,omitempty" bson:"signalId,omitempty"`
 	Timestamp   string `json:"timestamp,omitempty" bson:"timestamp,omitempty"`
+}
+
+// EvidenceLedgerItem records whether a brief claim is supported by collected
+// evidence, contradicted by evidence, unsupported, or missing because a signal
+// category was unavailable. This is intentionally deterministic so the UI can
+// audit AI output without trusting prose alone.
+type EvidenceLedgerItem struct {
+	ID               string               `json:"id" bson:"id"`
+	Claim            string               `json:"claim" bson:"claim"`
+	Status           EvidenceLedgerStatus `json:"status" bson:"status"`
+	Category         string               `json:"category" bson:"category"`
+	ConfidenceImpact EvidenceLedgerImpact `json:"confidenceImpact" bson:"confidenceImpact"`
+	EvidenceIDs      []string             `json:"evidenceIds,omitempty" bson:"evidenceIds,omitempty"`
+	Rationale        string               `json:"rationale" bson:"rationale"`
+	Attributes       map[string]string    `json:"attributes,omitempty" bson:"attributes,omitempty"`
+}
+
+// EvidenceLedgerStatus describes the support level for a claim.
+type EvidenceLedgerStatus string
+
+const (
+	LedgerStatusSupported    EvidenceLedgerStatus = "supported"
+	LedgerStatusUnsupported  EvidenceLedgerStatus = "unsupported"
+	LedgerStatusContradicted EvidenceLedgerStatus = "contradicted"
+	LedgerStatusMissing      EvidenceLedgerStatus = "missing"
+)
+
+// EvidenceLedgerImpact describes how a ledger item affects confidence.
+type EvidenceLedgerImpact string
+
+const (
+	LedgerImpactPositive EvidenceLedgerImpact = "positive"
+	LedgerImpactNegative EvidenceLedgerImpact = "negative"
+	LedgerImpactNeutral  EvidenceLedgerImpact = "neutral"
+)
+
+// EvidenceLedgerSummary provides compact counts for UI and API consumers.
+type EvidenceLedgerSummary struct {
+	Supported    int `json:"supported" bson:"supported"`
+	Unsupported  int `json:"unsupported" bson:"unsupported"`
+	Contradicted int `json:"contradicted" bson:"contradicted"`
+	Missing      int `json:"missing" bson:"missing"`
 }
 
 // TimelineEntry is a condensed timeline item for the brief output.

@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Sparkles, ChevronDown, Target, Clock, AlertTriangle, CheckCircle2, Info, Loader2 } from 'lucide-react'
 import { cn, relativeTime } from '@/shared/lib/utils'
-import { evidenceApi, type IncidentBrief } from '@/features/incidents/api/evidence'
+import { evidenceApi, type EvidenceLedgerItem, type IncidentBrief } from '@/features/incidents/api/evidence'
 
 function ConfidenceBadge({ confidence }: { confidence: IncidentBrief['confidence'] }) {
     const pct = Math.round(confidence.score * 100)
@@ -48,6 +48,93 @@ function ConfidenceBreakdownPanel({ breakdown }: { breakdown: IncidentBrief['con
             <div className="mt-2 flex items-center gap-2 text-[10px] text-slate-400">
                 <span>{breakdown.evidenceCount} evidence signals</span>
                 <span>{breakdown.availableCategories}/{breakdown.totalPossibleCategories} categories</span>
+            </div>
+        </div>
+    )
+}
+
+const ledgerStatusStyles: Record<EvidenceLedgerItem['status'], string> = {
+    supported: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
+    unsupported: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+    contradicted: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400',
+    missing: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+}
+
+const ledgerImpactLabels: Record<EvidenceLedgerItem['confidenceImpact'], string> = {
+    positive: '+ confidence',
+    negative: '- confidence',
+    neutral: 'neutral',
+}
+
+function EvidenceLedgerSection({ brief }: { brief: IncidentBrief }) {
+    const ledger = brief.evidenceLedger ?? []
+    if (ledger.length === 0) return null
+
+    const summary = brief.evidenceLedgerSummary ?? {
+        supported: ledger.filter((item) => item.status === 'supported').length,
+        unsupported: ledger.filter((item) => item.status === 'unsupported').length,
+        contradicted: ledger.filter((item) => item.status === 'contradicted').length,
+        missing: ledger.filter((item) => item.status === 'missing').length,
+    }
+
+    return (
+        <div>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="flex items-center gap-1 text-[10px] font-semibold uppercase text-slate-500">
+                    <Info className="h-3 w-3" />
+                    Evidence Ledger
+                </h3>
+                <div className="flex flex-wrap gap-1 text-[10px] font-medium">
+                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                        {summary.supported} supported
+                    </span>
+                    <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                        {summary.contradicted} contradicted
+                    </span>
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                        {summary.unsupported} unsupported
+                    </span>
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+                        {summary.missing} missing
+                    </span>
+                </div>
+            </div>
+            <div className="space-y-2">
+                {ledger.map((item) => (
+                    <div key={item.id} className="rounded-lg border border-slate-200 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/30">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase', ledgerStatusStyles[item.status])}>
+                                {item.status}
+                            </span>
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                                {item.category}
+                            </span>
+                            <span className="text-[10px] font-medium text-slate-400">
+                                {ledgerImpactLabels[item.confidenceImpact]}
+                            </span>
+                        </div>
+                        <p className="mt-2 break-words text-sm font-medium leading-relaxed text-slate-800 dark:text-slate-200">
+                            {item.claim}
+                        </p>
+                        <p className="mt-1 break-words text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                            {item.rationale}
+                        </p>
+                        {item.evidenceIds && item.evidenceIds.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                                {item.evidenceIds.slice(0, 4).map((id) => (
+                                    <span key={id} className="max-w-full truncate rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                                        {id}
+                                    </span>
+                                ))}
+                                {item.evidenceIds.length > 4 && (
+                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                                        +{item.evidenceIds.length - 4}
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                ))}
             </div>
         </div>
     )
@@ -151,10 +238,14 @@ function BriefContent({ brief }: { brief: IncidentBrief }) {
                 </div>
             )}
 
+            <EvidenceLedgerSection brief={brief} />
+
             {/* Footer controls */}
             <div className="flex flex-wrap gap-3 border-t border-indigo-100 pt-3 dark:border-indigo-900/50">
                 <button
+                    type="button"
                     onClick={() => setShowBreakdown(!showBreakdown)}
+                    aria-expanded={showBreakdown}
                     className="flex items-center gap-1 text-xs font-medium text-indigo-600 transition-colors hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
                 >
                     <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showBreakdown && 'rotate-180')} />
@@ -162,7 +253,9 @@ function BriefContent({ brief }: { brief: IncidentBrief }) {
                 </button>
                 {brief.rawAiResponse && (
                     <button
+                        type="button"
                         onClick={() => setShowRaw(!showRaw)}
+                        aria-expanded={showRaw}
                         className="flex items-center gap-1 text-xs font-medium text-indigo-600 transition-colors hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
                     >
                         <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showRaw && 'rotate-180')} />
@@ -225,6 +318,7 @@ export function EvidenceBriefCard({ incidentId }: { incidentId: string }) {
                         <h2 className="text-sm font-semibold text-indigo-900 dark:text-indigo-300">AI Incident Brief</h2>
                     </div>
                     <button
+                        type="button"
                         onClick={() => generateMutation.mutate()}
                         disabled={generateMutation.isPending}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white/80 px-3 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-50 disabled:opacity-50 dark:border-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-400"
@@ -254,6 +348,7 @@ export function EvidenceBriefCard({ incidentId }: { incidentId: string }) {
             {hasBrief && (
                 <div className="mt-3 flex justify-end">
                     <button
+                        type="button"
                         onClick={() => generateMutation.mutate()}
                         disabled={generateMutation.isPending}
                         className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-indigo-500 transition-colors hover:bg-indigo-100 hover:text-indigo-700 dark:hover:bg-indigo-900/50 dark:hover:text-indigo-300"
